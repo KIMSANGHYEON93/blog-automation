@@ -2,7 +2,7 @@
 name = "blog-automation"
 version = "2.3.0"
 description = "B2B IT Blog Automation - DDD 4-Layer Architecture"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 dependencies = [
     "gspread>=6.0",
     "google-auth>=2.0",
@@ -27,12 +27,12 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py39"
 line-length = 100
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true

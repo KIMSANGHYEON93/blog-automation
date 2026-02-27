@@ -1,0 +1,13 @@
+.env
+credentials.json
+*.pyc
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+logs/
+*.log
+.mypy_cache/
+.ruff_cache/

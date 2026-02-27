@@ -6,7 +6,7 @@ requires-python = ">=3.9"
 dependencies = [
     "gspread>=6.0",
     "google-auth>=2.0",
-    "selenium>=4.15",
+    "seleniumbase>=4.25",
     "python-dotenv>=1.0",
 ]
 

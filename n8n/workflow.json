@@ -1,0 +1,249 @@
+{
+  "name": "Blog Automation Pipeline A — Content Generation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 1 * * *" }]
+        }
+      },
+      "id": "node-1-schedule",
+      "name": "Schedule Trigger (01:00 AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": { "value": "={{ $env.SHEET_ID }}" },
+        "range": "A:S",
+        "options": {
+          "filters": {
+            "column": "C",
+            "value": "대기"
+          }
+        }
+      },
+      "id": "node-2-sheets-read",
+      "name": "Sheets Read (Status=대기)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [460, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/search.json",
+        "qs": {
+          "q": "={{ $json.keyword }}",
+          "location": "South Korea",
+          "hl": "ko",
+          "gl": "kr",
+          "num": "10",
+          "api_key": "={{ $env.SERPAPI_KEY }}"
+        }
+      },
+      "id": "node-3-serpapi",
+      "name": "SerpAPI Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// route_prompt.js — 프롬프트 유형 분기\n// n8n/code_nodes/route_prompt.js 내용을 여기에 복사"
+      },
+      "id": "node-4-route-prompt",
+      "name": "Route Prompt (A/B/C)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.CLAUDE_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "claude-sonnet-4-5-20250514" },
+            { "name": "max_tokens", "value": "4000" },
+            { "name": "system", "value": "={{ $json.system_prompt }}" },
+            { "name": "messages", "value": "=[{\"role\":\"user\",\"content\":\"{{ $json.user_message }}\"}]" }
+          ]
+        }
+      },
+      "id": "node-5-claude-sonnet",
+      "name": "Claude Sonnet (Content Gen)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// parse_json.js — JSON 파싱 + 필드 검증\n// n8n/code_nodes/parse_json.js 내용을 여기에 복사"
+      },
+      "id": "node-6-parse-json",
+      "name": "Parse JSON Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// validate_urls.js — URL 정규식 검증\n// n8n/code_nodes/validate_urls.js 내용을 여기에 복사"
+      },
+      "id": "node-7a-url-validate",
+      "name": "URL Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// lint_code_blocks.js — 코드 블록 검사\n// n8n/code_nodes/lint_code_blocks.js 내용을 여기에 복사"
+      },
+      "id": "node-7b-code-lint",
+      "name": "Code Block Lint",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.CLAUDE_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "claude-haiku-4-5-20251001" },
+            { "name": "max_tokens", "value": "500" },
+            { "name": "temperature", "value": "0" },
+            { "name": "system", "value": "당신은 B2B IT 기술 콘텐츠 품질 검증 AI입니다. 아래 블로그 글을 검토하고, 정확히 두 항목만 평가하세요. 반드시 JSON 형식으로만 응답: {\"is_accurate\": true/false, \"is_logical\": true/false, \"reason\": \"사유\"}" },
+            { "name": "messages", "value": "=[{\"role\":\"user\",\"content\":\"제목: {{ $json.title }}\\n본문:\\n{{ $json.content }}\"}]" }
+          ]
+        }
+      },
+      "id": "node-7c-haiku-verify",
+      "name": "Haiku Verification (temp=0)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// parse_verification.js — 검증 결과 파싱\n// n8n/code_nodes/parse_verification.js 내용을 여기에 복사"
+      },
+      "id": "node-8-parse-verify",
+      "name": "Parse Verification Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            { "value1": "={{ $json.verification.passed }}", "value2": true }
+          ]
+        }
+      },
+      "id": "node-9-if-passed",
+      "name": "Verification Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": { "value": "={{ $env.SHEET_ID }}" },
+        "range": "={{ 'A' + $json.row_index }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "C": "발행대기",
+            "D": "={{ $json.title }}",
+            "E": "={{ $json.meta_description }}",
+            "H": "={{ JSON.stringify($json.faq_schema) }}",
+            "I": "={{ JSON.stringify($json.references) }}",
+            "O": "={{ $json.content }}",
+            "Q": "={{ $json.prompt_type }}",
+            "R": "={{ JSON.stringify($json.verification) }}",
+            "S": "={{ JSON.stringify($json.internal_link_keywords) }}"
+          }
+        }
+      },
+      "id": "node-10a-sheets-pass",
+      "name": "Sheets Update (발행대기)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2440, 200],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": { "value": "={{ $env.SHEET_ID }}" },
+        "range": "={{ 'A' + $json.row_index }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "C": "검수필요",
+            "M": "={{ $json.verification.reason || '검증 실패' }}",
+            "R": "={{ JSON.stringify($json.verification) }}"
+          }
+        }
+      },
+      "id": "node-10b-sheets-fail",
+      "name": "Sheets Update (검수필요)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2440, 400],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (01:00 AM)": { "main": [[{ "node": "Sheets Read (Status=대기)", "type": "main", "index": 0 }]] },
+    "Sheets Read (Status=대기)": { "main": [[{ "node": "SerpAPI Search", "type": "main", "index": 0 }]] },
+    "SerpAPI Search": { "main": [[{ "node": "Route Prompt (A/B/C)", "type": "main", "index": 0 }]] },
+    "Route Prompt (A/B/C)": { "main": [[{ "node": "Claude Sonnet (Content Gen)", "type": "main", "index": 0 }]] },
+    "Claude Sonnet (Content Gen)": { "main": [[{ "node": "Parse JSON Response", "type": "main", "index": 0 }]] },
+    "Parse JSON Response": { "main": [[
+      { "node": "URL Validation", "type": "main", "index": 0 },
+      { "node": "Code Block Lint", "type": "main", "index": 0 }
+    ]] },
+    "URL Validation": { "main": [[{ "node": "Haiku Verification (temp=0)", "type": "main", "index": 0 }]] },
+    "Code Block Lint": { "main": [[{ "node": "Haiku Verification (temp=0)", "type": "main", "index": 0 }]] },
+    "Haiku Verification (temp=0)": { "main": [[{ "node": "Parse Verification Result", "type": "main", "index": 0 }]] },
+    "Parse Verification Result": { "main": [[{ "node": "Verification Passed?", "type": "main", "index": 0 }]] },
+    "Verification Passed?": {
+      "main": [
+        [{ "node": "Sheets Update (발행대기)", "type": "main", "index": 0 }],
+        [{ "node": "Sheets Update (검수필요)", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul"
+  }
+}

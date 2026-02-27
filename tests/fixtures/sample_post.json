@@ -1,0 +1,23 @@
+{
+  "keyword": "제로 트러스트란",
+  "category": "IT 기초 용어",
+  "status": "발행대기",
+  "title": "제로 트러스트(Zero Trust)란? 개념부터 기업 도입까지 완벽 가이드",
+  "content": "## 제로 트러스트란?\n\n제로 트러스트(Zero Trust)는 '아무도 신뢰하지 않는다'는 원칙을 기반으로 한 보안 모델입니다.\n\n### 핵심 원칙\n\n| 원칙 | 설명 |\n|------|------|\n| 최소 권한 | 필요한 최소한의 접근만 허용 |\n| 지속 검증 | 모든 접근 시 재인증 |\n| 마이크로 세그멘테이션 | 네트워크를 작은 구역으로 분리 |\n\n### 기업 도입 사례\n\n```powershell\n# Azure AD 조건부 액세스 정책 확인\nGet-AzureADMSConditionalAccessPolicy\n```",
+  "meta_description": "제로 트러스트 보안 모델의 핵심 원칙, 작동 방식, 기업 환경 도입 방법을 쉽게 설명합니다. Azure AD, SSO 연동까지 실무 가이드를 제공합니다.",
+  "faq_schema": [
+    {
+      "question": "제로 트러스트와 VPN의 차이점은?",
+      "answer": "VPN은 네트워크 경계를 신뢰하지만, 제로 트러스트는 모든 접근을 검증합니다."
+    },
+    {
+      "question": "중소기업도 제로 트러스트를 도입할 수 있나요?",
+      "answer": "네, Azure AD 조건부 액세스 등 클라우드 기반 도구로 단계적 도입이 가능합니다."
+    }
+  ],
+  "references": [
+    "https://learn.microsoft.com/en-us/security/zero-trust/",
+    "NIST SP 800-207: Zero Trust Architecture"
+  ],
+  "internal_link_keywords": ["SSO", "Azure AD", "조건부 액세스"]
+}

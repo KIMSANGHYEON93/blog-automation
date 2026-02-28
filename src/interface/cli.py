@@ -6,13 +6,13 @@ import logging
 
 from dotenv import load_dotenv
 
+from src.application.use_cases.publish_posts import PublishPostsUseCase
+from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
+from src.domain.value_objects.credentials import Credentials
+from src.infrastructure.browser.selenium_adapter import SeleniumBrowserAdapter
 from src.infrastructure.config import Config
 from src.infrastructure.logging_setup import setup_logging
 from src.infrastructure.persistence.google_sheets_repo import GoogleSheetsPostRepository
-from src.infrastructure.browser.selenium_adapter import SeleniumBrowserAdapter
-from src.domain.value_objects.credentials import Credentials
-from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
-from src.application.use_cases.publish_posts import PublishPostsUseCase
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ def main() -> None:
         headless=config.headless,
         min_delay=config.min_delay,
         max_delay=config.max_delay,
+        user_data_dir=".browser_data",
     )
 
     # Step 1: 고스트 복구

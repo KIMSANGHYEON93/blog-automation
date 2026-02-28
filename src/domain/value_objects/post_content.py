@@ -1,12 +1,13 @@
 """PostContent — Value Object for blog post content."""
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
 class PostContent:
-    title: Optional[str] = ""
-    body_markdown: Optional[str] = ""
+    title: str | None = ""
+    body_markdown: str | None = ""
     meta_description: str = ""
     faq_schema: str = ""
 

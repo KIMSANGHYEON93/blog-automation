@@ -41,4 +41,4 @@ class Config:
         if not os.path.exists(self.google_creds):
             missing.append(f"GOOGLE_CREDS (파일 없음: {self.google_creds})")
         if missing:
-            raise EnvironmentError(f"필수 환경 변수 누락: {', '.join(missing)}")
+            raise OSError(f"필수 환경 변수 누락: {', '.join(missing)}")

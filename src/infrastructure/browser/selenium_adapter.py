@@ -1,7 +1,7 @@
 """SeleniumBrowserAdapter — BrowserPort implementation using SeleniumBase."""
 import logging
-import time
 import random
+import time
 
 from src.domain.entities.post import Post
 from src.domain.ports.browser_port import BrowserPort
@@ -15,16 +15,28 @@ logger = logging.getLogger(__name__)
 
 class SeleniumBrowserAdapter(BrowserPort):
     def __init__(self, credentials: Credentials, headless: bool = True,
-                 min_delay: int = 300, max_delay: int = 900):
+                 min_delay: int = 300, max_delay: int = 900,
+                 user_data_dir: str = ""):
         self._credentials = credentials
         self._headless = headless
         self._min_delay = min_delay
         self._max_delay = max_delay
+        self._user_data_dir = user_data_dir
         self._sb = None
 
     def start(self) -> None:
+        import os
+
         from seleniumbase import SB
-        self._sb = SB(headless=self._headless).__enter__()
+        # 쿠키 영속화: user_data_dir 설정 시 브라우저 세션 유지 (2FA 1회만)
+        if self._user_data_dir:
+            os.makedirs(self._user_data_dir, exist_ok=True)
+            self._sb = SB(
+                headless=self._headless,
+                user_data_dir=self._user_data_dir,
+            ).__enter__()
+        else:
+            self._sb = SB(headless=self._headless).__enter__()
         logger.info("브라우저 시작")
 
     def stop(self) -> None:

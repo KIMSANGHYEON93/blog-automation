@@ -13,3 +13,4 @@ htmlcov/
 screenshots/
 logs/
 credentials.json
+.browser_data/

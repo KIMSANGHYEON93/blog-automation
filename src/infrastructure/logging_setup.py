@@ -6,7 +6,7 @@ from pathlib import Path
 
 def setup_logging(log_file: str = "/var/log/blog-publisher.log") -> None:
     log_path = Path(log_file)
-    handlers = [logging.StreamHandler(sys.stdout)]
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
 
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)

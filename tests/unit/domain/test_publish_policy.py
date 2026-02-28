@@ -1,7 +1,6 @@
 """PublishPolicy domain service tests."""
-from src.domain.services.publish_policy import PublishPolicy
 from src.domain.entities.post import Post
-from src.domain.value_objects.post_status import PostStatus
+from src.domain.services.publish_policy import PublishPolicy
 from src.domain.value_objects.post_content import PostContent
 
 

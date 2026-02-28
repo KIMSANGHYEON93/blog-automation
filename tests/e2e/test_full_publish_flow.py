@@ -1,7 +1,8 @@
 """E2E tests for the full publish flow — requires real infrastructure."""
 import os
-import pytest
 import time
+
+import pytest
 
 
 @pytest.mark.e2e
@@ -35,11 +36,11 @@ class TestFullPublishFlow:
         from dotenv import load_dotenv
 
         load_dotenv()
+        from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
         from src.infrastructure.config import Config
         from src.infrastructure.persistence.google_sheets_repo import (
             GoogleSheetsPostRepository,
         )
-        from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
 
         config = Config.from_env()
         repo = GoogleSheetsPostRepository(config.google_creds, config.sheet_name)

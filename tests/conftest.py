@@ -1,5 +1,4 @@
 """Shared test fixtures for blog-automation."""
-import pytest
 import sys
 from pathlib import Path
 

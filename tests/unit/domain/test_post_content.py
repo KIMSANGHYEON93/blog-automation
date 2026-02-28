@@ -6,7 +6,12 @@ from src.domain.value_objects.post_content import PostContent
 
 class TestPostContent:
     def test_create_with_all_fields(self):
-        c = PostContent(title="제목", body_markdown="본문 내용", meta_description="설명", faq_schema="[]")
+        c = PostContent(
+            title="제목",
+            body_markdown="본문 내용",
+            meta_description="설명",
+            faq_schema="[]",
+        )
         assert c.title == "제목"
         assert c.body_markdown == "본문 내용"
         assert c.meta_description == "설명"

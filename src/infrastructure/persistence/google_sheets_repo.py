@@ -1,6 +1,7 @@
 """GoogleSheetsPostRepository — PostRepository implementation using gspread."""
+from __future__ import annotations
+
 import logging
-from typing import List
 
 import gspread
 from google.oauth2.service_account import Credentials as GoogleCredentials
@@ -50,7 +51,7 @@ class GoogleSheetsPostRepository(PostRepository):
             error_message=get("error_msg"),
         )
 
-    def find_pending(self, limit: int = 5) -> List[Post]:
+    def find_pending(self, limit: int = 5) -> list[Post]:
         all_rows = self._sheet.get_all_values()
         result = []
         for i, row in enumerate(all_rows[self._header_row:], start=self._header_row + 1):
@@ -61,7 +62,7 @@ class GoogleSheetsPostRepository(PostRepository):
                     break
         return result
 
-    def find_stuck(self) -> List[Post]:
+    def find_stuck(self) -> list[Post]:
         all_rows = self._sheet.get_all_values()
         result = []
         for i, row in enumerate(all_rows[self._header_row:], start=self._header_row + 1):

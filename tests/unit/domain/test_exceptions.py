@@ -1,11 +1,10 @@
 """Domain exceptions tests."""
-import pytest
 
 from src.domain.exceptions import (
+    ContentMissingError,
     DomainError,
-    InvalidStatusTransition,
-    PostNotPublishable,
-    ContentMissing,
+    InvalidStatusTransitionError,
+    PostNotPublishableError,
 )
 from src.domain.value_objects.post_status import PostStatus
 
@@ -15,16 +14,16 @@ class TestDomainExceptions:
         assert issubclass(DomainError, Exception)
 
     def test_invalid_status_transition(self):
-        err = InvalidStatusTransition(PostStatus.PUBLISHED, PostStatus.PUBLISHING)
+        err = InvalidStatusTransitionError(PostStatus.PUBLISHED, PostStatus.PUBLISHING)
         assert "발행완료" in str(err)
         assert "발행중" in str(err)
         assert err.current_status == PostStatus.PUBLISHED
         assert err.target_status == PostStatus.PUBLISHING
 
     def test_post_not_publishable(self):
-        err = PostNotPublishable("이유")
+        err = PostNotPublishableError("이유")
         assert isinstance(err, DomainError)
 
     def test_content_missing(self):
-        err = ContentMissing("본문 없음")
+        err = ContentMissingError("본문 없음")
         assert isinstance(err, DomainError)

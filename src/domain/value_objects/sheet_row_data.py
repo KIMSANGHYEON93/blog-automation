@@ -1,6 +1,7 @@
 """SheetRowData — Value Object representing a single row from Google Sheets."""
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -16,5 +17,5 @@ class SheetRowData:
     faq_schema: str = ""
     internal_link_keywords: str = ""
     published_url: str = ""
-    published_at: Optional[str] = None
+    published_at: str | None = None
     note: str = ""

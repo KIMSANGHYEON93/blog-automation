@@ -1,9 +1,9 @@
+from __future__ import annotations
+
 """
 DOM 셀렉터 Fallback Chain
 티스토리 에디터 DOM 변경에 대응하기 위해 우선순위 순으로 정의
 """
-from typing import List, Optional
-
 
 MARKDOWN_MODE_SELECTORS = [
     "button.toolbar-markdown",
@@ -35,7 +35,7 @@ PUBLISH_BUTTON_SELECTORS = [
 ]
 
 
-def find_element(sb, selectors: List[str], timeout: int = 10) -> Optional[str]:
+def find_element(sb, selectors: list[str], timeout: int = 10) -> str | None:
     """Fallback Chain으로 첫 번째 존재하는 셀렉터 반환."""
     for selector in selectors:
         try:

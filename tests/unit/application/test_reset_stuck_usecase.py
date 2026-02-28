@@ -1,10 +1,9 @@
 """Unit tests for ResetStuckPostsUseCase — TDD RED phase."""
-import pytest
 
 from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
 from src.domain.entities.post import Post
-from src.domain.value_objects.post_status import PostStatus
 from src.domain.value_objects.post_content import PostContent
+from src.domain.value_objects.post_status import PostStatus
 from src.infrastructure.persistence.in_memory_repo import InMemoryPostRepository
 
 

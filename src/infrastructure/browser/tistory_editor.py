@@ -5,11 +5,11 @@ import time
 from src.domain.entities.post import Post
 from src.domain.value_objects.publish_result import PublishResult
 from src.infrastructure.browser.dom_selectors import (
-    find_element,
-    MARKDOWN_MODE_SELECTORS,
-    TITLE_SELECTORS,
     CONTENT_AREA_SELECTORS,
+    MARKDOWN_MODE_SELECTORS,
     SAVE_BUTTON_SELECTORS,
+    TITLE_SELECTORS,
+    find_element,
 )
 from src.infrastructure.browser.js_injector import safe_js_inject
 
@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
     """티스토리 에디터에 포스트 발행. PublishResult 반환."""
     try:
+        if post.content is None or not post.content.body_markdown:
+            return PublishResult.fail("포스트 콘텐츠가 없음")
+
+        content = post.content
+        assert content.body_markdown is not None  # guarded above
+        body_markdown: str = content.body_markdown
+
         write_url = f"https://{blog_name}.tistory.com/manage/post/write"
         sb.open(write_url)
         time.sleep(2)
@@ -28,7 +35,7 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         if not title_sel:
             return PublishResult.fail("제목 입력창을 찾을 수 없음")
         sb.triple_click(title_sel)
-        sb.type(title_sel, post.content.title_or_fallback(post.keyword))
+        sb.type(title_sel, content.title_or_fallback(post.keyword))
         time.sleep(0.5)
 
         # 마크다운 모드 전환
@@ -39,11 +46,11 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
 
         # 본문 주입 (JS)
         content_sel = find_element(sb, CONTENT_AREA_SELECTORS) or ".CodeMirror"
-        success = safe_js_inject(sb, content_sel, post.content.body_markdown)
+        success = safe_js_inject(sb, content_sel, body_markdown)
         if not success:
             # Fallback: 직접 타이핑
             sb.click(content_sel)
-            sb.type(content_sel, post.content.body_markdown)
+            sb.type(content_sel, body_markdown)
         time.sleep(1)
 
         # 임시저장 또는 발행

@@ -922,6 +922,9 @@ lint:                                 ## 코드 품질
 | **2026-02-28** | **Port/Adapter 패턴 적용** | **의존성 역전으로 InMemoryRepo+MockBrowser 테스트 가능** | **Claude 설계** |
 | **2026-02-28** | **Composition Root를 cli.py에 집중** | **유일하게 구체 클래스를 아는 지점 — 교체 용이** | **Claude 설계** |
 | **2026-02-28** | **레거시 병행 운영 후 폐기** | **1주 병행으로 무중단 전환** | **Claude 설계** |
+| **2026-02-28** | **kakao_auth: hostname 기반 URL 판별** | **OAuth redirect URL query param false positive 수정** | **Claude 버그 수정** |
+| **2026-02-28** | **kakao_auth: URL 안정화 폴링 (15초)** | **고정 sleep 3초 → 리다이렉트 완료 대기 폴링** | **Claude 버그 수정** |
+| **2026-02-28** | **cli.py: user_data_dir 쿠키 영속화** | **매 실행 2FA 재요구 방지, test_login.py와 동작 일치** | **Claude 버그 수정** |
 
 ---
 
@@ -945,7 +948,15 @@ lint:                                 ## 코드 품질
 | 7 | meta_description "150자" vs "120~155자" | 전 프롬프트 "120~155자" | ✅ |
 | 8 | Gemini 프롬프트 상세도 부족 | v2.1 상세 본문 유지 | ✅ |
 
-### 14.3 v2.2→v2.3 DDD/TDD 아키텍처 적용 (11건)
+### 14.3 Phase 2.5 카카오 로그인 버그 수정 (3건, 2026-02-28)
+
+| # | 변경 | 파일 | 상세 |
+|---|------|------|------|
+| 20 | `_is_tistory_logged_in()` hostname 기반 판별 | `kakao_auth.py` | `urlparse`로 host만 검사, OAuth redirect URL false positive 수정 |
+| 21 | 카카오 버튼 클릭 후 URL 안정화 폴링 | `kakao_auth.py` | `time.sleep(3)` → 최대 15초 폴링, accounts.kakao 체크 우선 |
+| 22 | `cli.py`에 `user_data_dir` 전달 | `cli.py` | `.browser_data` 쿠키 영속화, 2FA 1회만 필요 |
+
+### 14.4 v2.2→v2.3 DDD/TDD 아키텍처 적용 (11건)
 
 | # | 변경 | 상세 | 영향 범위 |
 |---|------|------|----------|
@@ -977,4 +988,14 @@ lint:                                 ## 코드 품질
 
 ---
 
-> **다음 단계**: Phase 1 실행 또는 Phase 2 TDD 시작 (`prosess.md` 섹션 5.3의 Red-Green-Refactor 사이클 따라 Domain Layer 구현).
+> **현재 상태**: Phase 2 완료 (66 단위 테스트 통과), Phase 2.5 인프라 어댑터 구현 완료 + 카카오 로그인 버그 수정 완료 (2026-02-28)
+>
+> **다음 단계**:
+> 1. `HEADLESS=false python3 test_login.py` — 카카오 로그인 수정 검증 (2FA 승인 + 쿠키 영속화)
+> 2. 시트 더미 데이터 주입 후 `python3 -m src.interface.cli` 단독 발행 검증 (Phase 2.5.8~2.5.15)
+> 3. 통합 테스트 8건+ 통과 확인 (Phase 2.5.16)
+> 4. 파이프라인 A 구축 — n8n 워크플로우 (Phase 3)
+> 5. E2E 통합 테스트 (Phase 3.5)
+> 6. Go-Live 스케줄링 (Phase 4)
+>
+> 상세 진행 추적: `prosess.md` 참조

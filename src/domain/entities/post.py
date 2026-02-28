@@ -1,11 +1,12 @@
 """Post — Aggregate Root entity with state machine."""
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional
+from __future__ import annotations
 
-from src.domain.value_objects.post_status import PostStatus
+from dataclasses import dataclass
+from datetime import datetime
+
+from src.domain.exceptions import InvalidStatusTransitionError
 from src.domain.value_objects.post_content import PostContent
-from src.domain.exceptions import InvalidStatusTransition
+from src.domain.value_objects.post_status import PostStatus
 
 
 @dataclass
@@ -13,16 +14,16 @@ class Post:
     row_index: int
     keyword: str
     category: str = ""
-    content: Optional[PostContent] = None
+    content: PostContent | None = None
     status: PostStatus = PostStatus.PENDING
     published_url: str = ""
-    published_at: Optional[datetime] = None
+    published_at: datetime | None = None
     error_message: str = ""
 
     def mark_publishing(self) -> None:
         """PENDING → PUBLISHING (only from PENDING)."""
         if self.status != PostStatus.PENDING:
-            raise InvalidStatusTransition(self.status, PostStatus.PUBLISHING)
+            raise InvalidStatusTransitionError(self.status, PostStatus.PUBLISHING)
         self.status = PostStatus.PUBLISHING
 
     def mark_published(self, url: str) -> None:

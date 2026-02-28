@@ -1,11 +1,12 @@
 """Post entity tests — 15+ tests for state machine."""
-import pytest
 from datetime import datetime
 
+import pytest
+
 from src.domain.entities.post import Post
-from src.domain.value_objects.post_status import PostStatus
+from src.domain.exceptions import InvalidStatusTransitionError
 from src.domain.value_objects.post_content import PostContent
-from src.domain.exceptions import InvalidStatusTransition
+from src.domain.value_objects.post_status import PostStatus
 
 
 class TestPostCreation:
@@ -30,17 +31,17 @@ class TestMarkPublishing:
 
     def test_non_pending_raises(self):
         post = Post(row_index=1, keyword="test", status=PostStatus.PUBLISHED)
-        with pytest.raises(InvalidStatusTransition):
+        with pytest.raises(InvalidStatusTransitionError):
             post.mark_publishing()
 
     def test_from_failed_raises(self):
         post = Post(row_index=1, keyword="test", status=PostStatus.FAILED)
-        with pytest.raises(InvalidStatusTransition):
+        with pytest.raises(InvalidStatusTransitionError):
             post.mark_publishing()
 
     def test_from_waiting_raises(self):
         post = Post(row_index=1, keyword="test", status=PostStatus.WAITING)
-        with pytest.raises(InvalidStatusTransition):
+        with pytest.raises(InvalidStatusTransitionError):
             post.mark_publishing()
 
 

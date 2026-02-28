@@ -1,12 +1,11 @@
 """Unit tests for PublishPostsUseCase — TDD RED phase."""
-import pytest
 
 from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.domain.entities.post import Post
-from src.domain.value_objects.post_status import PostStatus
 from src.domain.value_objects.post_content import PostContent
-from src.infrastructure.persistence.in_memory_repo import InMemoryPostRepository
+from src.domain.value_objects.post_status import PostStatus
 from src.infrastructure.browser.mock_browser import MockBrowserAdapter
+from src.infrastructure.persistence.in_memory_repo import InMemoryPostRepository
 
 
 def make_publishable_post(row_index: int = 1, keyword: str = "AD란"):

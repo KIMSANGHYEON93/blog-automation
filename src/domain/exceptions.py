@@ -5,7 +5,7 @@ class DomainError(Exception):
     """Base exception for all domain errors."""
 
 
-class InvalidStatusTransition(DomainError):
+class InvalidStatusTransitionError(DomainError):
     """Raised when a post status transition violates business rules."""
 
     def __init__(self, current_status, target_status):
@@ -16,9 +16,9 @@ class InvalidStatusTransition(DomainError):
         )
 
 
-class PostNotPublishable(DomainError):
+class PostNotPublishableError(DomainError):
     """Raised when attempting to publish a post that is not in publishable state."""
 
 
-class ContentMissing(DomainError):
+class ContentMissingError(DomainError):
     """Raised when post content is required but missing."""

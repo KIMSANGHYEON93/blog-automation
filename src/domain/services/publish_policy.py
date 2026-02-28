@@ -1,5 +1,5 @@
 """PublishPolicy — Domain service for publish eligibility rules."""
-from typing import List
+from __future__ import annotations
 
 from src.domain.entities.post import Post
 
@@ -10,7 +10,7 @@ class PublishPolicy:
     def __init__(self, max_posts: int = 5):
         self._max_posts = max_posts
 
-    def filter_publishable(self, posts: List[Post]) -> List[Post]:
+    def filter_publishable(self, posts: list[Post]) -> list[Post]:
         """Return only publishable posts, limited to max_posts."""
         return [p for p in posts if p.is_publishable()][:self._max_posts]
 

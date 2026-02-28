@@ -23,6 +23,7 @@ class SeleniumBrowserAdapter(BrowserPort):
         self._max_delay = max_delay
         self._user_data_dir = user_data_dir
         self._sb = None
+        self._sb_context = None  # SB 컨텍스트 매니저 참조 유지
 
     def start(self) -> None:
         import os
@@ -31,23 +32,26 @@ class SeleniumBrowserAdapter(BrowserPort):
         # 쿠키 영속화: user_data_dir 설정 시 브라우저 세션 유지 (2FA 1회만)
         if self._user_data_dir:
             os.makedirs(self._user_data_dir, exist_ok=True)
-            self._sb = SB(
+            self._sb_context = SB(
                 headless=self._headless,
                 user_data_dir=self._user_data_dir,
-            ).__enter__()
+            )
         else:
-            self._sb = SB(headless=self._headless).__enter__()
+            self._sb_context = SB(headless=self._headless)
+        assert self._sb_context is not None
+        self._sb = self._sb_context.__enter__()
         logger.info("브라우저 시작")
 
     def stop(self) -> None:
-        if self._sb:
+        if self._sb_context:
             try:
-                self._sb.__exit__(None, None, None)
+                self._sb_context.__exit__(None, None, None)
                 logger.info("브라우저 종료")
             except Exception as e:
                 logger.warning(f"브라우저 종료 중 오류 (무시): {e}")
             finally:
                 self._sb = None
+                self._sb_context = None
 
     def login(self) -> bool:
         return kakao_login(

@@ -45,6 +45,18 @@ class TestPostContent:
         c = PostContent(title=None, body_markdown="본문")
         assert c.title_or_fallback("키워드") == "키워드"
 
+    def test_tag_list_with_tags(self):
+        c = PostContent(title="제목", body_markdown="본문", tags="SSO,AD,인증")
+        assert c.tag_list() == ["SSO", "AD", "인증"]
+
+    def test_tag_list_empty_string(self):
+        c = PostContent(title="제목", body_markdown="본문", tags="")
+        assert c.tag_list() == []
+
+    def test_tag_list_with_whitespace(self):
+        c = PostContent(title="제목", body_markdown="본문", tags=" SSO , AD , ")
+        assert c.tag_list() == ["SSO", "AD"]
+
     def test_is_immutable(self):
         c = PostContent(title="제목", body_markdown="본문")
         with pytest.raises(AttributeError):

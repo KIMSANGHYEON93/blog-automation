@@ -39,6 +39,8 @@ class GoogleSheetsPostRepository(PostRepository):
                 title=get("title"),
                 body_markdown=body,
                 meta_description=get("meta_desc"),
+                faq_schema=get("faq"),
+                tags=get("tags"),
             )
 
         return Post(

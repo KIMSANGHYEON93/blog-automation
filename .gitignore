@@ -11,6 +11,7 @@ htmlcov/
 .coverage
 *.log
 screenshots/
+legacy/
 logs/
 credentials.json
 .browser_data/

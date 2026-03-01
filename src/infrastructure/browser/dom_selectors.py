@@ -23,6 +23,15 @@ MARKDOWN_MODE_SELECTORS = [
     "#editor-mode-markdown",
 ]
 
+# 마크다운 모드 전환 확인 팝업 (전환 시 나타나는 확인 다이얼로그)
+MODE_CONFIRM_SELECTORS = [
+    ".layer_popup .btn_ok",           # 확인 버튼
+    ".layer_popup .btn_default",      # 기본 확인 버튼
+    ".popup_wrap .btn_ok",            # 팝업 확인
+    "button.btn_confirm",             # 전환 확인
+    ".mce-btn.mce-primary button",    # TinyMCE 확인
+]
+
 # 마크다운 모드 전환 후 CodeMirror 에디터
 CONTENT_AREA_SELECTORS = [
     ".CodeMirror",
@@ -40,7 +49,23 @@ SAVE_BUTTON_SELECTORS = [
 ]
 
 PUBLISH_BUTTON_SELECTORS = [
-    "#publish-layer-btn",  # 완료 버튼
+    "#publish-layer-btn",  # 완료 버튼 (발행 설정 레이어 열기)
+]
+
+# 발행 설정 레이어 내 공개 옵션
+PUBLIC_MODE_SELECTORS = [
+    "#open-type-0",                       # 공개 라디오 버튼
+    "input[value='0']",                   # 공개범위 value=0 (공개)
+    "label[for='open-type-0']",           # 공개 라벨
+    "//label[contains(text(), '공개')]",    # XPath fallback
+]
+
+# 발행 설정 레이어 내 최종 발행 확인 버튼
+PUBLISH_CONFIRM_SELECTORS = [
+    "#publish-btn",               # 발행하기 버튼
+    ".btn_publish",               # 발행 버튼
+    ".layer_post .btn_ok",        # 확인 버튼
+    "button.btn_default",         # 기본 확인 버튼
 ]
 
 TAG_INPUT_SELECTORS = [

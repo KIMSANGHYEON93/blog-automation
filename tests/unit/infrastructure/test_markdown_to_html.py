@@ -1,0 +1,249 @@
+"""Unit tests for markdown → HTML conversion and validation."""
+from src.infrastructure.browser.tistory_editor import (
+    _add_lazy_loading,
+    convert_markdown_to_html,
+    validate_html,
+)
+
+
+def _long_text(min_chars: int = 1600) -> str:
+    """validate_html 본문 길이 검증(1,500자)을 통과할 수 있는 충분한 텍스트 생성."""
+    unit = "이것은 블로그 본문 테스트 텍스트입니다. 충분한 길이를 확보하기 위해 반복합니다. "
+    repeats = (min_chars // len(unit)) + 1
+    return unit * repeats
+
+
+def _valid_html(extra: str = "") -> str:
+    """validate_html을 통과하는 기본 HTML 생성 (1,500자 이상)."""
+    body = _long_text()
+    return f"<h2>제목</h2><p>{body}</p>{extra}"
+
+
+class TestConvertMarkdownToHtml:
+    """convert_markdown_to_html() 함수 검증."""
+
+    def test_헤딩_변환(self):
+        md = "## 소개\n\n내용입니다."
+        html = convert_markdown_to_html(md)
+        assert "<h2" in html
+        assert "소개</h2>" in html
+
+    def test_h1_h3_변환(self):
+        md = "# 큰제목\n\n### 작은제목\n\n본문"
+        html = convert_markdown_to_html(md)
+        # toc 확장이 id 속성을 추가하므로 부분 매칭
+        assert "<h1" in html
+        assert "큰제목</h1>" in html
+        assert "<h3" in html
+        assert "작은제목</h3>" in html
+
+    def test_단락_변환(self):
+        md = "첫 번째 단락입니다.\n\n두 번째 단락입니다."
+        html = convert_markdown_to_html(md)
+        assert "<p>" in html
+        assert "첫 번째 단락입니다." in html
+
+    def test_볼드_이탤릭_변환(self):
+        md = "이것은 **볼드**이고 *이탤릭*입니다."
+        html = convert_markdown_to_html(md)
+        assert "<strong>볼드</strong>" in html
+        assert "<em>이탤릭</em>" in html
+
+    def test_테이블_변환(self):
+        md = "| 항목 | 값 |\n|---|---|\n| A | 1 |\n| B | 2 |"
+        html = convert_markdown_to_html(md)
+        assert "<table>" in html
+        assert "<th>항목</th>" in html
+        assert "<td>A</td>" in html
+        assert "<td>2</td>" in html
+
+    def test_펜스_코드블록_변환(self):
+        md = "```python\nprint('hello')\n```"
+        html = convert_markdown_to_html(md)
+        # codehilite가 활성화되어 있으므로 <div class="highlight"> 포함
+        assert "print" in html
+
+    def test_순서_목록_변환(self):
+        md = "1. 첫째\n2. 둘째\n3. 셋째"
+        html = convert_markdown_to_html(md)
+        assert "<ol>" in html
+        assert "<li>첫째</li>" in html
+
+    def test_비순서_목록_변환(self):
+        md = "- 항목 A\n- 항목 B\n- 항목 C"
+        html = convert_markdown_to_html(md)
+        assert "<ul>" in html
+        assert "<li>항목 A</li>" in html
+
+    def test_줄바꿈_nl2br(self):
+        md = "줄 하나\n줄 둘"
+        html = convert_markdown_to_html(md)
+        assert "<br" in html
+
+    def test_빈_문자열_처리(self):
+        assert convert_markdown_to_html("") == ""
+        assert convert_markdown_to_html("   ") == ""
+        assert convert_markdown_to_html(None) == ""  # type: ignore[arg-type]
+
+    def test_복합_콘텐츠(self):
+        """실제 블로그 포스트 형태의 복합 마크다운 변환."""
+        md = """## 개요
+
+이 글에서는 **AWS**와 **Azure**를 비교합니다.
+
+## 비교 표
+
+| 항목 | AWS | Azure |
+|---|---|---|
+| 컴퓨팅 | EC2 | VM |
+| 스토리지 | S3 | Blob |
+
+### 코드 예시
+
+```bash
+aws s3 ls
+```
+
+## FAQ
+
+1. AWS가 더 좋은가요?
+2. Azure 무료 사용 가능한가요?
+
+- 장점 1
+- 장점 2
+"""
+        html = convert_markdown_to_html(md)
+        assert "<h2" in html
+        assert "개요</h2>" in html
+        assert "<strong>AWS</strong>" in html
+        assert "<table>" in html
+        assert "<th>AWS</th>" in html
+        assert "<ol>" in html
+        assert "<ul>" in html
+
+
+class TestConvertMarkdownToHtmlEnhanced:
+    """Phase 5.7: codehilite + TOC 확장 검증."""
+
+    def test_코드_하이라이트_인라인_스타일(self):
+        """codehilite noclasses=True → inline style 속성 포함 확인."""
+        md = '```python\nprint("hello")\n```'
+        html = convert_markdown_to_html(md)
+        # noclasses=True 이므로 style= 속성이 포함되어야 함
+        assert "style=" in html
+
+    def test_TOC_생성(self):
+        """H2 2개 이상 → toc-container div 생성 확인."""
+        md = "## 첫 번째 섹션\n\n내용 1\n\n## 두 번째 섹션\n\n내용 2\n\n## 세 번째 섹션\n\n내용 3"
+        html = convert_markdown_to_html(md)
+        assert 'class="toc-container"' in html
+        assert "<h2>목차</h2>" in html
+
+    def test_TOC_H2_앞_배치(self):
+        """목차가 첫 번째 <h2> 앞에 위치하는지 확인."""
+        md = "## 섹션 A\n\n내용 A\n\n## 섹션 B\n\n내용 B"
+        html = convert_markdown_to_html(md)
+        toc_pos = html.find('class="toc-container"')
+        # 목차를 담는 div의 h2 이후, 첫 번째 콘텐츠 h2 찾기
+        first_content_h2 = html.find("섹션 A</h2>")
+        assert toc_pos != -1, "TOC가 생성되지 않음"
+        assert first_content_h2 != -1, "첫 번째 H2가 없음"
+        assert toc_pos < first_content_h2, "TOC가 첫 번째 H2 앞에 있어야 함"
+
+    def test_이미지_lazy_loading(self):
+        """_add_lazy_loading() → loading="lazy" 삽입 확인."""
+        html = '<p>텍스트</p><img src="test.jpg" alt="test"><p>끝</p>'
+        result = _add_lazy_loading(html)
+        assert 'loading="lazy"' in result
+        assert '<img loading="lazy" src="test.jpg"' in result
+
+    def test_lazy_loading_이미_있으면_중복_추가_안함(self):
+        """이미 loading= 속성이 있는 img에는 추가하지 않음."""
+        html = '<img loading="eager" src="test.jpg">'
+        result = _add_lazy_loading(html)
+        assert result.count("loading=") == 1
+
+    def test_lazy_loading_빈_문자열(self):
+        """빈 문자열 입력 처리."""
+        assert _add_lazy_loading("") == ""
+        assert _add_lazy_loading(None) is None  # type: ignore[arg-type]
+
+
+class TestValidateHtml:
+    """validate_html() 함수 검증."""
+
+    def test_정상_HTML_통과(self):
+        html = _valid_html()
+        assert validate_html(html) is True
+
+    def test_h3_태그도_통과(self):
+        body = _long_text()
+        html = f"<h3>소제목</h3><p>{body}</p>"
+        assert validate_html(html) is True
+
+    def test_빈_콘텐츠_실패(self):
+        assert validate_html("") is False
+        assert validate_html(None) is False  # type: ignore[arg-type]
+
+    def test_헤딩_없으면_실패(self):
+        html = "<p>본문만 있습니다.</p>"
+        assert validate_html(html) is False
+
+    def test_단락_없으면_실패(self):
+        html = "<h2>제목만</h2><div>내용</div>"
+        assert validate_html(html) is False
+
+    def test_마크다운_헤딩_잔여_실패(self):
+        html = "<p>## 이것은 변환되지 않은 헤딩</p>"
+        assert validate_html(html) is False
+
+    def test_마크다운_볼드_잔여_실패(self):
+        html = "<h2>제목</h2><p>**변환안된볼드**</p>"
+        assert validate_html(html) is False
+
+    def test_마크다운_테이블_구분선_잔여_실패(self):
+        html = "<h2>제목</h2><p>|---|---|</p>"
+        assert validate_html(html) is False
+
+    def test_코드블록_내_마크다운_문법은_무시(self):
+        """<pre>/<code> 내부의 마크다운 문법은 검증에서 제외."""
+        body = _long_text()
+        html = (
+            f'<h2>코드 예시</h2>'
+            f'<p>{body}</p>'
+            f'<pre><code>## 이것은 주석\n**볼드아님**\n|---|</code></pre>'
+        )
+        assert validate_html(html) is True
+
+    def test_convert_후_validate_통과(self):
+        """convert_markdown_to_html 결과가 validate_html을 통과하는지."""
+        long_body = _long_text()
+        md = f"## 제목\n\n{long_body}\n\n### 소제목\n\n추가 내용."
+        html = convert_markdown_to_html(md)
+        assert validate_html(html) is True
+
+
+class TestValidateHtmlEnhanced:
+    """Phase 5.7: validate_html() 강화 검증."""
+
+    def test_본문_길이_부족_실패(self):
+        """태그 제거 후 순수 텍스트 1,500자 미만이면 실패."""
+        html = "<h2>제목</h2><p>짧은 본문입니다.</p>"
+        assert validate_html(html) is False
+
+    def test_본문_길이_충분_통과(self):
+        """태그 제거 후 순수 텍스트 1,500자 이상이면 통과."""
+        html = _valid_html()
+        assert validate_html(html) is True
+
+    def test_IMAGE_마커_잔류_실패(self):
+        """<!-- IMAGE: keyword --> 마커가 남아있으면 hard fail."""
+        body = _long_text()
+        html = f"<h2>제목</h2><p>{body}</p><!-- IMAGE: server rack -->"
+        assert validate_html(html) is False
+
+    def test_이미지_없어도_경고만_통과(self):
+        """<img> 태그가 0개여도 ok 플래그는 변경되지 않음 (warning only)."""
+        html = _valid_html()
+        assert "<img" not in html  # img 태그 없음 확인
+        assert validate_html(html) is True  # 그래도 통과

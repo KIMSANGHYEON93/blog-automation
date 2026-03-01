@@ -83,8 +83,8 @@
           ]
         }
       },
-      "id": "node-5-claude-sonnet",
-      "name": "Claude Sonnet (Content Gen)",
+      "id": "node-5-gemini-flash",
+      "name": "Gemini Flash (Content Gen)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1120, 300]
@@ -142,8 +142,8 @@
           ]
         }
       },
-      "id": "node-7c-haiku-verify",
-      "name": "Haiku Verification (temp=0)",
+      "id": "node-7c-gemini-verify",
+      "name": "Gemini Verification (temp=0)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1780, 300]
@@ -225,15 +225,15 @@
     "Schedule Trigger (01:00 AM)": { "main": [[{ "node": "Sheets Read (Status=대기)", "type": "main", "index": 0 }]] },
     "Sheets Read (Status=대기)": { "main": [[{ "node": "SerpAPI Search", "type": "main", "index": 0 }]] },
     "SerpAPI Search": { "main": [[{ "node": "Route Prompt (A/B/C)", "type": "main", "index": 0 }]] },
-    "Route Prompt (A/B/C)": { "main": [[{ "node": "Claude Sonnet (Content Gen)", "type": "main", "index": 0 }]] },
-    "Claude Sonnet (Content Gen)": { "main": [[{ "node": "Parse JSON Response", "type": "main", "index": 0 }]] },
+    "Route Prompt (A/B/C)": { "main": [[{ "node": "Gemini Flash (Content Gen)", "type": "main", "index": 0 }]] },
+    "Gemini Flash (Content Gen)": { "main": [[{ "node": "Parse JSON Response", "type": "main", "index": 0 }]] },
     "Parse JSON Response": { "main": [[
       { "node": "URL Validation", "type": "main", "index": 0 },
       { "node": "Code Block Lint", "type": "main", "index": 0 }
     ]] },
-    "URL Validation": { "main": [[{ "node": "Haiku Verification (temp=0)", "type": "main", "index": 0 }]] },
-    "Code Block Lint": { "main": [[{ "node": "Haiku Verification (temp=0)", "type": "main", "index": 0 }]] },
-    "Haiku Verification (temp=0)": { "main": [[{ "node": "Parse Verification Result", "type": "main", "index": 0 }]] },
+    "URL Validation": { "main": [[{ "node": "Gemini Verification (temp=0)", "type": "main", "index": 0 }]] },
+    "Code Block Lint": { "main": [[{ "node": "Gemini Verification (temp=0)", "type": "main", "index": 0 }]] },
+    "Gemini Verification (temp=0)": { "main": [[{ "node": "Parse Verification Result", "type": "main", "index": 0 }]] },
     "Parse Verification Result": { "main": [[{ "node": "Verification Passed?", "type": "main", "index": 0 }]] },
     "Verification Passed?": {
       "main": [

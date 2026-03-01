@@ -7,7 +7,7 @@ import pytest
 
 @pytest.mark.e2e
 class TestFullPublishFlow:
-    """실제 티스토리 발행 검증 — 비공개 발행."""
+    """실제 티스토리 발행 검증 — 공개 발행."""
 
     @pytest.mark.skipif(
         not os.getenv("KAKAO_ID"),

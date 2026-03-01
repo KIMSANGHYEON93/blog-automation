@@ -9,13 +9,13 @@
 
 | 항목 | 값 |
 |------|---|
-| **현재 Phase** | **Phase 5.8 완료** (KEYWORD_BROADENING + n8n 자격증명 복구 + Tistory 실발행 검증) |
-| **단위 테스트** | 105건 통과 (Domain 74 + Infra 31) |
+| **현재 Phase** | **Phase 5.9 완료** (발행 품질 7건 수정 — alt text, lazy loading, nofollow, meta desc, 프롬프트 강화) |
+| **단위 테스트** | 111건 통과 (Domain 74 + Infra 37) |
 | **통합 테스트** | 9건 통과 (GoogleSheets 6 + Selenium 3) |
 | **E2E 테스트** | 2건 스킵 (환경변수 미설정) |
 | **n8n E2E** | 3건 통과 (CI/CD 2개 이미지, Jenkins 1개 이미지, Terraform 4개 이미지) |
 | **Tistory 실발행** | 1건 성공 (CI/CD → https://kimsanghyeon.tistory.com/197) |
-| **전체 테스트** | 105건 통과, 2건 스킵 |
+| **전체 테스트** | 111건 통과, 2건 스킵 |
 | **커버리지** | 92.05% (domain + application) |
 | **ruff** | 0 errors |
 | **mypy** | 0 errors |
@@ -804,6 +804,77 @@ MAX_POSTS=1 MIN_DELAY=0 MAX_DELAY=0 python3 -m src.interface.cli
 
 ---
 
+## Phase 5.9: 발행 품질 강화 (7건) — ✅ 완료 (2026-03-01)
+
+> **목표**: 실발행 포스트(`/197`) 검증에서 발견된 7가지 품질 이슈 수정
+
+### 수정 항목
+
+| # | 우선순위 | 항목 | 수정 파일 | 상태 |
+|---|---------|------|----------|------|
+| 1 | P0 | 이미지 alt text: Unsplash description → `{keyword} - {section title}` | `inject_images.js` | ✅ |
+| 2 | P0 | Lazy loading: 첫 번째 이미지 LCP candidate로 제외 | `tistory_editor.py` | ✅ |
+| 3 | P1 | 프롬프트에 코드 예시 작성 지시 추가 | `prompt_a/b/c` | ✅ |
+| 4 | P1 | 장점/한계 테이블 분리 작성 지시 추가 | `prompt_a` | ✅ |
+| 5 | P1 | Meta description 티스토리 에디터 description 필드 주입 | `tistory_editor.py` | ✅ |
+| 6 | P2 | Unsplash attribution: `*...*` → `<small>` 태그 + nofollow 링크 | `inject_images.js` | ✅ |
+| 7 | P2 | 외부 링크에 `rel="nofollow noopener" target="_blank"` 자동 추가 | `tistory_editor.py` | ✅ |
+
+### 상세 변경 내역
+
+#### 1. Image alt text (P0)
+
+`searchUnsplashSingle(keyword, sectionTitle)`: 마커 직전 H2 제목 또는 H2 원문 텍스트를 `sectionTitle`로 전달.
+alt text 형식: `{검색키워드} - {섹션제목}` (예: `cloud infrastructure automation - Terraform 작동 원리`)
+
+#### 2. Lazy loading LCP (P0)
+
+`_add_lazy_loading()`: regex 치환 콜백에 카운터 도입. 첫 번째 `<img>` 태그는 LCP(Largest Contentful Paint) candidate이므로 `loading="lazy"` 미적용, 두 번째부터 적용.
+
+#### 3. 코드 예시 지시 (P1)
+
+- 프롬프트 A: "설정 파일, CLI 명령어, 스크립트 등 실무 코드 예시를 1개 이상 포함" + 언어 태그 필수
+- 프롬프트 B: "각 기술의 설정/사용 예시 코드를 1개 이상 포함" + 언어 태그 필수
+- 프롬프트 C: "모든 코드블록에 반드시 언어 태그 부착" (기존 3개 이상 필수 유지)
+
+#### 4. 테이블 분리 (P1)
+
+프롬프트 A: "장점 테이블과 한계 테이블을 **별도로 분리** (각 3행 이상)"
+
+#### 5. Meta description (P1)
+
+`_inject_meta_description(sb, meta_description)`: 발행 전 description 관련 폼 필드(`#post-description`, `textarea[name="description"]` 등) 탐색 후 값 주입.
+
+#### 6. Unsplash credits (P2)
+
+attribution 형식 변경:
+- 이전: `*Photo by [Name](url) on [Unsplash](url)*`
+- 이후: `<small>Photo by <a href="url" rel="nofollow noopener" target="_blank">Name</a> on <a href="url" rel="nofollow noopener" target="_blank">Unsplash</a></small>`
+
+#### 7. External links nofollow (P2)
+
+`_add_nofollow_to_external_links(html_text, blog_name)`: HTML 내 모든 `<a>` 태그 검사. 내부 링크(`{blog_name}.tistory.com`), 앵커 링크(`#`), 이미 `rel=` 있는 태그는 건드리지 않고, 나머지 외부 링크에 `rel="nofollow noopener" target="_blank"` 추가.
+
+### 수정 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `n8n/code_nodes/inject_images.js` | alt text 형식 변경, attribution `<small>` + nofollow, `searchUnsplashSingle/WithFallback`에 sectionTitle 파라미터 추가, `findPrecedingH2()` 헬퍼 |
+| `n8n/prompts/prompt_a_terminology.md` | 코드 예시 지시 + 테이블 분리 지시 + 체크리스트 항목 추가 |
+| `n8n/prompts/prompt_b_comparison.md` | 코드 예시 지시 + 체크리스트 항목 추가 |
+| `n8n/prompts/prompt_c_troubleshooting.md` | 코드블록 언어 태그 필수 지시 추가 |
+| `n8n/workflow_complete.json` | inject_images.js 변경 동기화 |
+| `src/infrastructure/browser/tistory_editor.py` | `_add_lazy_loading()` LCP 제외, `_add_nofollow_to_external_links()` 신규, `_inject_meta_description()` 신규 |
+| `tests/unit/infrastructure/test_markdown_to_html.py` | lazy loading 테스트 수정 + nofollow 테스트 5건 추가 (총 111건) |
+
+### 테스트 결과
+
+- 단위 테스트: **111건 전체 통과** (기존 105 → 신규 6건 추가)
+- ruff: 0건 (기존 1건 pre-existing — post_content.py E501)
+- workflow import: n8n 컨테이너 반영 완료
+
+---
+
 ## Phase 6: 콘텐츠 누적 + SEO 최적화 — 🔲 미시작
 
 > **기간**: W3~6 (2026-03-15 ~ 2026-04-11)
@@ -889,3 +960,8 @@ MAX_POSTS=1 MIN_DELAY=0 MAX_DELAY=0 python3 -m src.interface.cli
 | 2026-03-01 | 다단계 키워드 fallback 전략 (Phase 5.8) | 원본 → broadening → 제목 영문 → 범용, 순차 재시도로 이미지 확보율 극대화 |
 | 2026-03-01 | n8n CLI `import:credentials` 방식 채택 (Phase 5.8) | REST API body parser 오류로 POST 불가 → CLI + crypto-js 암호화로 자격증명 프로그래밍 등록 |
 | 2026-03-01 | Tistory 실발행 검증 완료 (Phase 5.8) | Pipeline A(n8n) → Pipeline B(Selenium) 전체 흐름 실증, /197 공개 발행 확인 |
+| 2026-03-01 | Image alt text를 `{keyword} - {section title}` 형식으로 변경 (Phase 5.9) | Unsplash alt_description은 영문이고 맥락 부족 → 검색키워드+섹션제목 조합이 SEO에 유리 |
+| 2026-03-01 | 첫 번째 이미지 lazy loading 제외 (Phase 5.9) | 첫 이미지가 LCP(Largest Contentful Paint) candidate → lazy loading 시 Core Web Vitals 점수 하락 |
+| 2026-03-01 | Unsplash attribution을 `<small>` + nofollow로 변경 (Phase 5.9) | 저작권 표기는 필수이나 외부 링크 juice 유출 방지 + 시각적으로 본문과 구분 |
+| 2026-03-01 | 외부 링크에 nofollow/noopener/target="_blank" 자동 추가 (Phase 5.9) | SEO link juice 유출 방지 + 보안(noopener) + UX(새 탭 열기) |
+| 2026-03-01 | 프롬프트에 코드 예시 + 테이블 분리 지시 추가 (Phase 5.9) | 실발행 검증에서 코드블록 0개, 장점/한계가 하나의 테이블로 구분이 어려운 문제 발견 |

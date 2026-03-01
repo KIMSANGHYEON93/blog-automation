@@ -12,31 +12,88 @@ const UNSPLASH_KEY = $env.UNSPLASH_ACCESS_KEY;
 const helpers = this.helpers;
 
 /**
- * H2 텍스트에서 Unsplash 검색용 영문 키워드를 추출
- * 한국어만 있는 H2("개요", "상세 비교표")는 Unsplash에서 결과 0건이므로
- * 영문 단어를 우선 추출하고, 없으면 글 제목의 영문을 사용
+ * IT 기술 키워드 → Unsplash 검색 친화 키워드 매핑
+ * Terraform, Jenkins 등 특정 기술 이름은 Unsplash에서 0건이므로
+ * 시각적으로 관련 있는 일반 키워드로 변환
  */
-function extractSearchKeyword(h2Text) {
-  // H2에서 영문+숫자 단어 추출
+const KEYWORD_BROADENING = {
+  terraform: 'cloud infrastructure automation',
+  ansible: 'server automation terminal',
+  jenkins: 'software development pipeline',
+  kubernetes: 'cloud container technology',
+  docker: 'container technology server',
+  'ci/cd': 'software deployment automation',
+  cicd: 'software deployment automation',
+  ssl: 'cybersecurity encryption lock',
+  tls: 'cybersecurity encryption lock',
+  siem: 'cybersecurity monitoring dashboard',
+  splunk: 'data analytics dashboard',
+  elk: 'data analytics search',
+  prometheus: 'server monitoring dashboard',
+  grafana: 'monitoring dashboard visualization',
+  dns: 'network technology server',
+  vpn: 'network security connection',
+  saml: 'authentication security login',
+  oauth: 'authentication security login',
+  iam: 'identity access management security',
+  mfa: 'two factor authentication security',
+  'sd-wan': 'network infrastructure',
+  microservice: 'software architecture diagram',
+  'zero trust': 'cybersecurity network',
+  iac: 'infrastructure as code automation',
+};
+
+/**
+ * H2 텍스트에서 Unsplash 검색용 키워드 후보 배열을 반환
+ * 1순위: 추출된 영문 키워드
+ * 2순위: broadening 매핑 적용 키워드
+ * 3순위: 제목에서 추출한 영문
+ * 4순위: 범용 IT 이미지 키워드
+ */
+function extractSearchKeywords(h2Text) {
+  const candidates = [];
+
+  // H2에서 영문 단어 추출
   const engWords = h2Text.match(/[A-Za-z0-9][\w./-]*/g) || [];
   if (engWords.length > 0) {
-    return engWords.join(' ');
+    candidates.push(engWords.join(' '));
   }
-  // 글 제목에서 영문 추출
+
+  // broadening 매핑 적용 (추출된 영문 단어 중 매핑이 있으면 추가)
+  const lowerText = h2Text.toLowerCase();
+  for (const [tech, broad] of Object.entries(KEYWORD_BROADENING)) {
+    if (lowerText.includes(tech)) {
+      candidates.push(broad);
+      break;
+    }
+  }
+
+  // 제목에서 영문 + broadening
   const titleEng = title.match(/[A-Za-z0-9][\w./-]*/g) || [];
   if (titleEng.length > 0) {
-    return titleEng.join(' ');
+    const titleKeyword = titleEng.join(' ');
+    if (!candidates.includes(titleKeyword)) {
+      candidates.push(titleKeyword);
+    }
+    const lowerTitle = title.toLowerCase();
+    for (const [tech, broad] of Object.entries(KEYWORD_BROADENING)) {
+      if (lowerTitle.includes(tech) && !candidates.includes(broad)) {
+        candidates.push(broad);
+        break;
+      }
+    }
   }
-  // 최후 fallback: 원문 그대로
-  return h2Text;
+
+  // 최후 fallback: 범용 IT 이미지
+  candidates.push('technology software development');
+
+  return candidates;
 }
 
 /**
- * Unsplash API에서 이미지 검색 (n8n Code Node용 — this.helpers.httpRequest 사용)
- * @param {string} keyword - 검색 키워드
- * @returns {Promise<{url: string, alt: string, attribution: string}|null>}
+ * Unsplash API에서 이미지 검색 (단일 키워드)
  */
-async function searchUnsplash(keyword) {
+async function searchUnsplashSingle(keyword) {
   if (!UNSPLASH_KEY) return null;
 
   try {
@@ -52,7 +109,6 @@ async function searchUnsplash(keyword) {
     });
     if (!data.results || data.results.length === 0) return null;
 
-    // 랜덤하게 상위 4개 중 1개 선택
     const idx = Math.floor(Math.random() * Math.min(data.results.length, 4));
     const photo = data.results[idx];
 
@@ -65,6 +121,17 @@ async function searchUnsplash(keyword) {
   } catch (e) {
     return null;
   }
+}
+
+/**
+ * 키워드 후보 배열을 순서대로 시도하여 첫 번째 성공 결과 반환
+ */
+async function searchUnsplashWithFallback(keywords) {
+  for (const kw of keywords) {
+    const result = await searchUnsplashSingle(kw);
+    if (result) return { ...result, usedKeyword: kw };
+  }
+  return null;
 }
 
 // === Step 1: IMAGE 마커 탐색 ===
@@ -90,7 +157,14 @@ if (markers.length > 0) {
   // 역순으로 처리 (인덱스 밀림 방지)
   for (let i = markers.length - 1; i >= 0; i--) {
     const marker = markers[i];
-    const image = await searchUnsplash(marker.keyword);
+    // 마커 키워드 + broadening 후보로 검색
+    const markerCandidates = [marker.keyword];
+    const lk = marker.keyword.toLowerCase();
+    for (const [tech, broad] of Object.entries(KEYWORD_BROADENING)) {
+      if (lk.includes(tech)) { markerCandidates.push(broad); break; }
+    }
+    markerCandidates.push('technology software development');
+    const image = await searchUnsplashWithFallback(markerCandidates);
 
     if (image) {
       const imageBlock = `\n![${image.alt}](${image.url})\n\n*${image.attribution}*\n`;
@@ -99,7 +173,7 @@ if (markers.length > 0) {
         imageBlock +
         updatedContent.substring(marker.index + marker.full.length);
       injectedCount++;
-      usedKeywords.push(marker.keyword);
+      usedKeywords.push(image.usedKeyword);
 
       if (!thumbnailUrl) {
         thumbnailUrl = image.thumb || image.url;
@@ -135,8 +209,8 @@ if (markers.length > 0) {
     const h2 = targetH2s[i];
     // H2 텍스트에서 영문 키워드 추출 (Unsplash는 영문 검색이 결과가 좋음)
     const rawText = h2.text.replace(/^##\s*/, '').trim();
-    const keyword = extractSearchKeyword(rawText);
-    const image = await searchUnsplash(keyword);
+    const keywords = extractSearchKeywords(rawText);
+    const image = await searchUnsplashWithFallback(keywords);
 
     if (image) {
       // H2 뒤 첫 문단 이후에 삽입
@@ -154,7 +228,7 @@ if (markers.length > 0) {
         imageBlock +
         updatedContent.substring(insertPos);
       injectedCount++;
-      usedKeywords.push(keyword);
+      usedKeywords.push(image.usedKeyword);
 
       if (!thumbnailUrl) {
         thumbnailUrl = image.thumb || image.url;

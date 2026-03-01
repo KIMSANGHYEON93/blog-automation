@@ -9,11 +9,12 @@
 
 | 항목 | 값 |
 |------|---|
-| **현재 Phase** | **Phase 5.7 완료** (이미지 삽입 + codehilite/TOC + 검증 강화 + E2E 검증) |
+| **현재 Phase** | **Phase 5.8 완료** (KEYWORD_BROADENING + n8n 자격증명 복구 + Tistory 실발행 검증) |
 | **단위 테스트** | 105건 통과 (Domain 74 + Infra 31) |
 | **통합 테스트** | 9건 통과 (GoogleSheets 6 + Selenium 3) |
 | **E2E 테스트** | 2건 스킵 (환경변수 미설정) |
-| **n8n E2E** | 1건 통과 (CI/CD 파이프라인 구축 가이드 — 이미지 2개 삽입 확인) |
+| **n8n E2E** | 3건 통과 (CI/CD 2개 이미지, Jenkins 1개 이미지, Terraform 4개 이미지) |
+| **Tistory 실발행** | 1건 성공 (CI/CD → https://kimsanghyeon.tistory.com/197) |
 | **전체 테스트** | 105건 통과, 2건 스킵 |
 | **커버리지** | 92.05% (domain + application) |
 | **ruff** | 0 errors |
@@ -694,6 +695,115 @@ curl -s http://localhost:5678/api/v1/executions -H "X-N8N-API-KEY: ..." | jq '.d
 
 ---
 
+## Phase 5.8: KEYWORD_BROADENING + 실발행 검증 — ✅ 완료 (2026-03-01)
+
+> **목표**: Unsplash 검색 실패 키워드 해결 + n8n 자격증명 복구 + 전체 파이프라인(A→B) 실발행 검증
+
+### 5.8.1: KEYWORD_BROADENING — Unsplash 검색 실패 해결
+
+**문제**: IT 기술 특화 키워드("Terraform", "Ansible", "SIEM" 등)는 Unsplash에서 검색 결과 0건 반환 → 이미지 삽입 0개
+
+**수정**:
+- `KEYWORD_BROADENING` 매핑 테이블 추가 (23개 IT 기술 → Unsplash 검색 친화 키워드)
+- `extractSearchKeywords()`: 다중 후보 반환 (원본 → broadening → 제목 영문 → 범용)
+- `searchUnsplashWithFallback()`: 키워드 후보 배열 순차 재시도
+
+| 기술 키워드 | 매핑된 Unsplash 키워드 |
+|------------|----------------------|
+| terraform | cloud infrastructure automation |
+| jenkins | software development pipeline |
+| kubernetes | cloud container technology |
+| ssl/tls | cybersecurity encryption lock |
+| siem | cybersecurity monitoring dashboard |
+| (총 23개) | ... |
+
+### 5.8.2: n8n 자격증명 복구
+
+**문제**: n8n 볼륨 초기화 후 Google Sheets 자격증명 유실 → REST API body parser 오류로 재등록 불가
+
+**해결**: n8n CLI `import:credentials` 방식으로 우회
+1. n8n 암호화 키 확인 (`/home/node/.n8n/config`)
+2. `crypto-js` (n8n 내장)로 서비스 계정 자격증명 암호화
+3. 워크플로우가 참조하는 credential ID (`amt5R8weAKcq8xmn`)로 import 파일 생성
+4. `n8n import:credentials --input=file.json` 실행
+5. n8n 재시작 후 Google Sheets API 연결 확인
+
+**n8n 계정 정보**:
+- 이메일: `sanghyun6467@gmail.com`
+- 워크플로우 ID: `ty52rqOEJ6ZjNF2L`
+- 스프레드시트 ID: `1VbyEQNuIAKpmTfk_5pTIjuLb3xlS-kdUfWflmfnFJSA`
+
+### 5.8.3: E2E 테스트 3 — Terraform (KEYWORD_BROADENING 검증)
+
+```
+키워드: Terraform이란 무엇인가 (유형: 용어)
+결과: 20/20 노드 성공, finished: true
+총 실행 시간: ~37초
+```
+
+| 지표 | 값 |
+|------|---|
+| 이미지 삽입 | **4개** (broadening: `cloud infrastructure automation`) |
+| 콘텐츠 길이 | 11,177자 |
+| H2 헤딩 | 5개 |
+| 검증 | 전 항목 True (accurate, logical, complete, useful) |
+| Sheets 업데이트 | 발행대기 ✅ |
+
+### 5.8.4: Tistory 실발행 테스트 (Pipeline B)
+
+```bash
+MAX_POSTS=1 MIN_DELAY=0 MAX_DELAY=0 python3 -m src.interface.cli
+```
+
+**결과**: 발행 성공 — https://kimsanghyeon.tistory.com/197
+
+| 지표 | 값 |
+|------|---|
+| 키워드 | CI/CD 파이프라인 구축 가이드 (Row 11) |
+| 카카오 로그인 | 쿠키 기반 자동 로그인 성공 |
+| 본문 주입 | TinyMCE API `setContent()` — 8,992자 |
+| 태그 | 7개 (CI/CD, DevOps, Jenkins, GitHub Actions 등) |
+| 임시저장 → 공개발행 | 성공 |
+| 발행 URL | `/197` |
+| 총 소요 시간 | ~47초 |
+
+### 5.8.5: 발행 포스트 품질 검증
+
+| 항목 | 결과 |
+|------|------|
+| 제목 | CI/CD 파이프라인 구축 완벽 가이드: 초보자를 위한 단계별 실전 튜토리얼 |
+| H2 섹션 | 6개 (목차, CI/CD란?, 작동 원리, 적용 사례, 장점과 한계, FAQ) |
+| 이미지 | 2개 (Unsplash) |
+| 목차(TOC) | 있음 (9개 항목) |
+| FAQ | 있음 |
+| LD+JSON 스키마 | 2개 |
+| 태그 | 7개 |
+| 글자수 | 4,376자 |
+| 마크다운 잔류물 | 없음 |
+| 공개 접근 | 정상 |
+
+**개선 포인트** (향후):
+- `loading="lazy"` 속성이 Tistory 에디터에 의해 제거됨 (0/2)
+- Unsplash attribution(저작권 표기)이 HTML 변환 시 누락
+
+### 수정 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `n8n/code_nodes/inject_images.js` | KEYWORD_BROADENING 매핑(23개) + extractSearchKeywords() + searchUnsplashWithFallback() |
+| `n8n/workflow_complete.json` | Inject Images 노드 jsCode 업데이트 |
+
+### 의사결정 로그
+
+| 결정 | 근거 |
+|------|------|
+| KEYWORD_BROADENING 매핑 도입 | "Terraform" 등 IT 기술명은 Unsplash 0건 → 관련 일반 키워드로 확장 |
+| 다단계 키워드 fallback (원본→broadening→제목→범용) | 단일 키워드 실패 시에도 최소 `technology software development`로 이미지 확보 |
+| n8n CLI `import:credentials` 사용 | REST API body parser 오류 → CLI가 유일한 프로그래밍 가능한 우회 경로 |
+| `crypto-js`로 자격증명 암호화 | n8n은 암호화된 data 필드만 import → 현재 인스턴스의 encryptionKey로 암호화 필수 |
+
+---
+
 ## Phase 6: 콘텐츠 누적 + SEO 최적화 — 🔲 미시작
 
 > **기간**: W3~6 (2026-03-15 ~ 2026-04-11)
@@ -775,3 +885,7 @@ curl -s http://localhost:5678/api/v1/executions -H "X-N8N-API-KEY: ..." | jq '.d
 | 2026-03-01 | MD→HTML 변환 버그 수정 — 방향 A 채택 (Phase 5) | 마크다운 모드 + CodeMirror setValue()는 서버에 raw MD 저장 → Python `markdown` 라이브러리로 HTML 변환 후 WYSIWYG 모드(TinyMCE)에 주입 |
 | 2026-03-01 | `markdown>=3.5` 패키지 추가 + extensions: tables, fenced_code, nl2br, sane_lists | 테이블/코드블록/줄바꿈/목록 정상 변환 보장 |
 | 2026-03-01 | HTML 검증 함수 `validate_html()` 도입 | `<h2>/<h3>`, `<p>` 존재 + 잔여 MD 문법(`## `, `**`, `\|---\|`) 미포함 검사 |
+| 2026-03-01 | KEYWORD_BROADENING 매핑 테이블 도입 (Phase 5.8) | "Terraform" 등 IT 기술 키워드가 Unsplash 검색 0건 → 23개 기술별 일반 키워드 매핑 |
+| 2026-03-01 | 다단계 키워드 fallback 전략 (Phase 5.8) | 원본 → broadening → 제목 영문 → 범용, 순차 재시도로 이미지 확보율 극대화 |
+| 2026-03-01 | n8n CLI `import:credentials` 방식 채택 (Phase 5.8) | REST API body parser 오류로 POST 불가 → CLI + crypto-js 암호화로 자격증명 프로그래밍 등록 |
+| 2026-03-01 | Tistory 실발행 검증 완료 (Phase 5.8) | Pipeline A(n8n) → Pipeline B(Selenium) 전체 흐름 실증, /197 공개 발행 확인 |

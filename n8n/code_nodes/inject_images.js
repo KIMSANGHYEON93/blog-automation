@@ -7,8 +7,29 @@
  */
 
 const content = $input.item.json.content || '';
+const title = $input.item.json.title || '';
 const UNSPLASH_KEY = $env.UNSPLASH_ACCESS_KEY;
 const helpers = this.helpers;
+
+/**
+ * H2 텍스트에서 Unsplash 검색용 영문 키워드를 추출
+ * 한국어만 있는 H2("개요", "상세 비교표")는 Unsplash에서 결과 0건이므로
+ * 영문 단어를 우선 추출하고, 없으면 글 제목의 영문을 사용
+ */
+function extractSearchKeyword(h2Text) {
+  // H2에서 영문+숫자 단어 추출
+  const engWords = h2Text.match(/[A-Za-z0-9][\w./-]*/g) || [];
+  if (engWords.length > 0) {
+    return engWords.join(' ');
+  }
+  // 글 제목에서 영문 추출
+  const titleEng = title.match(/[A-Za-z0-9][\w./-]*/g) || [];
+  if (titleEng.length > 0) {
+    return titleEng.join(' ');
+  }
+  // 최후 fallback: 원문 그대로
+  return h2Text;
+}
 
 /**
  * Unsplash API에서 이미지 검색 (n8n Code Node용 — this.helpers.httpRequest 사용)
@@ -112,8 +133,9 @@ if (markers.length > 0) {
   // 역순 처리
   for (let i = targetH2s.length - 1; i >= 0; i--) {
     const h2 = targetH2s[i];
-    // H2 텍스트에서 키워드 추출 (## 제거)
-    const keyword = h2.text.replace(/^##\s*/, '').trim();
+    // H2 텍스트에서 영문 키워드 추출 (Unsplash는 영문 검색이 결과가 좋음)
+    const rawText = h2.text.replace(/^##\s*/, '').trim();
+    const keyword = extractSearchKeyword(rawText);
     const image = await searchUnsplash(keyword);
 
     if (image) {

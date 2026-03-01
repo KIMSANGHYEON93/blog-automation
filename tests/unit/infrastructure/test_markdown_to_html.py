@@ -1,6 +1,7 @@
 """Unit tests for markdown → HTML conversion and validation."""
 from src.infrastructure.browser.tistory_editor import (
     _add_lazy_loading,
+    _add_nofollow_to_external_links,
     convert_markdown_to_html,
     validate_html,
 )
@@ -150,12 +151,20 @@ class TestConvertMarkdownToHtmlEnhanced:
         assert first_content_h2 != -1, "첫 번째 H2가 없음"
         assert toc_pos < first_content_h2, "TOC가 첫 번째 H2 앞에 있어야 함"
 
-    def test_이미지_lazy_loading(self):
-        """_add_lazy_loading() → loading="lazy" 삽입 확인."""
+    def test_이미지_lazy_loading_첫번째_제외(self):
+        """_add_lazy_loading() → 첫 번째 이미지는 LCP candidate로 제외, 두 번째부터 lazy."""
+        html = '<img src="first.jpg" alt="first"><p>중간</p><img src="second.jpg" alt="second">'
+        result = _add_lazy_loading(html)
+        # 첫 번째 이미지: lazy loading 없음 (LCP candidate)
+        assert '<img src="first.jpg"' in result
+        # 두 번째 이미지: lazy loading 적용
+        assert '<img loading="lazy" src="second.jpg"' in result
+
+    def test_이미지_lazy_loading_단일_이미지(self):
+        """단일 이미지는 LCP candidate로 lazy loading 미적용."""
         html = '<p>텍스트</p><img src="test.jpg" alt="test"><p>끝</p>'
         result = _add_lazy_loading(html)
-        assert 'loading="lazy"' in result
-        assert '<img loading="lazy" src="test.jpg"' in result
+        assert 'loading="lazy"' not in result
 
     def test_lazy_loading_이미_있으면_중복_추가_안함(self):
         """이미 loading= 속성이 있는 img에는 추가하지 않음."""
@@ -247,3 +256,32 @@ class TestValidateHtmlEnhanced:
         html = _valid_html()
         assert "<img" not in html  # img 태그 없음 확인
         assert validate_html(html) is True  # 그래도 통과
+
+
+class TestAddNofollowToExternalLinks:
+    """_add_nofollow_to_external_links() 함수 검증."""
+
+    def test_외부_링크에_nofollow_추가(self):
+        html = '<a href="https://example.com">외부</a>'
+        result = _add_nofollow_to_external_links(html, "myblog")
+        assert 'rel="nofollow noopener"' in result
+        assert 'target="_blank"' in result
+
+    def test_내부_링크는_건드리지_않음(self):
+        html = '<a href="https://myblog.tistory.com/123">내부</a>'
+        result = _add_nofollow_to_external_links(html, "myblog")
+        assert "nofollow" not in result
+
+    def test_앵커_링크는_건드리지_않음(self):
+        html = '<a href="#section1">앵커</a>'
+        result = _add_nofollow_to_external_links(html, "myblog")
+        assert "nofollow" not in result
+
+    def test_이미_rel_있으면_건드리지_않음(self):
+        html = '<a href="https://example.com" rel="sponsored">외부</a>'
+        result = _add_nofollow_to_external_links(html, "myblog")
+        assert 'rel="sponsored"' in result
+        assert "nofollow" not in result
+
+    def test_빈_문자열_처리(self):
+        assert _add_nofollow_to_external_links("", "myblog") == ""

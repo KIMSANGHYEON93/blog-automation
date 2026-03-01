@@ -92,8 +92,10 @@ function extractSearchKeywords(h2Text) {
 
 /**
  * Unsplash API에서 이미지 검색 (단일 키워드)
+ * @param {string} keyword - 검색 키워드
+ * @param {string} sectionTitle - H2 섹션 제목 (alt text용)
  */
-async function searchUnsplashSingle(keyword) {
+async function searchUnsplashSingle(keyword, sectionTitle) {
   if (!UNSPLASH_KEY) return null;
 
   try {
@@ -112,10 +114,15 @@ async function searchUnsplashSingle(keyword) {
     const idx = Math.floor(Math.random() * Math.min(data.results.length, 4));
     const photo = data.results[idx];
 
+    // alt text: "{keyword} - {section title}" 형식 (SEO 최적화)
+    const altText = sectionTitle
+      ? `${keyword} - ${sectionTitle}`
+      : keyword;
+
     return {
       url: photo.urls.regular,
-      alt: photo.alt_description || keyword,
-      attribution: `Photo by [${photo.user.name}](${photo.user.links.html}?utm_source=blog_automation&utm_medium=referral) on [Unsplash](https://unsplash.com/?utm_source=blog_automation&utm_medium=referral)`,
+      alt: altText,
+      attribution: `<small>Photo by <a href="${photo.user.links.html}?utm_source=blog_automation&utm_medium=referral" rel="nofollow noopener" target="_blank">${photo.user.name}</a> on <a href="https://unsplash.com/?utm_source=blog_automation&utm_medium=referral" rel="nofollow noopener" target="_blank">Unsplash</a></small>`,
       thumb: photo.urls.small,
     };
   } catch (e) {
@@ -125,10 +132,12 @@ async function searchUnsplashSingle(keyword) {
 
 /**
  * 키워드 후보 배열을 순서대로 시도하여 첫 번째 성공 결과 반환
+ * @param {string[]} keywords - 검색 키워드 후보 배열
+ * @param {string} sectionTitle - H2 섹션 제목 (alt text용)
  */
-async function searchUnsplashWithFallback(keywords) {
+async function searchUnsplashWithFallback(keywords, sectionTitle) {
   for (const kw of keywords) {
-    const result = await searchUnsplashSingle(kw);
+    const result = await searchUnsplashSingle(kw, sectionTitle);
     if (result) return { ...result, usedKeyword: kw };
   }
   return null;
@@ -154,9 +163,18 @@ const usedKeywords = [];
 
 if (markers.length > 0) {
   // === Step 2: 마커 기반 이미지 삽입 ===
+  // 마커 직전 H2 제목을 추출하는 헬퍼
+  function findPrecedingH2(text, markerIndex) {
+    const before = text.substring(0, markerIndex);
+    const h2s = before.match(/^## .+$/gm) || [];
+    if (h2s.length === 0) return '';
+    return h2s[h2s.length - 1].replace(/^##\s*/, '').trim();
+  }
+
   // 역순으로 처리 (인덱스 밀림 방지)
   for (let i = markers.length - 1; i >= 0; i--) {
     const marker = markers[i];
+    const sectionTitle = findPrecedingH2(updatedContent, marker.index);
     // 마커 키워드 + broadening 후보로 검색
     const markerCandidates = [marker.keyword];
     const lk = marker.keyword.toLowerCase();
@@ -164,10 +182,10 @@ if (markers.length > 0) {
       if (lk.includes(tech)) { markerCandidates.push(broad); break; }
     }
     markerCandidates.push('technology software development');
-    const image = await searchUnsplashWithFallback(markerCandidates);
+    const image = await searchUnsplashWithFallback(markerCandidates, sectionTitle);
 
     if (image) {
-      const imageBlock = `\n![${image.alt}](${image.url})\n\n*${image.attribution}*\n`;
+      const imageBlock = `\n![${image.alt}](${image.url})\n\n${image.attribution}\n`;
       updatedContent =
         updatedContent.substring(0, marker.index) +
         imageBlock +
@@ -210,7 +228,7 @@ if (markers.length > 0) {
     // H2 텍스트에서 영문 키워드 추출 (Unsplash는 영문 검색이 결과가 좋음)
     const rawText = h2.text.replace(/^##\s*/, '').trim();
     const keywords = extractSearchKeywords(rawText);
-    const image = await searchUnsplashWithFallback(keywords);
+    const image = await searchUnsplashWithFallback(keywords, rawText);
 
     if (image) {
       // H2 뒤 첫 문단 이후에 삽입
@@ -222,7 +240,7 @@ if (markers.length > 0) {
           ? nextParagraphEnd + 2
           : afterH2 + 1;
 
-      const imageBlock = `\n![${image.alt}](${image.url})\n\n*${image.attribution}*\n`;
+      const imageBlock = `\n![${image.alt}](${image.url})\n\n${image.attribution}\n`;
       updatedContent =
         updatedContent.substring(0, insertPos) +
         imageBlock +

@@ -61,6 +61,9 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         # 이미지 lazy loading 적용
         html_body = _add_lazy_loading(html_body)
 
+        # 외부 링크에 nofollow/noopener 속성 추가
+        html_body = _add_nofollow_to_external_links(html_body, blog_name)
+
         # HTML 변환 검증
         if not validate_html(html_body):
             logger.warning("HTML 변환 검증 실패 — 그대로 진행")
@@ -90,6 +93,11 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         if content.tags:
             _input_tags(sb, content.tag_list())
             time.sleep(1)
+
+        # 메타 설명(meta description) 주입
+        if content.meta_description:
+            _inject_meta_description(sb, content.meta_description)
+            time.sleep(0.5)
 
         # 저장 전 콘텐츠 동기화 확인
         _ensure_content_in_form(sb, html_body)
@@ -440,10 +448,55 @@ def convert_markdown_to_html(md_text: str) -> str:
 
 
 def _add_lazy_loading(html_text: str) -> str:
-    """<img> 태그에 loading="lazy" 속성을 추가."""
+    """<img> 태그에 loading="lazy" 속성을 추가. 첫 번째 이미지는 제외 (LCP candidate)."""
     if not html_text:
         return html_text
-    return re.sub(r"<img\s(?!.*loading=)", '<img loading="lazy" ', html_text)
+    count = 0
+
+    def _replace_img(match: re.Match) -> str:
+        nonlocal count
+        count += 1
+        if count == 1:
+            # 첫 번째 이미지: LCP candidate이므로 lazy loading 미적용
+            return match.group(0)
+        return '<img loading="lazy" ' + match.group(0)[5:]
+
+    return re.sub(r"<img\s(?!.*loading=)", _replace_img, html_text)
+
+
+def _add_nofollow_to_external_links(html_text: str, blog_name: str) -> str:
+    """외부 링크 <a> 태그에 rel="nofollow noopener" target="_blank" 추가.
+
+    내부 링크 (같은 블로그 도메인)는 제외.
+    """
+    if not html_text:
+        return html_text
+
+    internal_pattern = re.compile(
+        rf'https?://({re.escape(blog_name)}\.tistory\.com|tistory\.com)',
+        re.IGNORECASE,
+    )
+
+    def _process_anchor(match: re.Match) -> str:
+        tag = match.group(0)
+        href_match = re.search(r'href="([^"]*)"', tag)
+        if not href_match:
+            return tag
+        href = href_match.group(1)
+        # 내부 링크, 앵커, 빈 href는 건드리지 않음
+        if not href or href.startswith('#') or internal_pattern.search(href):
+            return tag
+        # 이미 rel이 있으면 건드리지 않음
+        if 'rel=' in tag:
+            return tag
+        # target="_blank"과 rel 추가
+        tag = tag.rstrip('>')
+        if 'target=' not in tag:
+            tag += ' target="_blank"'
+        tag += ' rel="nofollow noopener">'
+        return tag
+
+    return re.sub(r'<a\s[^>]*>', _process_anchor, html_text)
 
 
 def validate_html(html_text: str) -> bool:
@@ -728,6 +781,41 @@ def _input_tags(sb, tags: list[str]) -> None:
         logger.info(f"태그 입력 완료: {tags} (등록된 태그: {tag_count}개)")
     except Exception as e:
         logger.warning(f"태그 입력 중 오류 (무시): {e}")
+
+
+def _inject_meta_description(sb, meta_description: str) -> None:
+    """발행 설정 레이어 또는 에디터의 meta description 필드에 값 주입."""
+    try:
+        result = sb.execute_script("""
+            var desc = arguments[0];
+            // 방법 1: 발행 설정의 description textarea/input
+            var selectors = [
+                '#post-description',
+                'textarea[name="description"]',
+                'input[name="description"]',
+                '#meta-description',
+                'textarea.tf_excerpt',
+                '#excerpt'
+            ];
+            for (var i = 0; i < selectors.length; i++) {
+                var el = document.querySelector(selectors[i]);
+                if (el) {
+                    el.value = desc;
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                    return 'injected:' + selectors[i];
+                }
+            }
+            // 방법 2: og:description / name=description 메타 태그 직접 생성은
+            // 발행 시 Tistory가 자체 처리하므로 여기서는 폼 필드만 처리
+            return null;
+        """, meta_description)
+        if result:
+            logger.info(f"메타 설명 주입: {result}")
+        else:
+            logger.warning("메타 설명 필드를 찾지 못함 — 건너뜀")
+    except Exception as e:
+        logger.warning(f"메타 설명 주입 중 오류 (무시): {e}")
 
 
 def _install_ajax_content_interceptor(sb, markdown_text: str) -> None:

@@ -3,7 +3,7 @@
 > **문서 버전**: v2.3 (DDD/TDD 아키텍처 적용 + 파이프라인 B 재설계)
 > **최종 갱신**: 2026-02-28
 > **아키텍처**: 비동기 듀얼 파이프라인 + DDD 4-Layer (Domain-Driven Design)
-> **상세 프로세스**: `prosess.md` 참조 (1,207줄, DDD/TDD 개발 프로세스 전문)
+> **상세 프로세스**: `process.md` 참조 (1,207줄, DDD/TDD 개발 프로세스 전문)
 
 ---
 
@@ -307,7 +307,7 @@ blog-automation/
 ├── pyproject.toml
 ├── Makefile
 ├── .env.example
-├── prosess.md                           # DDD/TDD 개발 프로세스 (1,207줄)
+├── process.md                           # DDD/TDD 개발 프로세스 (1,207줄)
 └── masterplan_v2.3.md                   # 본 문서
 ```
 
@@ -1044,7 +1044,7 @@ lint:                                 ## 코드 품질
 | 파일명 | 유형 | 버전 | 설명 |
 |--------|------|------|------|
 | `masterplan_v2.3.md` | 마크다운 | **v2.3** | 본 문서 (DDD 아키텍처 반영) |
-| `prosess.md` | 마크다운 | v1.0 | DDD/TDD 개발 프로세스 (1,207줄, 코드 전문 포함) |
+| `process.md` | 마크다운 | v1.0 | DDD/TDD 개발 프로세스 (1,207줄, 코드 전문 포함) |
 | `masterplan_v2.2.md` | 마크다운 | v2.2 | 이전 버전 (프롬프트/검증/시트 스키마 전문 참조) |
 | `tistory_publisher.py` | Python | v1.0 (레거시) | 모놀리식 파이프라인 B (553줄, Phase 4에서 폐기) |
 | `blog-automation/src/` | Python | v2.3 | DDD 4-Layer 파이프라인 B (20+ 파일) |
@@ -1057,7 +1057,7 @@ lint:                                 ## 코드 품질
 > 30개 B2B IT 키워드 투입 완료, Pipeline A (Sonnet 4.5, 01:00 AM) + Pipeline B (09:00 AM) 자동 운영 중
 >
 > **다음 단계**: Phase 5 — 운영 안정화 + SEO 기반 구축
-> 상세 진행 추적: `prosess.md` 참조
+> 상세 진행 추적: `process.md` 참조
 
 ---
 

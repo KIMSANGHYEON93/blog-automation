@@ -2,7 +2,7 @@
 
 ## Project Overview
 B2B IT 블로그 자동화 프로젝트의 Pipeline B를 DDD 4-Layer + TDD로 구축한다.
-상세 설계: `prosess.md` (1,207줄) / 마스터 플랜: `masterplan_v2.3.md` (980줄)
+상세 설계: `process.md` (1,207줄) / 마스터 플랜: `masterplan_v2.3.md` (980줄)
 
 ## Architecture Rules (MANDATORY)
 - Domain Layer (src/domain/): 외부 의존성 ZERO. 순수 Python만 허용

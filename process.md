@@ -366,7 +366,7 @@ sb.execute_script("window.confirm = function() { return true; };")
 | 12 | 마크다운 구조 검증 (validate_structure.js 신규) | `validate_structure.js`, `workflow_complete.json` | ✅ |
 | 13 | FAQ LD+JSON 자동 주입 | `post_content.py`, `tistory_editor.py` | ✅ |
 | 14 | internal_link_keywords 굵게 지시 | 3개 프롬프트 | ✅ |
-| 15 | 문서 업데이트 (masterplan, prosess) | `masterplan_v2.3.md`, `prosess.md` | ✅ |
+| 15 | 문서 업데이트 (masterplan, prosess) | `masterplan_v2.3.md`, `process.md` | ✅ |
 
 ### 수정 파일 요약 (13개)
 
@@ -625,6 +625,7 @@ curl -s http://localhost:5678/api/v1/executions -H "X-N8N-API-KEY: ..." | jq '.d
 | IMAGE 마커 잔류 → hard fail | inject_images.js 이후 잔류하면 파이프라인 오류 |
 | `this.helpers.httpRequest` 사용 | n8n Code Node 샌드박스가 `fetch`/`require('https')` 미노출, `this.helpers`만 사용 가능 |
 | Sheets Update → `$('Inject Images')` 참조 | 이미지 삽입 후 content를 저장해야 하므로 Inject Images 노드 출력 참조 |
+| `extractSearchKeyword()` 영문 추출 | Unsplash는 영문 검색이 효과적, 한국어 H2에서 영문 단어 추출 후 검색 |
 
 ### 수정 파일 목록
 
@@ -646,8 +647,11 @@ curl -s http://localhost:5678/api/v1/executions -H "X-N8N-API-KEY: ..." | jq '.d
 |---|------|------|------|
 | E1 | `images_injected: 0` (Inject Images 실행 9ms) | n8n Code Node 샌드박스에서 `fetch` 미노출 (`fetch is not defined`) | `fetch` → `this.helpers.httpRequest()` 변경 |
 | E2 | 이미지 삽입 성공하나 Sheets에 이미지 미반영 | `Sheets Update` 노드가 `$('Parse JSON Response')` (이미지 삽입 전) 참조 | `$('Inject Images')` 참조로 변경 |
+| E3 | H2 fallback으로 Unsplash 검색 시 결과 0건 | 한국어 H2("개요", "Jenkins 상세")를 그대로 검색 → Unsplash는 영문 검색만 유효 | `extractSearchKeyword()` 추가: H2에서 영문 추출, 없으면 글 제목 영문 fallback |
 
 ### E2E 파이프라인 테스트 결과
+
+#### 테스트 1: 용어 유형
 
 ```
 키워드: CI/CD 파이프라인 구축 가이드 (유형: 용어)
@@ -664,6 +668,23 @@ curl -s http://localhost:5678/api/v1/executions -H "X-N8N-API-KEY: ..." | jq '.d
 | Unsplash attribution | 2개 (라이선스 준수) |
 | 잔류 IMAGE 마커 | 0개 |
 | thumbnail_url | 설정됨 (Unsplash small URL) |
+
+#### 테스트 2: 비교 유형 (extractSearchKeyword 적용 후)
+
+```
+키워드: Jenkins vs GitHub Actions 비교 (유형: 비교)
+1차 시도: Gemini 응답 제어 문자 → Parse JSON 실패 (간헐적 LLM 비결정성)
+2차 시도: Exit code 0, finished: true, lastNode: Sheets Update (발행대기)
+```
+
+| 지표 | 값 |
+|------|---|
+| 이미지 삽입 | 1개 (H2 "Jenkins 상세" → 영문 "Jenkins" 추출 → Unsplash 검색 성공) |
+| 본문 길이 | 5,217자 |
+| H2 헤딩 | 6개 (개요, Jenkins 상세, GitHub Actions 상세, 상세 비교표, 선택 가이드, FAQ) |
+| Unsplash attribution | 1개 (라이선스 준수) |
+| 잔류 IMAGE 마커 | 0개 |
+| thumbnail_url | 설정됨 |
 
 ### 테스트 결과
 

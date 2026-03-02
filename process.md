@@ -1,7 +1,7 @@
 # B2B IT 블로그 자동화 — 개발 프로세스 추적
 
 > **문서 용도**: 실행 진행 추적 (마스터 플랜 `masterplan_v2.3.md`의 실행 로그)
-> **최종 갱신**: 2026-03-01
+> **최종 갱신**: 2026-03-02
 
 ---
 
@@ -9,16 +9,16 @@
 
 | 항목 | 값 |
 |------|---|
-| **현재 Phase** | **Phase 5.9 완료** (발행 품질 7건 수정 — alt text, lazy loading, nofollow, meta desc, 프롬프트 강화) |
-| **단위 테스트** | 111건 통과 (Domain 74 + Infra 37) |
-| **통합 테스트** | 9건 통과 (GoogleSheets 6 + Selenium 3) |
+| **현재 Phase** | **Phase 5.10 완료** (버그 수정 3건 — 카카오 셀렉터, FAILED→PENDING, n8n API 키) |
+| **단위 테스트** | 116건 통과 (Domain 79 + Infra 37) |
+| **통합 테스트** | 9건 통과 (GoogleSheets 6 + Selenium 3) — 이전 2건 실패 → 0건 실패 |
 | **E2E 테스트** | 2건 스킵 (환경변수 미설정) |
 | **n8n E2E** | 3건 통과 (CI/CD 2개 이미지, Jenkins 1개 이미지, Terraform 4개 이미지) |
-| **Tistory 실발행** | 1건 성공 (CI/CD → https://kimsanghyeon.tistory.com/197) |
-| **전체 테스트** | 111건 통과, 2건 스킵 |
+| **Tistory 실발행** | 30건 성공 (최신: Jenkins vs GitHub Actions → https://kimsanghyeon.tistory.com/207) |
+| **전체 테스트** | 125건 통과 (단위 116 + 통합 9), 2건 스킵 |
 | **커버리지** | 92.05% (domain + application) |
 | **ruff** | 0 errors |
-| **mypy** | 0 errors |
+| **mypy** | 0 errors (kakao_auth.py 포함) |
 | **콘텐츠 생성 모델** | Gemini 2.0 Flash (Phase 5.6에서 LLM_PROVIDER 추상화, `.env`로 전환 가능) |
 
 ---
@@ -875,6 +875,107 @@ attribution 형식 변경:
 
 ---
 
+## Phase 5.10: 버그 수정 세션 (3건) — ✅ 완료 (2026-03-02)
+
+> **배경**: Phase 5.9 완료 후 발견된 3가지 버그 수정. 통합 테스트 2건 실패, Row 12 발행실패, n8n 모니터링 미작동.
+
+### Bug 1 (P0): 카카오 로그인 셀렉터 오류
+
+**문제**: `#loginId--1`, `#password--2`는 React가 생성하는 불안정 ID. 카카오 페이지 업데이트 시 변경됨 → 통합 테스트 2건 실패
+
+**수정**: `kakao_auth.py` — Fallback Chain + JS 구조 기반 탐색
+
+| 추가 항목 | 내용 |
+|----------|------|
+| `KAKAO_LOGIN_ID_SELECTORS` | `#loginId--1` → `input[name='loginId']` → `input[type='email']` → `input[id^='loginId']` |
+| `KAKAO_PASSWORD_SELECTORS` | `#password--2` → `input[name='password']` → `input[type='password']` → `input[id^='password']` |
+| `KAKAO_SUBMIT_SELECTORS` | `button.submit` → `button[type='submit']` |
+| `_find_kakao_element()` | `dom_selectors.find_element()`와 동일 패턴의 헬퍼 |
+| `_find_kakao_elements_by_js()` | 최종 fallback — 페이지의 모든 input을 순회하여 email→password→submit 구조 기반 탐색 |
+
+**기존 동작 보존**: 원래 셀렉터(`#loginId--1` 등)를 chain 최상위에 유지 → 작동 시 기존과 동일
+
+**실전 검증**: Row 12 재발행 시 `#loginId--1` visible 실패 → JS fallback으로 자동 전환되어 로그인 성공
+
+### Bug 2 (P1): Row 12 발행 실패 재시도
+
+**문제**: Row 12 "Jenkins vs GitHub Actions 비교" — 이전 UI 버튼 코드에서 실패. DDD 상태 머신에 FAILED→PENDING 전이 없어 재시도 불가
+
+**수정**: 4-Layer 전체에 걸친 변경
+
+| 레이어 | 파일 | 변경 |
+|--------|------|------|
+| Domain | `post.py` | `reset_failed_to_pending()` 메서드 추가 (FAILED→PENDING, error_message 초기화) |
+| Domain | `post_repository.py` | `find_failed()` 추상 메서드 추가 |
+| Infrastructure | `google_sheets_repo.py` | `find_failed()` 구현 (STATUS_FAILED 필터링) |
+| Infrastructure | `in_memory_repo.py` | `find_failed()` 구현 (테스트용) |
+| Application | `reset_stuck_posts.py` | `retry_failed: bool = False` 파라미터 + 실패 재시도 로직 (옵트인) |
+| Interface | `cli.py` | `RETRY_FAILED` 환경변수 읽기 → UseCase 전달 |
+| Script | `scripts/reset_row12.py` | Row 12 즉시 리셋 (1회성 gspread 스크립트) |
+
+**테스트 추가** (5건):
+- `test_post_entity.py`: `TestResetFailedToPending` — 정상 전이, 비-FAILED 에러, error_message 클리어
+- `test_reset_stuck_usecase.py`: `TestRetryFailed` — 옵트인 동작, 기본 비활성
+
+**Row 12 재발행 결과**:
+- `python3 scripts/reset_row12.py` → 발행실패 → 발행대기 리셋 완료
+- `RETRY_FAILED=true MAX_POSTS=1 python3 -m src.interface.cli` → 발행 성공
+- 발행 URL: https://kimsanghyeon.tistory.com/207
+- 본문: 9,530자 TinyMCE 주입, 태그 5개
+
+### Bug 3 (P2): n8n API 키 누락
+
+**문제**: `/tmp/n8n_api_key.txt` 미존재 → `check_status.sh`, `check_last_run.sh` 모니터링 미작동
+
+**수정**:
+
+| 파일 | 변경 |
+|------|------|
+| `setup_n8n_apikey.sh` (신규) | n8n Docker에서 API 키 생성 + `/tmp/n8n_api_key.txt` 저장 + 검증 |
+| `check_status.sh` | API 키 로드 fallback chain (파일 → `.env` → 환경변수) |
+| `check_last_run.sh` | 동일 fallback chain 적용, 에러 메시지에 해결 안내 추가 |
+| `.env.example` | `N8N_API_KEY=` 항목 추가 |
+
+### 커밋 내역
+
+| 커밋 | 메시지 |
+|------|--------|
+| `cb7ba25` | `fix(infra): replace hardcoded Kakao login selectors with fallback chain` |
+| `08063b7` | `fix(domain): add FAILED→PENDING transition for post retry recovery` |
+| `8fef5be` | `fix(ops): add n8n API key setup script and .env fallback for monitoring` |
+| `4b7087e` | `fix(infra): tistory editor 발행 안정화 및 셀렉터 보강` |
+
+### 검증 결과
+
+| 항목 | 결과 |
+|------|------|
+| 단위 테스트 | **116 passed** (기존 111 + 신규 5) |
+| 통합 테스트 | **9 passed** (이전 2 failed → 0 failed) |
+| ruff | 0 errors |
+| mypy (kakao_auth.py) | 0 errors |
+| Row 12 재발행 | 성공 (https://kimsanghyeon.tistory.com/207) |
+
+### 수정 파일 요약 (13개)
+
+| 파일 | 변경 유형 |
+|------|----------|
+| `src/infrastructure/browser/kakao_auth.py` | 셀렉터 fallback chain 상수 + 헬퍼 2개 + `_enter_credentials_and_wait` 재작성 |
+| `src/domain/entities/post.py` | `reset_failed_to_pending()` 메서드 추가 |
+| `src/domain/ports/post_repository.py` | `find_failed()` 추상 메서드 추가 |
+| `src/infrastructure/persistence/google_sheets_repo.py` | `find_failed()` 구현 + `STATUS_FAILED` import |
+| `src/infrastructure/persistence/in_memory_repo.py` | `find_failed()` 구현 |
+| `src/application/use_cases/reset_stuck_posts.py` | `retry_failed` 옵트인 파라미터 + 실패 재시도 로직 |
+| `src/interface/cli.py` | `RETRY_FAILED` 환경변수 읽기 |
+| `scripts/reset_row12.py` | 1회성 Row 12 리셋 스크립트 (신규) |
+| `setup_n8n_apikey.sh` | n8n API 키 자동 생성+저장 스크립트 (신규) |
+| `check_status.sh` | API 키 로드 fallback chain 적용 |
+| `check_last_run.sh` | 동일 fallback chain 적용 |
+| `.env.example` | `N8N_API_KEY=` 추가 |
+| `tests/unit/domain/test_post_entity.py` | `TestResetFailedToPending` 3건 추가 |
+| `tests/unit/application/test_reset_stuck_usecase.py` | `TestRetryFailed` 2건 추가 |
+
+---
+
 ## Phase 6: 콘텐츠 누적 + SEO 최적화 — 🔲 미시작
 
 > **기간**: W3~6 (2026-03-15 ~ 2026-04-11)
@@ -965,3 +1066,6 @@ attribution 형식 변경:
 | 2026-03-01 | Unsplash attribution을 `<small>` + nofollow로 변경 (Phase 5.9) | 저작권 표기는 필수이나 외부 링크 juice 유출 방지 + 시각적으로 본문과 구분 |
 | 2026-03-01 | 외부 링크에 nofollow/noopener/target="_blank" 자동 추가 (Phase 5.9) | SEO link juice 유출 방지 + 보안(noopener) + UX(새 탭 열기) |
 | 2026-03-01 | 프롬프트에 코드 예시 + 테이블 분리 지시 추가 (Phase 5.9) | 실발행 검증에서 코드블록 0개, 장점/한계가 하나의 테이블로 구분이 어려운 문제 발견 |
+| 2026-03-02 | 카카오 로그인 셀렉터 Fallback Chain 도입 (Phase 5.10) | React 생성 ID(`#loginId--1`)가 불안정 → name/type/id-prefix + JS 구조 탐색으로 3단계 fallback |
+| 2026-03-02 | FAILED→PENDING 전이를 옵트인(`RETRY_FAILED=true`)으로 설계 (Phase 5.10) | 실패 원인 미해결 상태에서 자동 재시도는 위험 → 명시적 옵트인으로 의도적 재시도만 허용 |
+| 2026-03-02 | n8n API 키 로드 fallback chain 도입 (Phase 5.10) | 파일(/tmp) 단일 소스 → 파일/.env/환경변수 3단계로 유연성 확보, setup 스크립트로 초기 설정 자동화 |

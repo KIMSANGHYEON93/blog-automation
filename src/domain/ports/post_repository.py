@@ -26,3 +26,8 @@ class PostRepository(ABC):
     def find_failed(self) -> list[Post]:
         """Find posts with FAILED status."""
         ...
+
+    @abstractmethod
+    def find_published(self, limit: int = 50) -> list[Post]:
+        """발행완료 상태의 포스트 목록 (내부 링크용)."""
+        ...

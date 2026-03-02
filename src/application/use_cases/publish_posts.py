@@ -1,6 +1,6 @@
 """PublishPostsUseCase — Orchestrates the blog post publishing workflow."""
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from src.domain.entities.post import Post
 from src.domain.exceptions import DailyPublishLimitError
@@ -32,6 +32,8 @@ class PublishPostsUseCase:
             logger.info("발행 대기 포스트 없음")
             return stats
 
+        published_posts = self._repo.find_published(limit=50)
+
         self._browser.start()
         try:
             if not self._browser.login():
@@ -39,6 +41,7 @@ class PublishPostsUseCase:
                 return stats
 
             for post in posts:
+                self._enrich_with_related_links(post, published_posts)
                 try:
                     self._publish_single(post, stats)
                 except DailyPublishLimitError:
@@ -52,6 +55,45 @@ class PublishPostsUseCase:
             self._browser.stop()
 
         return stats
+
+    def _enrich_with_related_links(
+        self, post: Post, published: list[Post],
+    ) -> None:
+        if not post.content or not post.content.has_body():
+            return
+
+        same_cat = [
+            p for p in published
+            if p.category == post.category
+            and p.row_index != post.row_index
+            and p.published_url
+        ]
+        diff_cat = [
+            p for p in published
+            if p.category != post.category
+            and p.row_index != post.row_index
+            and p.published_url
+        ]
+        related = same_cat[:3] + diff_cat[: max(0, 5 - len(same_cat[:3]))]
+        if not related:
+            return
+
+        items = "".join(
+            f'<li style="margin:8px 0;">'
+            f'<a href="{p.published_url}">{p.keyword}</a></li>'
+            for p in related[:5]
+        )
+        html = (
+            "\n\n<hr>\n"
+            '<div style="margin-top:30px;padding:20px;'
+            'background:#f8f9fa;border-radius:8px;">'
+            "<h3>관련 글</h3>"
+            f'<ul style="list-style:none;padding:0;">{items}</ul>'
+            "</div>"
+        )
+        post.content = replace(
+            post.content, body_markdown=post.content.body_markdown + html,
+        )
 
     def _publish_single(self, post: Post, stats: PublishStats) -> None:
         if not post.is_publishable():

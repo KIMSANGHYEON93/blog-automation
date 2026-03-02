@@ -31,6 +31,10 @@ class InMemoryPostRepository(PostRepository):
         return [p for p in self._posts
                 if p.status == PostStatus.FAILED]
 
+    def find_published(self, limit: int = 50) -> list[Post]:
+        return [p for p in self._posts
+                if p.status == PostStatus.PUBLISHED][:limit]
+
     def all(self) -> list[Post]:
         """테스트 검증용: 전체 포스트 반환."""
         return list(self._posts)

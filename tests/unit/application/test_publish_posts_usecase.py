@@ -184,3 +184,87 @@ class TestPublishPostsDailyLimit:
         assert stats.failed == 0
         saved = repo.all()[0]
         assert saved.status == PostStatus.PENDING
+
+
+class TestRelatedLinks:
+    """관련 글 자동 삽입 테스트."""
+
+    def _make_published_post(
+        self, row_index: int, keyword: str, category: str = "IT",
+        url: str = "https://test.tistory.com/1",
+    ) -> Post:
+        post = Post(
+            row_index=row_index,
+            keyword=keyword,
+            category=category,
+            status=PostStatus.PUBLISHED,
+            content=PostContent(title=keyword, body_markdown="본문"),
+            published_url=url,
+        )
+        return post
+
+    def test_관련_글_삽입_동일_카테고리(self):
+        """동일 카테고리 발행글이 있으면 관련 글 HTML이 body에 포함된다."""
+        pending = Post(
+            row_index=10,
+            keyword="AD란",
+            category="IT",
+            status=PostStatus.PENDING,
+            content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+        )
+        pub1 = self._make_published_post(1, "SSO란", "IT", "https://test.tistory.com/1")
+        pub2 = self._make_published_post(2, "LDAP란", "IT", "https://test.tistory.com/2")
+
+        repo = InMemoryPostRepository([pending, pub1, pub2])
+        browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
+        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+
+        use_case.execute()
+
+        saved = repo.all()[0]
+        assert "관련 글" in saved.content.body_markdown
+        assert "SSO란" in saved.content.body_markdown
+        assert "LDAP란" in saved.content.body_markdown
+
+    def test_관련_글_미삽입_발행글_없음(self):
+        """발행글 0건이면 관련 글 섹션이 생성되지 않는다."""
+        pending = Post(
+            row_index=10,
+            keyword="AD란",
+            category="IT",
+            status=PostStatus.PENDING,
+            content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+        )
+        repo = InMemoryPostRepository([pending])
+        browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
+        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+
+        use_case.execute()
+
+        saved = repo.all()[0]
+        assert "관련 글" not in saved.content.body_markdown
+
+    def test_관련_글_자기자신_제외(self):
+        """현재 발행하려는 포스트는 관련 글 목록에서 제외된다."""
+        pending = Post(
+            row_index=1,
+            keyword="AD란",
+            category="IT",
+            status=PostStatus.PENDING,
+            content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+        )
+        # row_index=1인 발행완료 글 (자기 자신과 같은 row)
+        pub_self = self._make_published_post(1, "AD란", "IT", "https://test.tistory.com/1")
+        pub_other = self._make_published_post(2, "SSO란", "IT", "https://test.tistory.com/2")
+
+        repo = InMemoryPostRepository([pending, pub_self, pub_other])
+        browser = MockBrowserAdapter(publish_url="https://test.tistory.com/99")
+        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+
+        use_case.execute()
+
+        saved = repo.all()[0]
+        assert "관련 글" in saved.content.body_markdown
+        assert "SSO란" in saved.content.body_markdown
+        # 자기 자신(AD란)은 관련 글 링크에 포함되지 않아야 함
+        assert 'href="https://test.tistory.com/1"' not in saved.content.body_markdown

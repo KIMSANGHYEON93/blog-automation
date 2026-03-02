@@ -7,6 +7,20 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 N8N_API_KEY_FILE="/tmp/n8n_api_key.txt"
 DETAIL="${1:-}"
 
+# API 키 로드 (fallback chain: 파일 → .env → 환경변수)
+_load_n8n_api_key() {
+    if [ -f "$N8N_API_KEY_FILE" ]; then
+        cat "$N8N_API_KEY_FILE"
+    elif [ -f "${PROJECT_DIR}/.env" ] && grep -q '^N8N_API_KEY=' "${PROJECT_DIR}/.env"; then
+        grep '^N8N_API_KEY=' "${PROJECT_DIR}/.env" | cut -d'=' -f2-
+    elif [ -n "${N8N_API_KEY:-}" ]; then
+        echo "$N8N_API_KEY"
+    else
+        echo ""
+    fi
+}
+API_KEY=$(_load_n8n_api_key)
+
 # 색상 정의
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -33,8 +47,7 @@ echo
 
 # === 2. 워크플로우 상태 ===
 echo -e "${YELLOW}[2] n8n 워크플로우 상태${NC}"
-if [ -f "$N8N_API_KEY_FILE" ]; then
-    API_KEY=$(cat "$N8N_API_KEY_FILE")
+if [ -n "$API_KEY" ]; then
     WORKFLOWS=$(curl -s "http://localhost:5678/api/v1/workflows" -H "X-N8N-API-KEY: $API_KEY" 2>/dev/null)
     if [ $? -eq 0 ] && [ -n "$WORKFLOWS" ]; then
         echo "$WORKFLOWS" | python3 -c "
@@ -51,14 +64,14 @@ except:
         echo -e "  ${RED}n8n API 연결 실패${NC}"
     fi
 else
-    echo -e "  ${RED}API 키 파일 없음 ($N8N_API_KEY_FILE)${NC}"
+    echo -e "  ${RED}API 키 없음 (파일/환경변수/환경 모두 미설정)${NC}"
+    echo -e "  ${RED}→ ./setup_n8n_apikey.sh 실행 또는 .env에 N8N_API_KEY 설정${NC}"
 fi
 echo
 
 # === 3. 최근 Pipeline A 실행 이력 ===
 echo -e "${YELLOW}[3] Pipeline A — 최근 실행 이력 (n8n)${NC}"
-if [ -f "$N8N_API_KEY_FILE" ]; then
-    API_KEY=$(cat "$N8N_API_KEY_FILE")
+if [ -n "$API_KEY" ]; then
     curl -s "http://localhost:5678/api/v1/executions?limit=5" -H "X-N8N-API-KEY: $API_KEY" 2>/dev/null | python3 -c "
 import sys, json
 try:

@@ -6,12 +6,25 @@
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 N8N_API_KEY_FILE="/tmp/n8n_api_key.txt"
 
-if [ ! -f "$N8N_API_KEY_FILE" ]; then
-    echo "ERROR: API 키 파일 없음 ($N8N_API_KEY_FILE)"
+# API 키 로드 (fallback chain: 파일 → .env → 환경변수)
+_load_n8n_api_key() {
+    if [ -f "$N8N_API_KEY_FILE" ]; then
+        cat "$N8N_API_KEY_FILE"
+    elif [ -f "${PROJECT_DIR}/.env" ] && grep -q '^N8N_API_KEY=' "${PROJECT_DIR}/.env"; then
+        grep '^N8N_API_KEY=' "${PROJECT_DIR}/.env" | cut -d'=' -f2-
+    elif [ -n "${N8N_API_KEY:-}" ]; then
+        echo "$N8N_API_KEY"
+    else
+        echo ""
+    fi
+}
+API_KEY=$(_load_n8n_api_key)
+
+if [ -z "$API_KEY" ]; then
+    echo "ERROR: API 키 없음 (파일/환경변수/.env 모두 미설정)"
+    echo "  → ./setup_n8n_apikey.sh 실행 또는 .env에 N8N_API_KEY 설정"
     exit 1
 fi
-
-API_KEY=$(cat "$N8N_API_KEY_FILE")
 
 echo "=== Pipeline A — 최근 실행 상세 ==="
 echo

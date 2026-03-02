@@ -9,13 +9,13 @@
 
 | 항목 | 값 |
 |------|---|
-| **현재 Phase** | **Phase 5.13 완료** (발행 후 HTTP 검증 + 비공개 자동 복구) |
-| **단위 테스트** | 127건 통과 (Domain 79 + Infra 48) |
+| **현재 Phase** | **Phase 5.14 완료** (일일 발행 제한 감지 + 대량 발행) |
+| **단위 테스트** | 129건 통과 (Domain 79 + App 10 + Infra 40) |
 | **통합 테스트** | 9건 통과 (GoogleSheets 6 + Selenium 3) — 이전 2건 실패 → 0건 실패 |
 | **E2E 테스트** | 2건 스킵 (환경변수 미설정) |
 | **n8n E2E** | 3건 통과 (CI/CD 2개 이미지, Jenkins 1개 이미지, Terraform 4개 이미지) |
-| **Tistory 실발행** | 31건 성공 (최신: Kubernetes Ingress Controller → https://kimsanghyeon.tistory.com/211) |
-| **전체 테스트** | 136건 통과 (단위 127 + 통합 9), 2건 스킵 |
+| **Tistory 실발행** | 34건 성공 (최신: OAuth 2.0 인증 플로우 가이드 → https://kimsanghyeon.tistory.com/214) |
+| **전체 테스트** | 138건 통과 (단위 129 + 통합 9), 2건 스킵 |
 | **커버리지** | 92.05% (domain + application) |
 | **ruff** | 0 errors |
 | **mypy** | 0 errors (kakao_auth.py 포함) |
@@ -1148,6 +1148,55 @@ Tistory 관리자 페이지에서 210, 211번 글을 수동으로 공개 전환 
 
 ---
 
+## Phase 5.14: 일일 발행 제한 감지 + 대량 발행 — ✅ 완료 (2026-03-02)
+
+### Pipeline A — 15건 콘텐츠 일괄 생성
+
+n8n Pipeline A 수동 실행으로 "대기" 상태 15건 키워드를 전량 처리.
+
+| 항목 | 결과 |
+|------|------|
+| 입력 키워드 | 15건 (rows 33-47) |
+| 출력 상태 | **발행대기 15건** (검수필요 0건 — 100% 통과) |
+| 처리 시간 | ~90초 |
+
+### Pipeline B — 3건 발행 + 일일 제한 발견
+
+headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달.
+
+| # | 키워드 | URL | HTTP |
+|---|--------|-----|------|
+| 1 | API Gateway란 무엇인가 | /212 | **200** |
+| 2 | 컨테이너 오케스트레이션이란 | /213 | **200** |
+| 3 | OAuth 2.0 인증 플로우 가이드 | /214 | **200** |
+| 4 | Elasticsearch 검색엔진 구축 가이드 | — | **403 "최대 15개까지"** |
+
+**일일 제한**: "하루에 새롭게 공개 발행할 수 있는 글은 최대 15개까지입니다." (Tistory 정책)
+
+### 코드 개선 — 일일 발행 제한 감지
+
+기존: 일일 제한 시 포스트가 "발행실패"로 마킹됨 → 수동 리셋 필요.
+개선: `DailyPublishLimitError` 예외로 배치 즉시 중단 + 해당 포스트 "발행대기" 복원.
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `src/domain/exceptions.py` | `DailyPublishLimitError` 예외 클래스 추가 |
+| `src/infrastructure/browser/tistory_editor.py` | React alert / API 403 응답에서 "최대 15개까지" 패턴 감지 → 예외 발생 |
+| `src/application/use_cases/publish_posts.py` | `DailyPublishLimitError` 캐치 → 배치 중단, 현재 포스트 `reset_to_pending()` |
+| `tests/unit/application/test_publish_posts_usecase.py` | `TestPublishPostsDailyLimit` (2건) 추가 |
+
+### 검증 결과
+
+| 항목 | 결과 |
+|------|------|
+| 신규 발행 | 3건 (/212, /213, /214 — 모두 HTTP 200) |
+| 발행대기 잔여 | 12건 (내일 09:00 AM cron 자동 발행) |
+| 단위 테스트 | **129 passed** (기존 127 + 신규 2) |
+| ruff | 0 errors |
+| 커밋 | `db327bf` — `fix(infra): detect Tistory daily publish limit and stop batch gracefully` |
+
+---
+
 ## Phase 6: 콘텐츠 누적 + SEO 최적화 — 🔲 미시작
 
 > **기간**: W3~6 (2026-03-15 ~ 2026-04-11)
@@ -1249,3 +1298,4 @@ Tistory 관리자 페이지에서 210, 211번 글을 수동으로 공개 전환 
 | 2026-03-02 | `NODE_FUNCTION_ALLOW_BUILTIN=zlib` Docker 환경변수 추가 (Phase 5.12) | n8n Code 노드의 sandbox가 기본적으로 `require('zlib')` 차단 → 환경변수로 허용 |
 | 2026-03-02 | 발행 후 HTTP HEAD 검증 도입 (Phase 5.13) | 발행 URL을 HTTP HEAD로 검증, 403(비공개) 감지 시 `_fix_post_visibility()` API로 자동 공개 전환 시도 |
 | 2026-03-02 | `_select_public_mode()` silent failure 대응 (Phase 5.13) | 기존: 공개 선택 실패 시 경고만 → 개선: 발행 후 HTTP 검증으로 실제 공개 상태 확인 + 자동 복구 |
+| 2026-03-02 | `DailyPublishLimitError` 도입 (Phase 5.14) | 일일 15건 제한 도달 시 나머지 포스트를 실패 처리하지 않고 배치 중단 + 현재 포스트 발행대기 복원 |

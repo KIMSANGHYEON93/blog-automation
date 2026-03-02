@@ -2,7 +2,9 @@
 from src.infrastructure.browser.tistory_editor import (
     _add_lazy_loading,
     _add_nofollow_to_external_links,
+    _extract_post_id,
     _style_mermaid_fallback,
+    _verify_published_url,
     convert_markdown_to_html,
     validate_html,
 )
@@ -330,3 +332,51 @@ class TestValidateHtmlMermaid:
         body = _long_text()
         html = f"<h2>제목</h2><p>{body}</p><!-- IMAGE: server rack -->"
         assert validate_html(html) is False
+
+
+class TestExtractPostId:
+    """_extract_post_id() 함수 검증."""
+
+    def test_정상_URL(self):
+        assert _extract_post_id("https://blog.tistory.com/211") == "211"
+
+    def test_경로_없음(self):
+        assert _extract_post_id("https://blog.tistory.com") is None
+
+    def test_숫자_아닌_경로(self):
+        assert _extract_post_id("https://blog.tistory.com/manage") is None
+
+    def test_빈_문자열(self):
+        assert _extract_post_id("") is None
+
+
+class TestVerifyPublishedUrl:
+    """_verify_published_url() 함수 검증."""
+
+    def test_200_응답(self):
+        """HTTP 200 → 200 반환."""
+        import http.server
+        import threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_HEAD(self):
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass  # suppress log
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        t = threading.Thread(target=server.handle_request, daemon=True)
+        t.start()
+        try:
+            code = _verify_published_url(f"http://127.0.0.1:{port}/test")
+            assert code == 200
+        finally:
+            server.server_close()
+
+    def test_네트워크_오류(self):
+        """접속 불가 → 0 반환."""
+        code = _verify_published_url("http://127.0.0.1:1/unreachable", timeout=1)
+        assert code == 0

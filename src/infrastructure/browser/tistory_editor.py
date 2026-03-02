@@ -1,6 +1,7 @@
-"""TistoryEditor — Tistory blog editor automation (2026-03-01 updated).
+"""TistoryEditor — Tistory blog editor automation (2026-03-02 updated).
 
 변경 이력:
+  2026-03-02 — 발행 후 HTTP 검증 + 비공개 자동 복구 (_verify / _fix_post_visibility)
   2026-03-01 — MD→HTML 변환: 마크다운 모드 대신 WYSIWYG 모드에서 HTML 주입 (방향 A)
   2026-02-28 — 비공개→공개 발행 전환
 """
@@ -222,11 +223,42 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
 
         # 직접 API 호출로 발행 (UI 버튼 클릭 대신)
         published_url = _publish_via_api(sb, blog_name, content, html_body, post)
-        if published_url:
-            logger.info(f"API 발행 성공: {post.keyword} → {published_url}")
+        if not published_url:
+            return PublishResult.fail("API 발행 실패 — 모든 방법 실패")
+
+        logger.info(f"API 발행 완료: {post.keyword} → {published_url}")
+
+        # --- 발행 후 공개 상태 검증 ---
+        http_code = _verify_published_url(published_url)
+        if http_code == 200:
+            logger.info(f"공개 검증 성공 (200): {published_url}")
             return PublishResult.ok(published_url)
 
-        return PublishResult.fail("API 발행 실패 — 모든 방법 실패")
+        if http_code in (403, 404):
+            logger.warning(
+                f"발행 URL 비공개 감지 ({http_code}): {published_url}"
+            )
+            # 게시글 ID 추출 후 visibility 수정 시도
+            fixed = _fix_post_visibility(sb, blog_name, published_url)
+            if fixed:
+                recheck = _verify_published_url(published_url)
+                if recheck == 200:
+                    logger.info(
+                        f"비공개→공개 복구 성공: {published_url}"
+                    )
+                    return PublishResult.ok(published_url)
+                logger.warning(
+                    f"비공개→공개 복구 후에도 {recheck}: {published_url}"
+                )
+            # 복구 실패해도 URL은 반환 (시트에 기록용)
+            logger.warning(
+                f"비공개 상태로 발행됨 (수동 확인 필요): {published_url}"
+            )
+            return PublishResult.ok(published_url)
+
+        # 기타 상태 코드 (5xx 등) — 일단 성공으로 기록
+        logger.warning(f"발행 URL 검증 코드 {http_code}: {published_url}")
+        return PublishResult.ok(published_url)
 
     except Exception as e:
         logger.error(f"발행 실패: {post.keyword} — {e}")
@@ -1248,6 +1280,114 @@ def _extract_published_url(sb, blog_name: str) -> str | None:
     except Exception as e:
         logger.warning(f"발행 URL 추출 중 오류: {e}")
     return None
+
+
+def _verify_published_url(url: str, timeout: int = 10) -> int:
+    """발행된 URL에 HTTP HEAD 요청으로 공개 상태 확인.
+
+    Returns:
+        HTTP 상태 코드 (200=공개, 403=비공개, 404=미존재, 0=네트워크오류).
+    """
+    import urllib.error
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(url, method="HEAD")
+        req.add_header(
+            "User-Agent",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except Exception as exc:
+        logger.debug(f"URL 검증 요청 실패: {exc}")
+        return 0
+
+
+def _extract_post_id(url: str) -> str | None:
+    """티스토리 URL에서 게시글 ID 추출. e.g. '.../211' → '211'."""
+    m = re.search(r"/(\d+)$", url)
+    return m.group(1) if m else None
+
+
+def _fix_post_visibility(sb, blog_name: str, published_url: str) -> bool:
+    """비공개로 발행된 글을 공개(visibility=20)로 수정.
+
+    Tistory 내부 API: POST /manage/post.json (id 포함 시 수정 동작).
+    """
+    import json as json_mod
+
+    post_id = _extract_post_id(published_url)
+    if not post_id:
+        logger.warning(f"게시글 ID 추출 실패: {published_url}")
+        return False
+
+    logger.info(f"비공개→공개 복구 시도: post_id={post_id}")
+
+    try:
+        result_json = sb.execute_script(
+            """
+            var postId = arguments[0];
+            var blogName = arguments[1];
+
+            var manageUrl = '';
+            if (window.appInfo && window.appInfo.manageUrl) {
+                manageUrl = window.appInfo.manageUrl;
+            } else {
+                manageUrl = 'https://' + blogName + '.tistory.com/manage';
+            }
+
+            var url = manageUrl + '/post.json';
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', url, false);
+            xhr.setRequestHeader('Content-Type',
+                'application/json; charset=UTF-8');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+            // 최소 수정 요청: ID + visibility만 전송
+            var payload = {
+                id: postId,
+                visibility: '20',
+                published: '1'
+            };
+
+            try {
+                xhr.send(JSON.stringify(payload));
+            } catch(e) {
+                return JSON.stringify({success: false, error: e.message});
+            }
+
+            return JSON.stringify({
+                success: xhr.status >= 200 && xhr.status < 300,
+                status: xhr.status,
+                response: xhr.responseText.substring(0, 500)
+            });
+        """,
+            post_id,
+            blog_name,
+        )
+
+        if result_json:
+            result = json_mod.loads(result_json)
+            if result.get("success"):
+                logger.info(
+                    f"visibility 수정 API 성공: post_id={post_id}"
+                )
+                time.sleep(3)  # CDN 캐시 전파 대기
+                return True
+            logger.warning(
+                f"visibility 수정 API 실패 "
+                f"(status={result.get('status')}): "
+                f"{result.get('response', '')[:200]}"
+            )
+        return False
+    except Exception as e:
+        logger.warning(f"visibility 수정 예외: {e}")
+        return False
 
 
 def _input_tags(sb, tags: list[str]) -> None:

@@ -9,7 +9,7 @@
 
 | 항목 | 값 |
 |------|---|
-| **현재 Phase** | **Phase 5.11 완료** (Mermaid 다이어그램 대체 — Unsplash 스톡 사진 → kroki.io SVG) |
+| **현재 Phase** | **Phase 5.12 완료** (수동 검증 + 50K/JSON fence 수정 — kroki.io URL 방식 + [MERMAID] 커스텀 마커) |
 | **단위 테스트** | 121건 통과 (Domain 79 + Infra 42) |
 | **통합 테스트** | 9건 통과 (GoogleSheets 6 + Selenium 3) — 이전 2건 실패 → 0건 실패 |
 | **E2E 테스트** | 2건 스킵 (환경변수 미설정) |
@@ -1033,6 +1033,78 @@ attribution 형식 변경:
 
 ---
 
+## Phase 5.12: 수동 검증 + Sheets 50K/JSON fence 수정 — ✅ 완료 (2026-03-02)
+
+> **배경**: Phase 5.11 수동 검증 과정에서 3가지 치명적 문제 발견 및 해결.
+
+### 발견 및 해결한 문제 (3건)
+
+| # | 문제 | 원인 | 해결 |
+|---|------|------|------|
+| 1 | Gemini JSON 응답 5K자에서 잘림 (61K 공백 패딩) | JSON content 안의 ` ```mermaid ` 백틱이 Gemini 응답 생성을 혼란시킴 | `[MERMAID]...[/MERMAID]` 커스텀 마커로 대체 — 백틱 충돌 제거 |
+| 2 | Parse JSON Response fence 탐지 오류 | `lastIndexOf('` ``` `')` 가 mermaid 코드블록의 닫는 백틱을 JSON 끝으로 오인 | 커스텀 마커 도입으로 ` ``` ` 간섭 원천 제거 |
+| 3 | Google Sheets 50K 셀 제한 초과 | base64 SVG (~10K/개) 및 인라인 SVG (~10K/개) 모두 50K 초과 | zlib deflate + base64url → kroki.io GET URL (~200자/개) |
+
+### 검증 과정 (n8n 수동 실행 6회)
+
+| 실행 | 결과 | 문제 | 조치 |
+|------|------|------|------|
+| ID 6 | ✅ 성공 | Gemini가 mermaid 미생성 | Route Prompt 노드 프롬프트가 하드코딩 — mermaid 지시 추가 |
+| ID 7 | ❌ 실패 | Sheets 50K 초과 (base64 SVG) | base64 → 인라인 SVG로 변경 |
+| ID 8 | ❌ 실패 | Sheets 50K 초과 (인라인 SVG) | kroki.io GET URL 방식으로 전면 변경 |
+| ID 10 | ❌ 실패 | Parse JSON fence 탐지 오류 + Gemini 잘림 | `[MERMAID]` 커스텀 마커 도입 |
+| ID 11 | ✅ 성공 | — | 최종 구조 확정 |
+
+### 최종 아키텍처
+
+```
+LLM (Gemini) → content에 [MERMAID]graph TD...[/MERMAID] 마커 생성
+  ↓
+inject_images.js → [MERMAID] 추출 → zlib.deflateSync + base64url
+  → <img src="https://kroki.io/mermaid/svg/{encoded}"> (~200자)
+  ↓
+Google Sheets 저장 (5171자 — 50K 제한 안전)
+  ↓
+tistory_editor.py → 잔류 [MERMAID] 있으면 kroki.io POST로 SVG 렌더링
+```
+
+### 수정 파일 (8개)
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `docker-compose.yml` | `NODE_FUNCTION_ALLOW_BUILTIN=zlib` 환경변수 추가 |
+| `n8n/code_nodes/inject_images.js` | SVG 임베딩 → `zlib.deflateSync` + kroki.io GET URL, 마커 `[MERMAID]` 패턴 |
+| `n8n/code_nodes/validate_structure.js` | 잔류 탐지: ` ```mermaid ` → `[MERMAID]` 패턴 |
+| `n8n/prompts/prompt_a_terminology.md` | ` ```mermaid ` → `[MERMAID]...[/MERMAID]` 지시 |
+| `n8n/prompts/prompt_b_comparison.md` | 동일 |
+| `n8n/prompts/prompt_c_troubleshooting.md` | 동일 |
+| `n8n/workflow_complete.json` | Route Prompt / Inject Images / Validate Structure 3개 노드 동기화 |
+| `src/infrastructure/browser/tistory_editor.py` | `_render_mermaid_via_kroki()` 추가, `_preserve_mermaid_blocks()` 양 패턴 지원 |
+
+### 주요 발견: Route Prompt 하드코딩
+
+프롬프트 `.md` 파일은 n8n 워크플로우에서 직접 사용되지 않음. Route Prompt (A/B/C) 노드의 `jsCode`에 프롬프트가 하드코딩되어 있어, `.md` 파일 수정만으로는 반영 불가. `workflow_complete.json` 내 jsCode를 직접 수정해야 함.
+
+### 커밋 내역
+
+| 커밋 | 메시지 |
+|------|--------|
+| `fcf6552` | `fix(n8n): resolve Sheets 50K limit and JSON fence collision for Mermaid diagrams` |
+
+### 검증 결과
+
+| 항목 | 결과 |
+|------|------|
+| n8n 실행 ID 11 | ✅ 전 노드 성공 (Sheets Update 발행대기 포함) |
+| Gemini 응답 | `[MERMAID]` 2개 생성, 7060자, finishReason=STOP (공백 패딩 없음) |
+| Inject Images | 2개 발견 → 2개 kroki.io URL 변환 성공, 실패 0 |
+| Content 크기 | 5171자 (50K 제한 안전) |
+| kroki.io URL | SVG 정상 반환 확인 (curl 테스트) |
+| 단위 테스트 | **121 passed** |
+| ruff | 0 errors |
+
+---
+
 ## Phase 6: 콘텐츠 누적 + SEO 최적화 — 🔲 미시작
 
 > **기간**: W3~6 (2026-03-15 ~ 2026-04-11)
@@ -1129,3 +1201,6 @@ attribution 형식 변경:
 | 2026-03-02 | Unsplash 스톡 사진 → Mermaid 다이어그램 대체 (Phase 5.11) | 스톡 사진이 IT 블로그 본문과 연관성 낮음 — LLM이 직접 생성한 기술 다이어그램이 콘텐츠 가치 높음 |
 | 2026-03-02 | kroki.io POST API 단일 방식 채택 (Phase 5.11) | GET(deflate+base64url) 대비 구현 단순, n8n httpRequest 호환성 우수, 실패 시 원본 유지로 안전 |
 | 2026-03-02 | codehilite 간섭 회피를 위한 Mermaid 사전 처리 (Phase 5.11) | codehilite가 mermaid 블록을 구문 강조 처리하여 language-mermaid 클래스 소실 → markdown 변환 전 HTML로 사전 변환 |
+| 2026-03-02 | `[MERMAID]...[/MERMAID]` 커스텀 마커 도입 (Phase 5.12) | JSON content 안의 ` ``` ` 백틱이 (1) Gemini 응답 truncation (2) Parse JSON fence 탐지 오류를 유발 → 백틱 없는 커스텀 마커로 근본 해결 |
+| 2026-03-02 | kroki.io GET URL 방식 전환 (Phase 5.12) | 인라인 SVG/base64 모두 Google Sheets 50K 셀 제한 초과 → zlib deflate + base64url로 ~200자 URL 생성, 브라우저가 on-demand 렌더링 |
+| 2026-03-02 | `NODE_FUNCTION_ALLOW_BUILTIN=zlib` Docker 환경변수 추가 (Phase 5.12) | n8n Code 노드의 sandbox가 기본적으로 `require('zlib')` 차단 → 환경변수로 허용 |

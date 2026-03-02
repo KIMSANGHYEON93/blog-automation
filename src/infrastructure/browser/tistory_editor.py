@@ -817,15 +817,40 @@ def _inject_markdown_content(sb, markdown_text: str) -> bool:
     return False
 
 
+def _preserve_mermaid_blocks(md_text: str) -> str:
+    """잔류 Mermaid 코드블록을 styled HTML로 사전 변환.
+
+    codehilite extension이 ```mermaid 블록을 구문 강조 처리하여
+    language-mermaid 클래스가 사라지는 것을 방지한다.
+    Markdown은 raw HTML을 그대로 통과시키므로, 사전에 HTML로 변환한다.
+    """
+    import html as html_lib
+
+    def _replace(match: re.Match) -> str:
+        code = html_lib.escape(match.group(1).strip())
+        return (
+            '<div class="mermaid-fallback" style="background:#f0f4f8;border:1px solid #d0d7de;'
+            'border-radius:6px;padding:8px;margin:16px 0;overflow-x:auto;">'
+            f'<pre><code class="language-mermaid">{code}</code></pre></div>'
+        )
+
+    return re.sub(r"```mermaid\n([\s\S]*?)```", _replace, md_text)
+
+
 def convert_markdown_to_html(md_text: str) -> str:
     """마크다운 텍스트를 HTML로 변환.
 
     Extensions: tables, fenced_code, nl2br, sane_lists, codehilite, toc
     - codehilite: noclasses=True → 인라인 스타일 (외부 CSS 불필요)
     - toc: H2~H3 목차 자동 생성, 첫 번째 <h2> 앞에 삽입
+    - 잔류 Mermaid 블록: codehilite 처리 전에 styled HTML로 사전 변환
     """
     if not md_text or not md_text.strip():
         return ""
+
+    # Mermaid 코드블록 사전 처리 (codehilite보다 먼저 실행)
+    md_text = _preserve_mermaid_blocks(md_text)
+
     extensions = ["tables", "fenced_code", "nl2br", "sane_lists", "codehilite", "toc"]
     extension_configs = {
         "codehilite": {"css_class": "highlight", "linenums": False, "noclasses": True},
@@ -842,7 +867,27 @@ def convert_markdown_to_html(md_text: str) -> str:
         if h2_pos >= 0:
             html_body = html_body[:h2_pos] + toc_block + html_body[h2_pos:]
 
+    # Mermaid fallback 스타일링 (렌더링 실패한 잔류 코드블록에 시각적 힌트)
+    html_body = _style_mermaid_fallback(html_body)
+
     return html_body
+
+
+def _style_mermaid_fallback(html_text: str) -> str:
+    """렌더링 실패한 Mermaid 코드블록에 시각적 힌트 추가.
+
+    <pre><code class="language-mermaid">...  →
+    <div class="mermaid-fallback" style="..."><pre><code>...
+    """
+    if 'language-mermaid' not in html_text:
+        return html_text
+
+    return re.sub(
+        r'(<pre[^>]*><code[^>]*class="[^"]*language-mermaid[^"]*"[^>]*>)',
+        r'<div class="mermaid-fallback" style="background:#f0f4f8;border:1px solid #d0d7de;'
+        r'border-radius:6px;padding:8px;margin:16px 0;overflow-x:auto;">\1',
+        html_text,
+    ).replace('</code></pre>', '</code></pre></div>')
 
 
 def _add_lazy_loading(html_text: str) -> str:
@@ -954,6 +999,10 @@ def validate_html(html_text: str) -> bool:
     # 6. <img> 태그 0개 → warning only (ok 플래그 미변경)
     if not re.search(r"<img\s", html_text):
         logger.warning("HTML 검증 경고: <img> 태그 없음 (이미지 0개)")
+
+    # 7. Mermaid 코드블록 잔류 → warning only (ok 플래그 미변경)
+    if re.search(r'class="[^"]*language-mermaid', html_text):
+        logger.warning("HTML 검증 경고: Mermaid 코드블록 미렌더링 잔류")
 
     return ok
 

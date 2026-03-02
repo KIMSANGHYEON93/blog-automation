@@ -2,6 +2,7 @@
 from src.infrastructure.browser.tistory_editor import (
     _add_lazy_loading,
     _add_nofollow_to_external_links,
+    _style_mermaid_fallback,
     convert_markdown_to_html,
     validate_html,
 )
@@ -285,3 +286,47 @@ class TestAddNofollowToExternalLinks:
 
     def test_빈_문자열_처리(self):
         assert _add_nofollow_to_external_links("", "myblog") == ""
+
+
+class TestMermaidFallback:
+    """Mermaid 코드블록 처리 검증."""
+
+    def test_mermaid_code_block_converted(self):
+        """_preserve_mermaid_blocks가 ```mermaid를 mermaid-fallback div로 변환."""
+        md = "## 제목\n\n```mermaid\ngraph TD\n    A-->B\n```"
+        html = convert_markdown_to_html(md)
+        assert "language-mermaid" in html
+        assert "mermaid-fallback" in html
+
+    def test_style_mermaid_fallback_wraps_div(self):
+        """_style_mermaid_fallback()이 wrapper div를 추가하는지 확인."""
+        html = '<pre><code class="language-mermaid">graph TD\n    A-->B</code></pre>'
+        result = _style_mermaid_fallback(html)
+        assert 'class="mermaid-fallback"' in result
+        assert "background:#f0f4f8" in result
+        assert "</code></pre></div>" in result
+
+    def test_style_mermaid_fallback_no_mermaid_passthrough(self):
+        """Mermaid 없으면 원본 그대로 반환."""
+        html = "<pre><code>print('hello')</code></pre>"
+        result = _style_mermaid_fallback(html)
+        assert result == html
+
+
+class TestValidateHtmlMermaid:
+    """Mermaid 관련 validate_html() 검증."""
+
+    def test_mermaid_residue_warning_only(self):
+        """Mermaid 잔류 시 validate_html() 반환값 True (경고만)."""
+        body = _long_text()
+        html = (
+            f'<h2>제목</h2><p>{body}</p>'
+            f'<pre><code class="language-mermaid">graph TD</code></pre>'
+        )
+        assert validate_html(html) is True
+
+    def test_image_marker_still_fails(self):
+        """IMAGE 마커 잔류 시 여전히 False 반환."""
+        body = _long_text()
+        html = f"<h2>제목</h2><p>{body}</p><!-- IMAGE: server rack -->"
+        assert validate_html(html) is False

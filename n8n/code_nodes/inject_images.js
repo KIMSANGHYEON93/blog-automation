@@ -1,9 +1,9 @@
 /**
- * Inject Images — Unsplash 이미지 자동 삽입
+ * Inject Images — Mermaid 다이어그램 렌더링 + Unsplash 썸네일
  * Mode: runOnceForEachItem
  * Parse JSON Response와 Validate Structure 사이에 배치
  * 입력: 파싱된 JSON (content 필드 포함)
- * 출력: 이미지가 삽입된 content + thumbnail_url + image_injection 메타데이터
+ * 출력: Mermaid→SVG 변환된 content + thumbnail_url + image_injection 메타데이터
  */
 
 const content = $input.item.json.content || '';
@@ -13,8 +13,7 @@ const helpers = this.helpers;
 
 /**
  * IT 기술 키워드 → Unsplash 검색 친화 키워드 매핑
- * Terraform, Jenkins 등 특정 기술 이름은 Unsplash에서 0건이므로
- * 시각적으로 관련 있는 일반 키워드로 변환
+ * thumbnail 검색용으로 유지
  */
 const KEYWORD_BROADENING = {
   terraform: 'cloud infrastructure automation',
@@ -44,58 +43,10 @@ const KEYWORD_BROADENING = {
 };
 
 /**
- * H2 텍스트에서 Unsplash 검색용 키워드 후보 배열을 반환
- * 1순위: 추출된 영문 키워드
- * 2순위: broadening 매핑 적용 키워드
- * 3순위: 제목에서 추출한 영문
- * 4순위: 범용 IT 이미지 키워드
- */
-function extractSearchKeywords(h2Text) {
-  const candidates = [];
-
-  // H2에서 영문 단어 추출
-  const engWords = h2Text.match(/[A-Za-z0-9][\w./-]*/g) || [];
-  if (engWords.length > 0) {
-    candidates.push(engWords.join(' '));
-  }
-
-  // broadening 매핑 적용 (추출된 영문 단어 중 매핑이 있으면 추가)
-  const lowerText = h2Text.toLowerCase();
-  for (const [tech, broad] of Object.entries(KEYWORD_BROADENING)) {
-    if (lowerText.includes(tech)) {
-      candidates.push(broad);
-      break;
-    }
-  }
-
-  // 제목에서 영문 + broadening
-  const titleEng = title.match(/[A-Za-z0-9][\w./-]*/g) || [];
-  if (titleEng.length > 0) {
-    const titleKeyword = titleEng.join(' ');
-    if (!candidates.includes(titleKeyword)) {
-      candidates.push(titleKeyword);
-    }
-    const lowerTitle = title.toLowerCase();
-    for (const [tech, broad] of Object.entries(KEYWORD_BROADENING)) {
-      if (lowerTitle.includes(tech) && !candidates.includes(broad)) {
-        candidates.push(broad);
-        break;
-      }
-    }
-  }
-
-  // 최후 fallback: 범용 IT 이미지
-  candidates.push('technology software development');
-
-  return candidates;
-}
-
-/**
- * Unsplash API에서 이미지 검색 (단일 키워드)
+ * Unsplash API에서 이미지 1장 검색 (thumbnail용)
  * @param {string} keyword - 검색 키워드
- * @param {string} sectionTitle - H2 섹션 제목 (alt text용)
  */
-async function searchUnsplashSingle(keyword, sectionTitle) {
+async function searchUnsplashSingle(keyword) {
   if (!UNSPLASH_KEY) return null;
 
   try {
@@ -114,16 +65,9 @@ async function searchUnsplashSingle(keyword, sectionTitle) {
     const idx = Math.floor(Math.random() * Math.min(data.results.length, 4));
     const photo = data.results[idx];
 
-    // alt text: "{keyword} - {section title}" 형식 (SEO 최적화)
-    const altText = sectionTitle
-      ? `${keyword} - ${sectionTitle}`
-      : keyword;
-
     return {
-      url: photo.urls.regular,
-      alt: altText,
-      attribution: `<small>Photo by <a href="${photo.user.links.html}?utm_source=blog_automation&utm_medium=referral" rel="nofollow noopener" target="_blank">${photo.user.name}</a> on <a href="https://unsplash.com/?utm_source=blog_automation&utm_medium=referral" rel="nofollow noopener" target="_blank">Unsplash</a></small>`,
       thumb: photo.urls.small,
+      url: photo.urls.regular,
     };
   } catch (e) {
     return null;
@@ -131,126 +75,115 @@ async function searchUnsplashSingle(keyword, sectionTitle) {
 }
 
 /**
- * 키워드 후보 배열을 순서대로 시도하여 첫 번째 성공 결과 반환
- * @param {string[]} keywords - 검색 키워드 후보 배열
- * @param {string} sectionTitle - H2 섹션 제목 (alt text용)
+ * 제목에서 Unsplash 검색용 키워드 후보 배열 생성 (thumbnail용)
  */
-async function searchUnsplashWithFallback(keywords, sectionTitle) {
-  for (const kw of keywords) {
-    const result = await searchUnsplashSingle(kw, sectionTitle);
-    if (result) return { ...result, usedKeyword: kw };
+function extractThumbnailKeywords() {
+  const candidates = [];
+
+  const titleEng = title.match(/[A-Za-z0-9][\w./-]*/g) || [];
+  if (titleEng.length > 0) {
+    candidates.push(titleEng.join(' '));
   }
-  return null;
+
+  const lowerTitle = title.toLowerCase();
+  for (const [tech, broad] of Object.entries(KEYWORD_BROADENING)) {
+    if (lowerTitle.includes(tech)) {
+      candidates.push(broad);
+      break;
+    }
+  }
+
+  candidates.push('technology software development');
+  return candidates;
 }
 
-// === Step 1: IMAGE 마커 탐색 ===
-const markerRegex = /<!-- IMAGE:\s*(.+?)\s*-->/g;
-const markers = [];
+/**
+ * Mermaid 코드를 kroki.io API로 SVG 렌더링
+ * Primary: POST https://kroki.io/mermaid/svg (가장 단순)
+ * 실패 시: null 반환 (graceful degradation)
+ * @param {string} code - Mermaid 코드 (``` 제외)
+ * @returns {string|null} SVG 문자열 또는 null
+ */
+async function renderMermaidToSvg(code) {
+  try {
+    const svg = await helpers.httpRequest({
+      method: 'POST',
+      url: 'https://kroki.io/mermaid/svg',
+      body: code,
+      headers: { 'Content-Type': 'text/plain' },
+      returnFullResponse: false,
+    });
+    // SVG 응답 유효성 간단 확인
+    if (typeof svg === 'string' && svg.includes('<svg')) {
+      return svg;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * SVG 문자열을 base64 data URI <img> 태그로 변환
+ * @param {string} svg - SVG 문자열
+ * @param {string} altText - alt 속성 텍스트
+ * @returns {string} <img> 태그 HTML
+ */
+function svgToImgTag(svg, altText) {
+  const b64 = Buffer.from(svg).toString('base64');
+  const safeAlt = altText.replace(/"/g, '&quot;');
+  return `<img src="data:image/svg+xml;base64,${b64}" alt="${safeAlt}" style="max-width:100%;height:auto;" />`;
+}
+
+// === Step 1: Mermaid 코드블록 추출 ===
+const mermaidRegex = /```mermaid\n([\s\S]*?)```/g;
+const blocks = [];
 let match;
 
-while ((match = markerRegex.exec(content)) !== null) {
-  markers.push({
+while ((match = mermaidRegex.exec(content)) !== null) {
+  blocks.push({
     full: match[0],
-    keyword: match[1],
+    code: match[1].trim(),
     index: match.index,
   });
 }
 
 let updatedContent = content;
-let injectedCount = 0;
+let renderedCount = 0;
+let failedCount = 0;
+
+// === Step 2: 각 Mermaid 블록 → kroki.io SVG 렌더링 (역순 치환) ===
+for (let i = blocks.length - 1; i >= 0; i--) {
+  const block = blocks[i];
+  const svg = await renderMermaidToSvg(block.code);
+
+  if (svg) {
+    // Mermaid 코드 첫 줄에서 alt 텍스트 추출 (예: "graph TD" → "diagram")
+    const firstLine = block.code.split('\n')[0].trim();
+    const altText = `Mermaid diagram: ${firstLine}`;
+    const imgTag = svgToImgTag(svg, altText);
+
+    updatedContent =
+      updatedContent.substring(0, block.index) +
+      '\n' + imgTag + '\n' +
+      updatedContent.substring(block.index + block.full.length);
+    renderedCount++;
+  } else {
+    // 렌더링 실패 시 원본 코드블록 유지 (graceful degradation)
+    failedCount++;
+  }
+}
+
+// === Step 3: thumbnail_url — Unsplash 1장 검색 (OG 이미지용) ===
 let thumbnailUrl = '';
-const usedKeywords = [];
 
-if (markers.length > 0) {
-  // === Step 2: 마커 기반 이미지 삽입 ===
-  // 마커 직전 H2 제목을 추출하는 헬퍼
-  function findPrecedingH2(text, markerIndex) {
-    const before = text.substring(0, markerIndex);
-    const h2s = before.match(/^## .+$/gm) || [];
-    if (h2s.length === 0) return '';
-    return h2s[h2s.length - 1].replace(/^##\s*/, '').trim();
-  }
-
-  // 역순으로 처리 (인덱스 밀림 방지)
-  for (let i = markers.length - 1; i >= 0; i--) {
-    const marker = markers[i];
-    const sectionTitle = findPrecedingH2(updatedContent, marker.index);
-    // 마커 키워드 + broadening 후보로 검색
-    const markerCandidates = [marker.keyword];
-    const lk = marker.keyword.toLowerCase();
-    for (const [tech, broad] of Object.entries(KEYWORD_BROADENING)) {
-      if (lk.includes(tech)) { markerCandidates.push(broad); break; }
-    }
-    markerCandidates.push('technology software development');
-    const image = await searchUnsplashWithFallback(markerCandidates, sectionTitle);
-
-    if (image) {
-      const imageBlock = `\n![${image.alt}](${image.url})\n\n${image.attribution}\n`;
-      updatedContent =
-        updatedContent.substring(0, marker.index) +
-        imageBlock +
-        updatedContent.substring(marker.index + marker.full.length);
-      injectedCount++;
-      usedKeywords.push(image.usedKeyword);
-
-      if (!thumbnailUrl) {
-        thumbnailUrl = image.thumb || image.url;
-      }
-    } else {
-      // API 실패 시 마커만 제거 (graceful degradation)
-      updatedContent =
-        updatedContent.substring(0, marker.index) +
-        updatedContent.substring(marker.index + marker.full.length);
-    }
-  }
-} else {
-  // === Step 3: H2 기반 fallback ===
-  const h2Regex = /^## .+$/gm;
-  const h2Matches = [];
-  let h2Match;
-
-  while ((h2Match = h2Regex.exec(content)) !== null) {
-    // FAQ 섹션 제외
-    if (/FAQ/i.test(h2Match[0]) || /자주\s*묻는/i.test(h2Match[0])) continue;
-    h2Matches.push({
-      text: h2Match[0],
-      index: h2Match.index,
-      length: h2Match[0].length,
-    });
-  }
-
-  // 상위 4개 H2만 처리
-  const targetH2s = h2Matches.slice(0, 4);
-
-  // 역순 처리
-  for (let i = targetH2s.length - 1; i >= 0; i--) {
-    const h2 = targetH2s[i];
-    // H2 텍스트에서 영문 키워드 추출 (Unsplash는 영문 검색이 결과가 좋음)
-    const rawText = h2.text.replace(/^##\s*/, '').trim();
-    const keywords = extractSearchKeywords(rawText);
-    const image = await searchUnsplashWithFallback(keywords, rawText);
-
-    if (image) {
-      // H2 뒤 첫 문단 이후에 삽입
-      const afterH2 = h2.index + h2.length;
-      // 다음 빈 줄(문단 구분) 찾기
-      const nextParagraphEnd = updatedContent.indexOf('\n\n', afterH2);
-      const insertPos =
-        nextParagraphEnd !== -1
-          ? nextParagraphEnd + 2
-          : afterH2 + 1;
-
-      const imageBlock = `\n![${image.alt}](${image.url})\n\n${image.attribution}\n`;
-      updatedContent =
-        updatedContent.substring(0, insertPos) +
-        imageBlock +
-        updatedContent.substring(insertPos);
-      injectedCount++;
-      usedKeywords.push(image.usedKeyword);
-
-      if (!thumbnailUrl) {
-        thumbnailUrl = image.thumb || image.url;
-      }
+if (UNSPLASH_KEY) {
+  const keywords = extractThumbnailKeywords();
+  for (const kw of keywords) {
+    const result = await searchUnsplashSingle(kw);
+    if (result) {
+      thumbnailUrl = result.thumb || result.url;
+      break;
     }
   }
 }
@@ -261,10 +194,10 @@ return {
     content: updatedContent,
     thumbnail_url: thumbnailUrl,
     image_injection: {
-      method: markers.length > 0 ? 'marker' : 'h2_fallback',
-      markers_found: markers.length,
-      images_injected: injectedCount,
-      keywords: usedKeywords,
+      method: 'mermaid_kroki',
+      mermaid_found: blocks.length,
+      mermaid_rendered: renderedCount,
+      mermaid_failed: failedCount,
       has_unsplash_key: !!UNSPLASH_KEY,
     },
   },

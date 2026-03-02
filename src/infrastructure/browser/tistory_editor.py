@@ -817,9 +817,34 @@ def _inject_markdown_content(sb, markdown_text: str) -> bool:
     return False
 
 
-def _preserve_mermaid_blocks(md_text: str) -> str:
-    """잔류 Mermaid 코드블록을 styled HTML로 사전 변환.
+def _render_mermaid_via_kroki(code: str) -> str | None:
+    """kroki.io API로 Mermaid 코드를 SVG로 렌더링.
 
+    POST https://kroki.io/mermaid/svg 에 plaintext body를 전송하여 SVG를 반환받는다.
+    실패 시 None을 반환한다 (graceful degradation).
+    """
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(
+            "https://kroki.io/mermaid/svg",
+            data=code.encode("utf-8"),
+            headers={"Content-Type": "text/plain"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            svg = resp.read().decode("utf-8")
+        if "<svg" in svg:
+            return svg
+        return None
+    except Exception:
+        return None
+
+
+def _preserve_mermaid_blocks(md_text: str) -> str:
+    """잔류 Mermaid 코드블록을 SVG 또는 styled HTML로 사전 변환.
+
+    1차: kroki.io API로 SVG 렌더링 시도
+    2차 (실패 시): styled fallback <div>로 변환
     codehilite extension이 ```mermaid 블록을 구문 강조 처리하여
     language-mermaid 클래스가 사라지는 것을 방지한다.
     Markdown은 raw HTML을 그대로 통과시키므로, 사전에 HTML로 변환한다.
@@ -827,14 +852,36 @@ def _preserve_mermaid_blocks(md_text: str) -> str:
     import html as html_lib
 
     def _replace(match: re.Match) -> str:
-        code = html_lib.escape(match.group(1).strip())
+        code = match.group(1).strip()
+        first_line = code.split("\n")[0].strip()
+        alt_text = f"Mermaid diagram: {first_line}"
+        safe_alt = alt_text.replace('"', "&quot;")
+
+        # 1차: kroki.io SVG 렌더링 시도
+        svg = _render_mermaid_via_kroki(code)
+        if svg:
+            # SVG에 width가 없으면 반응형 설정
+            processed_svg = svg
+            if "width=" not in processed_svg:
+                processed_svg = processed_svg.replace("<svg", '<svg width="100%"', 1)
+            return (
+                f'<div class="mermaid-diagram" role="img" aria-label="{safe_alt}" '
+                f'style="max-width:100%;overflow-x:auto;margin:16px 0;">'
+                f"{processed_svg}</div>"
+            )
+
+        # 2차: fallback — styled code block
+        escaped_code = html_lib.escape(code)
         return (
             '<div class="mermaid-fallback" style="background:#f0f4f8;border:1px solid #d0d7de;'
             'border-radius:6px;padding:8px;margin:16px 0;overflow-x:auto;">'
-            f'<pre><code class="language-mermaid">{code}</code></pre></div>'
+            f'<pre><code class="language-mermaid">{escaped_code}</code></pre></div>'
         )
 
-    return re.sub(r"```mermaid\n([\s\S]*?)```", _replace, md_text)
+    # 1) [MERMAID]...[/MERMAID] 커스텀 마커 (Pipeline A에서 inject_images.js 실패 시 잔류)
+    result = re.sub(r"\[MERMAID\]([\s\S]*?)\[/MERMAID\]", _replace, md_text)
+    # 2) ```mermaid...``` 코드블록 (하위호환)
+    return re.sub(r"```mermaid\n([\s\S]*?)```", _replace, result)
 
 
 def convert_markdown_to_html(md_text: str) -> str:

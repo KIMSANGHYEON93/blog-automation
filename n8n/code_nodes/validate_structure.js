@@ -73,12 +73,12 @@ if (imageMarkers.length > 0) {
 // 8. 이미지 개수 (정보 제공, 실패 아님)
 const imageCount = (content.match(/!\[.*?\]\(.*?\)/g) || []).length;
 
-// 9. Mermaid 코드블록 잔류 감지 (WARNING only — hard fail 아님)
-// mermaid 잔류 > 0이면 inject_images.js가 렌더링 실패한 것
+// 9. Mermaid 마커 잔류 감지 (WARNING only — hard fail 아님)
+// [MERMAID] 잔류 > 0이면 inject_images.js가 렌더링 실패한 것
 // 콘텐츠 자체는 유효하므로 warning only
-const mermaidResidues = content.match(/```mermaid/g) || [];
+const mermaidResidues = content.match(/\[MERMAID\]/g) || [];
 const mermaidWarning = mermaidResidues.length > 0
-  ? `Mermaid 코드블록 ${mermaidResidues.length}개 미렌더링 (경고)`
+  ? `Mermaid 마커 ${mermaidResidues.length}개 미렌더링 (경고)`
   : null;
 
 const passed = issues.length === 0;

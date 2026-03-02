@@ -1,10 +1,17 @@
 /**
- * Inject Images — Mermaid 다이어그램 렌더링 + Unsplash 썸네일
+ * Inject Images — Mermaid 다이어그램 → kroki.io URL + Unsplash 썸네일
  * Mode: runOnceForEachItem
  * Parse JSON Response와 Validate Structure 사이에 배치
  * 입력: 파싱된 JSON (content 필드 포함)
- * 출력: Mermaid→SVG 변환된 content + thumbnail_url + image_injection 메타데이터
+ * 출력: [MERMAID]→kroki.io <img> URL 변환된 content + thumbnail_url + image_injection 메타데이터
+ *
+ * LLM은 [MERMAID]...[/MERMAID] 커스텀 마커로 다이어그램을 생성한다.
+ * (JSON 안의 ```가 fence 탐지를 깨뜨리고 Gemini 응답 truncation을 유발하는 것을 방지)
+ * SVG를 직접 삽입하지 않고 kroki.io GET URL을 사용하여 Google Sheets 50K 셀 제한을 회피한다.
+ * 다이어그램당 URL ~200자 vs 인라인 SVG ~10,000자+
  */
+
+const zlib = require('zlib');
 
 const content = $input.item.json.content || '';
 const title = $input.item.json.title || '';
@@ -98,45 +105,39 @@ function extractThumbnailKeywords() {
 }
 
 /**
- * Mermaid 코드를 kroki.io API로 SVG 렌더링
- * Primary: POST https://kroki.io/mermaid/svg (가장 단순)
- * 실패 시: null 반환 (graceful degradation)
+ * Mermaid 코드를 kroki.io GET URL로 변환
+ * deflate 압축 + base64url 인코딩 → https://kroki.io/mermaid/svg/{encoded}
+ * Google Sheets 50K 제한 회피를 위해 SVG 임베딩 대신 URL 참조 사용
  * @param {string} code - Mermaid 코드 (``` 제외)
- * @returns {string|null} SVG 문자열 또는 null
+ * @returns {string|null} kroki.io URL 또는 null
  */
-async function renderMermaidToSvg(code) {
+function mermaidToKrokiUrl(code) {
   try {
-    const svg = await helpers.httpRequest({
-      method: 'POST',
-      url: 'https://kroki.io/mermaid/svg',
-      body: code,
-      headers: { 'Content-Type': 'text/plain' },
-      returnFullResponse: false,
-    });
-    // SVG 응답 유효성 간단 확인
-    if (typeof svg === 'string' && svg.includes('<svg')) {
-      return svg;
-    }
-    return null;
+    const deflated = zlib.deflateSync(Buffer.from(code, 'utf-8'));
+    const encoded = deflated.toString('base64url');
+    return `https://kroki.io/mermaid/svg/${encoded}`;
   } catch (e) {
     return null;
   }
 }
 
 /**
- * SVG 문자열을 base64 data URI <img> 태그로 변환
- * @param {string} svg - SVG 문자열
+ * Mermaid 코드를 <img> 태그로 변환 (kroki.io GET URL 참조)
+ * @param {string} code - Mermaid 코드
  * @param {string} altText - alt 속성 텍스트
- * @returns {string} <img> 태그 HTML
+ * @returns {string|null} <img> 태그 또는 null
  */
-function svgToImgTag(svg, altText) {
-  const b64 = Buffer.from(svg).toString('base64');
+function mermaidToImgTag(code, altText) {
+  const url = mermaidToKrokiUrl(code);
+  if (!url) return null;
   const safeAlt = altText.replace(/"/g, '&quot;');
-  return `<img src="data:image/svg+xml;base64,${b64}" alt="${safeAlt}" style="max-width:100%;height:auto;" />`;
+  return `<img src="${url}" alt="${safeAlt}" style="max-width:100%;height:auto;margin:16px 0;" />`;
 }
 
-// === Step 1: Mermaid 코드블록 추출 ===
-const mermaidRegex = /```mermaid\n([\s\S]*?)```/g;
+// === Step 1: [MERMAID]...[/MERMAID] 마커 추출 ===
+// LLM이 JSON 안에서 ```mermaid 대신 [MERMAID]...[/MERMAID] 마커를 사용하도록 지시됨
+// (JSON fence 충돌 및 Gemini 응답 truncation 방지)
+const mermaidRegex = /\[MERMAID\]([\s\S]*?)\[\/MERMAID\]/g;
 const blocks = [];
 let match;
 
@@ -152,24 +153,21 @@ let updatedContent = content;
 let renderedCount = 0;
 let failedCount = 0;
 
-// === Step 2: 각 Mermaid 블록 → kroki.io SVG 렌더링 (역순 치환) ===
+// === Step 2: 각 [MERMAID] 블록 → kroki.io URL <img> 태그 (역순 치환) ===
 for (let i = blocks.length - 1; i >= 0; i--) {
   const block = blocks[i];
-  const svg = await renderMermaidToSvg(block.code);
+  const firstLine = block.code.split('\n')[0].trim();
+  const altText = `Mermaid diagram: ${firstLine}`;
+  const imgTag = mermaidToImgTag(block.code, altText);
 
-  if (svg) {
-    // Mermaid 코드 첫 줄에서 alt 텍스트 추출 (예: "graph TD" → "diagram")
-    const firstLine = block.code.split('\n')[0].trim();
-    const altText = `Mermaid diagram: ${firstLine}`;
-    const imgTag = svgToImgTag(svg, altText);
-
+  if (imgTag) {
     updatedContent =
       updatedContent.substring(0, block.index) +
       '\n' + imgTag + '\n' +
       updatedContent.substring(block.index + block.full.length);
     renderedCount++;
   } else {
-    // 렌더링 실패 시 원본 코드블록 유지 (graceful degradation)
+    // URL 생성 실패 시 원본 코드블록 유지 (graceful degradation)
     failedCount++;
   }
 }
@@ -194,7 +192,7 @@ return {
     content: updatedContent,
     thumbnail_url: thumbnailUrl,
     image_injection: {
-      method: 'mermaid_kroki',
+      method: 'mermaid_kroki_url',
       mermaid_found: blocks.length,
       mermaid_rendered: renderedCount,
       mermaid_failed: failedCount,

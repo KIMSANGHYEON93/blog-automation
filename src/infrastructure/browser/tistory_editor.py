@@ -236,6 +236,14 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         http_code = _verify_published_url(published_url)
         if http_code == 200:
             logger.info(f"공개 검증 성공 (200): {published_url}")
+            # FAQ 스키마 검증 (경고 로그만, 실패 안 함)
+            faq_ld_json = content.faq_ld_json() if hasattr(content, 'faq_ld_json') else ""
+            if faq_ld_json:
+                has_faq = _verify_faq_schema(published_url)
+                if has_faq:
+                    logger.info(f"FAQ 스키마 검증 성공: {published_url}")
+                else:
+                    logger.warning(f"FAQ 스키마 미발견 (수동 확인 필요): {published_url}")
             return PublishResult.ok(published_url)
 
         if http_code in (403, 404):
@@ -1098,6 +1106,10 @@ def validate_html(html_text: str) -> bool:
     if re.search(r'class="[^"]*language-mermaid', html_text):
         logger.warning("HTML 검증 경고: Mermaid 코드블록 미렌더링 잔류")
 
+    # 8. FAQ LD+JSON 스키마 존재 여부 (info only — 주입 전 호출이므로 통과)
+    if '<script type="application/ld+json">' not in html_text:
+        logger.info("validate_html: FAQ LD+JSON 스키마 미포함 (faq_schema 없는 글)")
+
     return ok
 
 
@@ -1522,6 +1534,26 @@ def _install_ajax_content_interceptor(sb, markdown_text: str) -> None:
         logger.info("AJAX content 인터셉터 설치 완료")
     except Exception as e:
         logger.warning(f"AJAX 인터셉터 설치 실패: {e}")
+
+
+def _verify_faq_schema(url: str, timeout: int = 10) -> bool:
+    """발행된 URL의 HTML에서 FAQPage LD+JSON 존재 여부 확인."""
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(url, method="GET")
+        req.add_header(
+            "User-Agent",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+        return '"FAQPage"' in html and '"application/ld+json"' in html
+    except Exception as exc:
+        logger.debug(f"FAQ 스키마 검증 실패: {exc}")
+        return False
 
 
 def _append_faq_schema(body_markdown: str, faq_ld_json: str) -> str:

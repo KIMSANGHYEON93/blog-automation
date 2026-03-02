@@ -61,3 +61,69 @@ class TestPostContent:
         c = PostContent(title="제목", body_markdown="본문")
         with pytest.raises(AttributeError):
             c.title = "변경"
+
+
+class TestFaqLdJson:
+    """faq_ld_json() 메서드 단위 테스트."""
+
+    def test_faq_ld_json_정상_변환(self):
+        """2건 FAQ → FAQPage schema + mainEntity 2건."""
+        import json
+
+        faq_data = json.dumps([
+            {"question": "Q1", "answer": "A1"},
+            {"question": "Q2", "answer": "A2"},
+        ])
+        c = PostContent(title="제목", body_markdown="본문", faq_schema=faq_data)
+        result = c.faq_ld_json()
+        parsed = json.loads(result)
+        assert parsed["@type"] == "FAQPage"
+        assert parsed["@context"] == "https://schema.org"
+        assert len(parsed["mainEntity"]) == 2
+        assert parsed["mainEntity"][0]["@type"] == "Question"
+        assert parsed["mainEntity"][0]["name"] == "Q1"
+        assert parsed["mainEntity"][0]["acceptedAnswer"]["text"] == "A1"
+        assert parsed["mainEntity"][1]["name"] == "Q2"
+
+    def test_faq_ld_json_빈_스키마(self):
+        """faq_schema="" → 빈 문자열 반환."""
+        c = PostContent(title="제목", body_markdown="본문", faq_schema="")
+        assert c.faq_ld_json() == ""
+
+    def test_faq_ld_json_잘못된_JSON(self):
+        """파싱 불가 문자열 → 빈 문자열 (예외 없음)."""
+        c = PostContent(title="제목", body_markdown="본문", faq_schema="{invalid json!!")
+        assert c.faq_ld_json() == ""
+
+    def test_faq_ld_json_빈_배열(self):
+        """'[]' → 빈 문자열."""
+        c = PostContent(title="제목", body_markdown="본문", faq_schema="[]")
+        assert c.faq_ld_json() == ""
+
+    def test_faq_ld_json_필드_누락(self):
+        """question만 있고 answer 없음 → 해당 항목 건너뜀."""
+        import json
+
+        faq_data = json.dumps([
+            {"question": "Q1"},
+            {"question": "Q2", "answer": "A2"},
+        ])
+        c = PostContent(title="제목", body_markdown="본문", faq_schema=faq_data)
+        result = c.faq_ld_json()
+        parsed = json.loads(result)
+        assert len(parsed["mainEntity"]) == 1
+        assert parsed["mainEntity"][0]["name"] == "Q2"
+
+    def test_faq_ld_json_한국어_보존(self):
+        """한국어 질답 → ensure_ascii=False 확인."""
+        import json
+
+        faq_data = json.dumps([
+            {"question": "한국어 질문입니다", "answer": "한국어 답변입니다"},
+        ], ensure_ascii=False)
+        c = PostContent(title="제목", body_markdown="본문", faq_schema=faq_data)
+        result = c.faq_ld_json()
+        assert "한국어 질문입니다" in result
+        assert "한국어 답변입니다" in result
+        # ensure_ascii=False 확인: 유니코드 이스케이프가 아닌 한국어 원문이 포함
+        assert "\\u" not in result

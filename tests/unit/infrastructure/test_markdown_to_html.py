@@ -4,6 +4,7 @@ from src.infrastructure.browser.tistory_editor import (
     _add_nofollow_to_external_links,
     _extract_post_id,
     _style_mermaid_fallback,
+    _verify_faq_schema,
     _verify_published_url,
     convert_markdown_to_html,
     validate_html,
@@ -380,3 +381,67 @@ class TestVerifyPublishedUrl:
         """접속 불가 → 0 반환."""
         code = _verify_published_url("http://127.0.0.1:1/unreachable", timeout=1)
         assert code == 0
+
+
+class TestVerifyFaqSchema:
+    """_verify_faq_schema() 함수 검증."""
+
+    def _serve_html(self, html_content: str) -> tuple:
+        """로컬 HTTP 서버에서 HTML 응답을 제공. (server, port) 반환."""
+        import http.server
+        import threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(html_content.encode("utf-8"))
+
+            def log_message(self, *args):
+                pass  # suppress log
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        t = threading.Thread(target=server.handle_request, daemon=True)
+        t.start()
+        return server, port
+
+    def test_FAQ_스키마_존재_확인(self):
+        """LD+JSON + FAQPage 포함 HTML → True."""
+        html = """<html><head>
+        <script type="application/ld+json">
+        {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[]}
+        </script>
+        </head><body><p>Hello</p></body></html>"""
+        server, port = self._serve_html(html)
+        try:
+            assert _verify_faq_schema(f"http://127.0.0.1:{port}/test") is True
+        finally:
+            server.server_close()
+
+    def test_FAQ_스키마_미존재(self):
+        """LD+JSON 없는 HTML → False."""
+        html = "<html><body><p>No FAQ here</p></body></html>"
+        server, port = self._serve_html(html)
+        try:
+            assert _verify_faq_schema(f"http://127.0.0.1:{port}/test") is False
+        finally:
+            server.server_close()
+
+    def test_FAQ_검증_네트워크_오류(self):
+        """접근 불가 URL → False (예외 없음)."""
+        assert _verify_faq_schema("http://127.0.0.1:1/unreachable", timeout=1) is False
+
+    def test_FAQ_스키마_부분_일치_방지(self):
+        """application/ld+json만 있고 FAQPage 없음 → False."""
+        html = """<html><head>
+        <script type="application/ld+json">
+        {"@context":"https://schema.org","@type":"Article","name":"Test"}
+        </script>
+        </head><body><p>Hello</p></body></html>"""
+        server, port = self._serve_html(html)
+        try:
+            assert _verify_faq_schema(f"http://127.0.0.1:{port}/test") is False
+        finally:
+            server.server_close()

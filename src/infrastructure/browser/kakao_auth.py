@@ -2,6 +2,8 @@
 
 Flow: 티스토리 로그인 → '카카오계정으로 로그인' 클릭 → 카카오 OAuth → 티스토리 세션 생성
 """
+from __future__ import annotations
+
 import logging
 import time
 from urllib.parse import urlparse
@@ -10,6 +12,28 @@ logger = logging.getLogger(__name__)
 
 TISTORY_LOGIN_URL = "https://www.tistory.com/auth/login"
 TWO_FA_WAIT_SEC = 120
+
+# --- 카카오 로그인 폼 셀렉터 Fallback Chain ---
+# React가 생성하는 불안정 ID(#loginId--1 등)를 최상위에 유지하되,
+# 안정적인 name/type/id-prefix 셀렉터를 fallback으로 추가
+KAKAO_LOGIN_ID_SELECTORS = [
+    "#loginId--1",              # React 생성 ID (기존 — 작동 시 최우선)
+    "input[name='loginId']",    # name 속성 기반 (안정)
+    "input[type='email']",      # type 기반 (범용)
+    "input[id^='loginId']",     # id prefix 매칭 (--2, --3 등 대응)
+]
+
+KAKAO_PASSWORD_SELECTORS = [
+    "#password--2",             # React 생성 ID (기존)
+    "input[name='password']",   # name 속성 기반 (안정)
+    "input[type='password']",   # type 기반 (범용)
+    "input[id^='password']",    # id prefix 매칭
+]
+
+KAKAO_SUBMIT_SELECTORS = [
+    "button.submit",            # class 기반 (기존)
+    "button[type='submit']",    # type 기반 (범용)
+]
 
 
 def kakao_login(sb, kakao_id: str, kakao_pw: str) -> bool:
@@ -91,23 +115,136 @@ def kakao_login(sb, kakao_id: str, kakao_pw: str) -> bool:
         return False
 
 
+def _find_kakao_element(sb, selectors: list[str], timeout: int = 10) -> str | None:
+    """Fallback Chain으로 첫 번째 존재하는 카카오 로그인 셀렉터 반환.
+
+    dom_selectors.find_element()와 동일 패턴.
+    """
+    per_timeout = max(1, timeout // len(selectors))
+    for selector in selectors:
+        try:
+            sb.wait_for_element_present(selector, timeout=per_timeout)
+            logger.debug(f"카카오 셀렉터 발견: {selector}")
+            return selector
+        except Exception:
+            continue
+    return None
+
+
+def _find_kakao_elements_by_js(sb) -> dict[str, str] | None:
+    """최종 fallback: JS로 페이지의 모든 input을 순회하여 구조 기반 탐색.
+
+    email→password→submit 순서로 폼 요소를 찾아 임시 ID를 부여한 뒤 반환.
+    """
+    result = sb.execute_script("""
+        var inputs = document.querySelectorAll('input');
+        var emailEl = null, pwEl = null;
+        for (var i = 0; i < inputs.length; i++) {
+            var inp = inputs[i];
+            var t = (inp.type || '').toLowerCase();
+            var n = (inp.name || '').toLowerCase();
+            if (!emailEl && (t === 'email' || t === 'text' || n === 'loginid'
+                || n === 'email' || n === 'username' || n === 'login_id')) {
+                emailEl = inp;
+            } else if (!pwEl && (t === 'password' || n === 'password')) {
+                pwEl = inp;
+            }
+        }
+        var submitEl = document.querySelector(
+            'button[type="submit"], button.submit, input[type="submit"]'
+        );
+        if (!emailEl || !pwEl) return null;
+
+        // 임시 data 속성 부여
+        emailEl.setAttribute('data-kakao-auto', 'loginId');
+        pwEl.setAttribute('data-kakao-auto', 'password');
+        if (submitEl) submitEl.setAttribute('data-kakao-auto', 'submit');
+
+        return {
+            loginId: '[data-kakao-auto="loginId"]',
+            password: '[data-kakao-auto="password"]',
+            submit: submitEl ? '[data-kakao-auto="submit"]' : null
+        };
+    """)
+    if result:
+        logger.info(f"JS fallback으로 카카오 로그인 폼 발견: {result}")
+        return dict(result)  # type: ignore[arg-type]
+    return None
+
+
 def _enter_credentials_and_wait(sb, kakao_id: str, kakao_pw: str) -> bool:
     """카카오 로그인 폼에 ID/PW 입력 후 2FA 처리."""
     try:
-        sb.wait_for_element_present("#loginId--1", timeout=10)
-        sb.type("#loginId--1", kakao_id)
-        time.sleep(0.5)
+        # 셀렉터 탐색: Fallback Chain → JS 구조 탐색
+        id_sel = _find_kakao_element(sb, KAKAO_LOGIN_ID_SELECTORS, timeout=10)
+        pw_sel = _find_kakao_element(sb, KAKAO_PASSWORD_SELECTORS, timeout=5)
+        submit_sel = _find_kakao_element(sb, KAKAO_SUBMIT_SELECTORS, timeout=3)
 
-        sb.type("#password--2", kakao_pw)
-        time.sleep(0.5)
+        # Chain 실패 시 JS 구조 기반 최종 fallback
+        if not id_sel or not pw_sel:
+            logger.warning("셀렉터 chain 실패 — JS 구조 탐색 시도")
+            js_result = _find_kakao_elements_by_js(sb)
+            if not js_result:
+                logger.error("카카오 로그인 폼을 찾을 수 없음 (셀렉터 + JS 모두 실패)")
+                return False
+            id_sel = js_result["loginId"]
+            pw_sel = js_result["password"]
+            submit_sel = js_result.get("submit") or submit_sel
 
-        sb.click("button.submit")
+        logger.info(f"카카오 로그인 셀렉터: id={id_sel}, pw={pw_sel}, submit={submit_sel}")
+
+        time.sleep(1)
+
+        # 방법 1: SeleniumBase 네이티브 타이핑
+        try:
+            sb.click(id_sel)
+            sb.type(id_sel, kakao_id)
+            time.sleep(0.5)
+            sb.click(pw_sel)
+            sb.type(pw_sel, kakao_pw)
+            time.sleep(0.5)
+            if submit_sel:
+                sb.click(submit_sel)
+        except Exception as type_err:
+            logger.warning(f"네이티브 타이핑 실패, JS fallback: {type_err}")
+            # JS로 직접 입력 + React nativeInputValueSetter + 클릭
+            safe_id = kakao_id.replace("\\", "\\\\").replace("'", "\\'")
+            safe_pw = kakao_pw.replace("\\", "\\\\").replace("'", "\\'")
+            # 동적 셀렉터를 안전하게 이스케이프
+            safe_id_sel = id_sel.replace("'", "\\'")
+            safe_pw_sel = pw_sel.replace("'", "\\'")
+            safe_submit_sel = (submit_sel or "button.submit").replace("'", "\\'")
+            sb.execute_script(f"""
+                function setNativeValue(el, value) {{
+                    var setter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(el, value);
+                    el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                    el.dispatchEvent(new Event('change', {{bubbles: true}}));
+                }}
+                var loginId = document.querySelector('{safe_id_sel}');
+                var pw = document.querySelector('{safe_pw_sel}');
+                if (loginId) setNativeValue(loginId, '{safe_id}');
+                if (pw) setNativeValue(pw, '{safe_pw}');
+                var btn = document.querySelector('{safe_submit_sel}');
+                if (btn) btn.click();
+            """)
+
         time.sleep(5)
 
         current_url = sb.get_current_url()
 
-        # 2FA 감지
-        if "twoStepVerification" in current_url or "twostep" in current_url.lower():
+        # 2FA 감지 (URL 또는 페이지 제목/본문 기반)
+        is_2fa = (
+            "twoStepVerification" in current_url
+            or "twostep" in current_url.lower()
+        )
+        if not is_2fa and "accounts.kakao" in current_url:
+            page_title = sb.get_title() or ""
+            if "2단계 인증" in page_title or "보안" in page_title:
+                is_2fa = True
+
+        if is_2fa:
             logger.info("2단계 인증 감지 — 카카오톡에서 승인 대기...")
             return _handle_two_fa(sb)
 
@@ -152,15 +289,47 @@ def _handle_two_fa(sb) -> bool:
             return True
 
         # 카카오 인증 완료 → 다른 URL로 이동한 경우
+        # kauth.kakao.com → tistory.com 리다이렉트 체인 완료 대기
         if "accounts.kakao" not in current_url:
-            logger.info(f"리다이렉트 감지 ({elapsed}초): {current_url}")
-            return _is_tistory_logged_in(current_url)
+            logger.info(f"리다이렉트 감지 ({elapsed}초): {current_url[:80]}")
+            time.sleep(2)
+            # kauth 계정 확인 페이지: "계속하기" 버튼 자동 클릭
+            if "kauth.kakao.com" in sb.get_current_url():
+                _click_kauth_continue(sb)
+                time.sleep(3)
+            # 최종 tistory.com 도달까지 추가 대기 (최대 15초)
+            for _ in range(15):
+                time.sleep(1)
+                final_url = sb.get_current_url()
+                if _is_tistory_logged_in(final_url):
+                    logger.info(f"2FA 승인 → 티스토리 로그인 완료: {final_url}")
+                    return True
+            logger.warning(f"리다이렉트 후 티스토리 미도달: {sb.get_current_url()}")
+            return _is_tistory_logged_in(sb.get_current_url())
 
         if elapsed % 15 == 0:
             logger.info(f"  대기 중... {elapsed}초")
 
     logger.error(f"2FA 타임아웃 ({TWO_FA_WAIT_SEC}초)")
     return False
+
+
+def _click_kauth_continue(sb) -> None:
+    """kauth.kakao.com 계정 확인 페이지에서 '계속하기' 버튼 클릭."""
+    try:
+        sb.execute_script("""
+            var btn = document.querySelector('button.btn_agree');
+            if (btn) { btn.click(); return; }
+            var buttons = document.querySelectorAll('button');
+            for (var i = 0; i < buttons.length; i++) {
+                if (buttons[i].textContent.trim() === '계속하기') {
+                    buttons[i].click(); return;
+                }
+            }
+        """)
+        logger.info("kauth '계속하기' 버튼 클릭")
+    except Exception as e:
+        logger.warning(f"kauth 계속하기 클릭 실패: {e}")
 
 
 def _is_tistory_logged_in(url: str) -> bool:

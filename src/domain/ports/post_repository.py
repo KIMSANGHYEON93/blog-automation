@@ -21,3 +21,8 @@ class PostRepository(ABC):
     def find_stuck(self) -> list[Post]:
         """Find posts stuck in PUBLISHING status."""
         ...
+
+    @abstractmethod
+    def find_failed(self) -> list[Post]:
+        """Find posts with FAILED status."""
+        ...

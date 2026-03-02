@@ -10,7 +10,12 @@ from src.domain.entities.post import Post
 from src.domain.ports.post_repository import PostRepository
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
-from src.infrastructure.persistence.column_map import COL, STATUS_PENDING, STATUS_PUBLISHING
+from src.infrastructure.persistence.column_map import (
+    COL,
+    STATUS_FAILED,
+    STATUS_PENDING,
+    STATUS_PUBLISHING,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +75,15 @@ class GoogleSheetsPostRepository(PostRepository):
         for i, row in enumerate(all_rows[self._header_row:], start=self._header_row + 1):
             status_val = row[COL["status"] - 1] if len(row) >= COL["status"] else ""
             if status_val == STATUS_PUBLISHING:
+                result.append(self._row_to_post(row, i))
+        return result
+
+    def find_failed(self) -> list[Post]:
+        all_rows = self._sheet.get_all_values()
+        result = []
+        for i, row in enumerate(all_rows[self._header_row:], start=self._header_row + 1):
+            status_val = row[COL["status"] - 1] if len(row) >= COL["status"] else ""
+            if status_val == STATUS_FAILED:
                 result.append(self._row_to_post(row, i))
         return result
 

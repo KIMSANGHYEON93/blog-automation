@@ -68,3 +68,43 @@ class TestResetStuckPosts:
 
         assert count == 0
         assert repo.all()[0].status == PostStatus.PUBLISHED
+
+
+class TestRetryFailed:
+    """실패 포스트 재시도 테스트."""
+
+    def test_retry_failed_옵트인_동작(self):
+        """retry_failed=True 시 FAILED→PENDING 전이."""
+        failed_post = Post(
+            row_index=12,
+            keyword="Jenkins vs GitHub Actions",
+            status=PostStatus.FAILED,
+            error_message="이전 UI 버튼 코드 실패",
+            content=PostContent(title="제목", body_markdown="내용"),
+        )
+        repo = InMemoryPostRepository([failed_post])
+        use_case = ResetStuckPostsUseCase(repo=repo, retry_failed=True)
+
+        count = use_case.execute()
+
+        assert count == 1
+        recovered = repo.all()[0]
+        assert recovered.status == PostStatus.PENDING
+        assert recovered.error_message == ""
+
+    def test_retry_failed_기본_비활성(self):
+        """기본값(retry_failed=False) 시 FAILED 포스트 무시."""
+        failed_post = Post(
+            row_index=12,
+            keyword="Jenkins vs GitHub Actions",
+            status=PostStatus.FAILED,
+            error_message="이전 UI 버튼 코드 실패",
+            content=PostContent(title="제목", body_markdown="내용"),
+        )
+        repo = InMemoryPostRepository([failed_post])
+        use_case = ResetStuckPostsUseCase(repo=repo)  # retry_failed 기본값 False
+
+        count = use_case.execute()
+
+        assert count == 0
+        assert repo.all()[0].status == PostStatus.FAILED  # 그대로

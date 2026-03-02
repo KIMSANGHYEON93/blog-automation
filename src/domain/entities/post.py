@@ -44,6 +44,13 @@ class Post:
         self.status = PostStatus.PENDING
         self.error_message = "이전 실행 중단으로 자동 복구됨"
 
+    def reset_failed_to_pending(self) -> None:
+        """Retry recovery: FAILED → PENDING. 비-FAILED에서 호출 시 에러."""
+        if self.status != PostStatus.FAILED:
+            raise InvalidStatusTransitionError(self.status, PostStatus.PENDING)
+        self.status = PostStatus.PENDING
+        self.error_message = ""
+
     def is_publishable(self) -> bool:
         """True only when PENDING + content has body."""
         return (

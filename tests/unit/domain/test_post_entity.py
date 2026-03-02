@@ -81,6 +81,27 @@ class TestResetToPending:
         assert post.status == PostStatus.FAILED  # unchanged
 
 
+class TestResetFailedToPending:
+    def test_failed_to_pending(self):
+        post = Post(row_index=12, keyword="Jenkins vs GitHub Actions", status=PostStatus.FAILED,
+                    error_message="이전 UI 버튼 코드 실패")
+        post.reset_failed_to_pending()
+        assert post.status == PostStatus.PENDING
+        assert post.error_message == ""
+
+    def test_non_failed_raises(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.PUBLISHED)
+        with pytest.raises(InvalidStatusTransitionError):
+            post.reset_failed_to_pending()
+
+    def test_clears_error_message(self):
+        post = Post(row_index=5, keyword="test", status=PostStatus.FAILED,
+                    error_message="셀렉터 미발견으로 인한 실패")
+        post.reset_failed_to_pending()
+        assert post.error_message == ""
+        assert post.status == PostStatus.PENDING
+
+
 class TestIsPublishable:
     def test_true_when_pending_with_body(self):
         content = PostContent(title="제목", body_markdown="본문 있음")

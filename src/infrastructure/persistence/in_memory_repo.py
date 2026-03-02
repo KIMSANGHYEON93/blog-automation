@@ -27,6 +27,10 @@ class InMemoryPostRepository(PostRepository):
         return [p for p in self._posts
                 if p.status == PostStatus.PUBLISHING]
 
+    def find_failed(self) -> list[Post]:
+        return [p for p in self._posts
+                if p.status == PostStatus.FAILED]
+
     def all(self) -> list[Post]:
         """테스트 검증용: 전체 포스트 반환."""
         return list(self._posts)

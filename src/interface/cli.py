@@ -3,6 +3,7 @@ Composition Root — 유일하게 모든 구체 클래스를 아는 진입점.
 의존성 역전(DIP): Application/Domain은 Port만 알고, 여기서 구체 구현을 조립.
 """
 import logging
+import os
 
 from dotenv import load_dotenv
 
@@ -44,8 +45,9 @@ def main() -> None:
         user_data_dir=".browser_data",
     )
 
-    # Step 1: 고스트 복구
-    reset_count = ResetStuckPostsUseCase(repo=repo).execute()
+    # Step 1: 고스트 복구 (+ 옵트인 실패 재시도)
+    retry_failed = os.getenv("RETRY_FAILED", "false").lower() == "true"
+    reset_count = ResetStuckPostsUseCase(repo=repo, retry_failed=retry_failed).execute()
     if reset_count > 0:
         logger.warning(f"고스트 복구 완료: {reset_count}건")
 

@@ -9,13 +9,13 @@
 
 | 항목 | 값 |
 |------|---|
-| **현재 Phase** | **Phase 5.12 완료** (수동 검증 + 50K/JSON fence 수정 — kroki.io URL 방식 + [MERMAID] 커스텀 마커) |
-| **단위 테스트** | 121건 통과 (Domain 79 + Infra 42) |
+| **현재 Phase** | **Phase 5.13 완료** (발행 후 HTTP 검증 + 비공개 자동 복구) |
+| **단위 테스트** | 127건 통과 (Domain 79 + Infra 48) |
 | **통합 테스트** | 9건 통과 (GoogleSheets 6 + Selenium 3) — 이전 2건 실패 → 0건 실패 |
 | **E2E 테스트** | 2건 스킵 (환경변수 미설정) |
 | **n8n E2E** | 3건 통과 (CI/CD 2개 이미지, Jenkins 1개 이미지, Terraform 4개 이미지) |
-| **Tistory 실발행** | 30건 성공 (최신: Jenkins vs GitHub Actions → https://kimsanghyeon.tistory.com/207) |
-| **전체 테스트** | 130건 통과 (단위 121 + 통합 9), 2건 스킵 |
+| **Tistory 실발행** | 31건 성공 (최신: Kubernetes Ingress Controller → https://kimsanghyeon.tistory.com/211) |
+| **전체 테스트** | 136건 통과 (단위 127 + 통합 9), 2건 스킵 |
 | **커버리지** | 92.05% (domain + application) |
 | **ruff** | 0 errors |
 | **mypy** | 0 errors (kakao_auth.py 포함) |
@@ -1105,6 +1105,49 @@ tistory_editor.py → 잔류 [MERMAID] 있으면 kroki.io POST로 SVG 렌더링
 
 ---
 
+## Phase 5.13: 발행 후 HTTP 검증 + 비공개 자동 복구 — ✅ 완료 (2026-03-02)
+
+### 발견된 문제
+
+Pipeline B로 발행한 게시글 `/210`, `/211`이 **403 (비공개)** 반환.
+
+**조사 결과:**
+- RSS/Sitemap에 /206까지만 노출, /210~211 미포함
+- HTTP 403 = "권한이 없거나 존재하지 않는 페이지" = 비공개 상태
+- `_select_public_mode()`가 공개 라디오 버튼을 클릭하지만, 실패 시 **경고만 출력하고 계속 진행** → 비공개 상태로 발행
+
+### 해결 방안
+
+**1) 발행 후 공개 상태 검증 (자동)**
+
+`publish_post()` 흐름에 검증 단계 추가:
+```
+발행 → URL 획득 → HTTP HEAD 검증 → 403 감지 시 → visibility=20 수정 API → 재검증
+```
+
+**2) 비공개 게시글 수동 복구**
+
+Tistory 관리자 페이지에서 210, 211번 글을 수동으로 공개 전환 → **HTTP 200 확인**.
+
+### 수정 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `src/infrastructure/browser/tistory_editor.py` | `_verify_published_url()`, `_extract_post_id()`, `_fix_post_visibility()` 추가 + `publish_post()` 검증 흐름 통합 |
+| `tests/unit/infrastructure/test_markdown_to_html.py` | `TestExtractPostId` (4건) + `TestVerifyPublishedUrl` (2건) 추가 |
+
+### 검증 결과
+
+| 항목 | 결과 |
+|------|------|
+| `/210` HTTP | 403 → **200 (공개)** |
+| `/211` HTTP | 403 → **200 (공개)** |
+| 단위 테스트 | **127 passed** (기존 121 + 신규 6) |
+| ruff | 0 errors |
+| 커밋 | `57f20ce` — `fix(infra): add post-publish HTTP verification and auto-visibility recovery` |
+
+---
+
 ## Phase 6: 콘텐츠 누적 + SEO 최적화 — 🔲 미시작
 
 > **기간**: W3~6 (2026-03-15 ~ 2026-04-11)
@@ -1204,3 +1247,5 @@ tistory_editor.py → 잔류 [MERMAID] 있으면 kroki.io POST로 SVG 렌더링
 | 2026-03-02 | `[MERMAID]...[/MERMAID]` 커스텀 마커 도입 (Phase 5.12) | JSON content 안의 ` ``` ` 백틱이 (1) Gemini 응답 truncation (2) Parse JSON fence 탐지 오류를 유발 → 백틱 없는 커스텀 마커로 근본 해결 |
 | 2026-03-02 | kroki.io GET URL 방식 전환 (Phase 5.12) | 인라인 SVG/base64 모두 Google Sheets 50K 셀 제한 초과 → zlib deflate + base64url로 ~200자 URL 생성, 브라우저가 on-demand 렌더링 |
 | 2026-03-02 | `NODE_FUNCTION_ALLOW_BUILTIN=zlib` Docker 환경변수 추가 (Phase 5.12) | n8n Code 노드의 sandbox가 기본적으로 `require('zlib')` 차단 → 환경변수로 허용 |
+| 2026-03-02 | 발행 후 HTTP HEAD 검증 도입 (Phase 5.13) | 발행 URL을 HTTP HEAD로 검증, 403(비공개) 감지 시 `_fix_post_visibility()` API로 자동 공개 전환 시도 |
+| 2026-03-02 | `_select_public_mode()` silent failure 대응 (Phase 5.13) | 기존: 공개 선택 실패 시 경고만 → 개선: 발행 후 HTTP 검증으로 실제 공개 상태 확인 + 자동 복구 |

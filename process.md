@@ -9,13 +9,13 @@
 
 | 항목 | 값 |
 |------|---|
-| **현재 Phase** | **Phase 5.10 완료** (버그 수정 3건 — 카카오 셀렉터, FAILED→PENDING, n8n API 키) |
-| **단위 테스트** | 116건 통과 (Domain 79 + Infra 37) |
+| **현재 Phase** | **Phase 5.11 완료** (Mermaid 다이어그램 대체 — Unsplash 스톡 사진 → kroki.io SVG) |
+| **단위 테스트** | 121건 통과 (Domain 79 + Infra 42) |
 | **통합 테스트** | 9건 통과 (GoogleSheets 6 + Selenium 3) — 이전 2건 실패 → 0건 실패 |
 | **E2E 테스트** | 2건 스킵 (환경변수 미설정) |
 | **n8n E2E** | 3건 통과 (CI/CD 2개 이미지, Jenkins 1개 이미지, Terraform 4개 이미지) |
 | **Tistory 실발행** | 30건 성공 (최신: Jenkins vs GitHub Actions → https://kimsanghyeon.tistory.com/207) |
-| **전체 테스트** | 125건 통과 (단위 116 + 통합 9), 2건 스킵 |
+| **전체 테스트** | 130건 통과 (단위 121 + 통합 9), 2건 스킵 |
 | **커버리지** | 92.05% (domain + application) |
 | **ruff** | 0 errors |
 | **mypy** | 0 errors (kakao_auth.py 포함) |
@@ -976,6 +976,63 @@ attribution 형식 변경:
 
 ---
 
+## Phase 5.11: Mermaid 다이어그램 이미지 대체 — ✅ 완료 (2026-03-02)
+
+> **배경**: Unsplash 스톡 사진이 IT 블로그 본문 내용과 연관성이 낮은 문제. `<!-- IMAGE: -->` 마커 기반 Unsplash 다중 삽입을 **LLM 생성 Mermaid 다이어그램**으로 대체.
+
+### 핵심 변경
+
+| 구분 | 기존 | 변경 |
+|------|------|------|
+| 본문 이미지 | Unsplash 스톡 사진 (H2당 1장, 최대 4장) | Mermaid 다이어그램 → kroki.io SVG (LLM이 직접 생성) |
+| 이미지 마커 | `<!-- IMAGE: {keyword} -->` | ` ```mermaid ` 코드블록 (최소 2개) |
+| 렌더링 | Unsplash API 검색 + URL 삽입 | kroki.io POST → SVG → base64 `<img>` 태그 |
+| 썸네일 | Unsplash 첫 번째 이미지 | Unsplash 1장 유지 (OG 이미지용) |
+| 실패 처리 | 마커 제거 | 원본 코드블록 유지 (graceful degradation) |
+
+### 수정 파일 (8개)
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `n8n/prompts/prompt_a_terminology.md` | 규칙 5: IMAGE 마커 → mermaid 코드블록 지시, 체크리스트 업데이트 |
+| `n8n/prompts/prompt_b_comparison.md` | 동일 패턴 적용 |
+| `n8n/prompts/prompt_c_troubleshooting.md` | 동일 패턴 적용 |
+| `n8n/code_nodes/inject_images.js` | 대폭 재작성: Mermaid→kroki.io SVG + Unsplash 썸네일만 유지 (272줄→175줄) |
+| `n8n/code_nodes/validate_structure.js` | #9 추가: Mermaid 잔류 감지 (warning only) |
+| `src/infrastructure/browser/tistory_editor.py` | `_preserve_mermaid_blocks()` + `_style_mermaid_fallback()` + `validate_html()` 경고 추가 |
+| `tests/unit/infrastructure/test_markdown_to_html.py` | 5건 추가: TestMermaidFallback (3) + TestValidateHtmlMermaid (2) |
+| `n8n/workflow_complete.json` | Inject Images, Validate Structure 노드 jsCode 동기화 |
+
+### inject_images.js 주요 로직
+
+1. **Mermaid 블록 추출**: ` ```mermaid ... ``` ` 정규식 매칭
+2. **kroki.io 렌더링**: `POST https://kroki.io/mermaid/svg` (Content-Type: text/plain)
+3. **SVG → `<img>`**: `data:image/svg+xml;base64,...` 인라인 삽입
+4. **역순 치환**: 인덱스 밀림 방지
+5. **thumbnail_url**: Unsplash 제목 기반 1장 검색 (OG 이미지용)
+
+### tistory_editor.py 적응 사항
+
+플랜에서 `fenced_code` extension이 `class="language-mermaid"`를 생성한다고 가정했으나, `codehilite` extension이 선처리하여 구문 강조 코드로 변환됨.
+
+**해결**: `_preserve_mermaid_blocks()`를 markdown 변환 전 사전 처리로 추가. 잔류 mermaid 블록을 styled HTML(`<div class="mermaid-fallback">`)로 직접 변환하여 codehilite 간섭을 회피.
+
+### 커밋 내역
+
+| 커밋 | 메시지 |
+|------|--------|
+| `3e3d526` | `feat(n8n): replace Unsplash stock photos with Mermaid diagrams via kroki.io` |
+
+### 검증 결과
+
+| 항목 | 결과 |
+|------|------|
+| 단위 테스트 | **121 passed** (기존 116 + 신규 5) |
+| ruff | 0 errors |
+| mypy | 0 new errors (기존 13건 — markdown stubs, Any return) |
+
+---
+
 ## Phase 6: 콘텐츠 누적 + SEO 최적화 — 🔲 미시작
 
 > **기간**: W3~6 (2026-03-15 ~ 2026-04-11)
@@ -1069,3 +1126,6 @@ attribution 형식 변경:
 | 2026-03-02 | 카카오 로그인 셀렉터 Fallback Chain 도입 (Phase 5.10) | React 생성 ID(`#loginId--1`)가 불안정 → name/type/id-prefix + JS 구조 탐색으로 3단계 fallback |
 | 2026-03-02 | FAILED→PENDING 전이를 옵트인(`RETRY_FAILED=true`)으로 설계 (Phase 5.10) | 실패 원인 미해결 상태에서 자동 재시도는 위험 → 명시적 옵트인으로 의도적 재시도만 허용 |
 | 2026-03-02 | n8n API 키 로드 fallback chain 도입 (Phase 5.10) | 파일(/tmp) 단일 소스 → 파일/.env/환경변수 3단계로 유연성 확보, setup 스크립트로 초기 설정 자동화 |
+| 2026-03-02 | Unsplash 스톡 사진 → Mermaid 다이어그램 대체 (Phase 5.11) | 스톡 사진이 IT 블로그 본문과 연관성 낮음 — LLM이 직접 생성한 기술 다이어그램이 콘텐츠 가치 높음 |
+| 2026-03-02 | kroki.io POST API 단일 방식 채택 (Phase 5.11) | GET(deflate+base64url) 대비 구현 단순, n8n httpRequest 호환성 우수, 실패 시 원본 유지로 안전 |
+| 2026-03-02 | codehilite 간섭 회피를 위한 Mermaid 사전 처리 (Phase 5.11) | codehilite가 mermaid 블록을 구문 강조 처리하여 language-mermaid 클래스 소실 → markdown 변환 전 HTML로 사전 변환 |

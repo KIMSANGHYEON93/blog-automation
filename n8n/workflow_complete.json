@@ -398,7 +398,8 @@
             "내부링크키워드": "={{ JSON.stringify($('Parse JSON Response').item.json.internal_link_keywords) }}",
             "태그": "={{ ($('Parse JSON Response').item.json.tags || []).join(', ') }}",
             "생성일시": "={{ new Date().toISOString().slice(0,19).replace('T',' ') }}",
-            "카테고리": "={{ $('Sheets Read (Status=대기)').item.json['콘텐츠유형'] || '' }}"
+            "카테고리": "={{ $('Sheets Read (Status=대기)').item.json['콘텐츠유형'] || '' }}",
+            "썸네일URL": "={{ $('Inject Images').item.json.thumbnail_url || '' }}"
           },
           "matchingColumns": [
             "키워드"

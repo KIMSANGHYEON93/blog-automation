@@ -12,6 +12,7 @@ class PostContent:
     meta_description: str = ""
     faq_schema: str = ""
     tags: str = ""
+    thumbnail_url: str = ""
 
     def has_body(self) -> bool:
         return bool(self.body_markdown and self.body_markdown.strip())

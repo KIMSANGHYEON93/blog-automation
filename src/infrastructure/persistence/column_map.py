@@ -1,5 +1,5 @@
 """
-Google Sheets 컬럼 매핑 (A~S열 = 1~19)
+Google Sheets 컬럼 매핑 (A~T열 = 1~20)
 masterplan_v2.2 스키마 섹션 7 기준
 """
 COL = {
@@ -22,6 +22,7 @@ COL = {
     "prompt_type": 17,   # Q: 프롬프트 유형 (A/B/C)
     "verified": 18,      # R: Haiku 검증 결과
     "internal_links": 19,  # S: 내부 링크 키워드
+    "thumbnail_url": 20,   # T: 썸네일 URL (OG 이미지)
 }
 
 STATUS_WAITING = "대기"

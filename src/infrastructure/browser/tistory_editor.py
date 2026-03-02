@@ -287,6 +287,7 @@ def _publish_via_api(
     """
     title = content.title_or_fallback(post.keyword)
     tags = ",".join(content.tag_list()) if content.tags else ""
+    thumbnail_url = content.thumbnail_url if content.thumbnail_url else ""
 
     # 방법 1: React 내부 상태를 통한 발행 (가장 신뢰도 높음)
     react_url = _try_publish_via_react_state(sb, title, html_body, tags, blog_name)
@@ -294,7 +295,7 @@ def _publish_via_api(
         return react_url
 
     # 방법 2: 직접 XHR API 호출 — JSON (post-editor.min.js 엔드포인트)
-    api_url = _call_tistory_post_api(sb, blog_name, title, html_body, tags)
+    api_url = _call_tistory_post_api(sb, blog_name, title, html_body, tags, thumbnail_url)
     if api_url:
         return api_url
 
@@ -303,6 +304,7 @@ def _publish_via_api(
 
 def _call_tistory_post_api(
     sb, blog_name: str, title: str, html_body: str, tags: str,
+    thumbnail_url: str = "",
 ) -> str | None:
     """POST /manage/post.json API 호출. 성공 시 entryUrl 반환."""
     import json as json_mod
@@ -313,6 +315,7 @@ def _call_tistory_post_api(
             var content = arguments[1];
             var tags = arguments[2];
             var blogName = arguments[3];
+            var thumbnailUrl = arguments[4] || '';
 
             var manageUrl = '';
             if (window.appInfo && window.appInfo.manageUrl) {
@@ -341,7 +344,7 @@ def _call_tistory_post_api(
                 daumLike: '',
                 cclCommercial: blogCfg.cclCommercial || '1',
                 cclDerive: blogCfg.cclDerive || '1',
-                thumbnail: '',
+                thumbnail: thumbnailUrl,
                 type: (cfg.postType || 'post'),
                 attachments: '[]',
                 recaptchaValue: '',
@@ -384,7 +387,7 @@ def _call_tistory_post_api(
             }
 
             return JSON.stringify(result);
-        """, title, html_body, tags, blog_name)
+        """, title, html_body, tags, blog_name, thumbnail_url)
 
         logger.info(f"API 발행 결과: {result_json}")
 

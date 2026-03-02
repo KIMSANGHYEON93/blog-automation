@@ -57,6 +57,18 @@ class TestPostContent:
         c = PostContent(title="제목", body_markdown="본문", tags=" SSO , AD , ")
         assert c.tag_list() == ["SSO", "AD"]
 
+    def test_create_with_thumbnail_url(self):
+        c = PostContent(
+            title="제목",
+            body_markdown="본문",
+            thumbnail_url="https://images.unsplash.com/photo-test",
+        )
+        assert c.thumbnail_url == "https://images.unsplash.com/photo-test"
+
+    def test_thumbnail_url_defaults_to_empty(self):
+        c = PostContent(title="제목", body_markdown="본문")
+        assert c.thumbnail_url == ""
+
     def test_is_immutable(self):
         c = PostContent(title="제목", body_markdown="본문")
         with pytest.raises(AttributeError):

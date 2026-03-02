@@ -47,6 +47,7 @@ class GoogleSheetsPostRepository(PostRepository):
                 meta_description=get("meta_desc"),
                 faq_schema=get("faq"),
                 tags=get("tags"),
+                thumbnail_url=get("thumbnail_url"),
             )
 
         return Post(

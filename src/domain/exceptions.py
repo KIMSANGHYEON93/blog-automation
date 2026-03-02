@@ -22,3 +22,7 @@ class PostNotPublishableError(DomainError):
 
 class ContentMissingError(DomainError):
     """Raised when post content is required but missing."""
+
+
+class DailyPublishLimitError(DomainError):
+    """Raised when the blog platform's daily publish limit is reached."""

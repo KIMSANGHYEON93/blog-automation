@@ -2,6 +2,7 @@
 
 from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.domain.entities.post import Post
+from src.domain.exceptions import DailyPublishLimitError
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
 from src.infrastructure.browser.mock_browser import MockBrowserAdapter
@@ -133,3 +134,53 @@ class TestPublishPostsBrowserLifecycle:
         assert stats.published == 0
         assert stats.skipped == 0
         assert browser.started is False
+
+
+class TestPublishPostsDailyLimit:
+    """일일 발행 제한 처리."""
+
+    def test_일일_제한_시_나머지_건너뛰기(self):
+        """2번째 글에서 일일 제한 발생 시 3번째 글은 시도하지 않음."""
+
+        class DailyLimitBrowser(MockBrowserAdapter):
+            call_count = 0
+
+            def publish(self, post):
+                self.call_count += 1
+                if self.call_count >= 2:
+                    raise DailyPublishLimitError("최대 15개까지")
+                return super().publish(post)
+
+        posts = [make_publishable_post(i, f"kw{i}") for i in range(1, 4)]
+        repo = InMemoryPostRepository(posts)
+        browser = DailyLimitBrowser(publish_url="https://test.tistory.com/1")
+        use_case = PublishPostsUseCase(repo=repo, browser=browser, max_posts=5)
+
+        stats = use_case.execute()
+
+        assert stats.published == 1
+        assert stats.failed == 0
+        # 2번째 글은 PENDING으로 복원 (일일 제한이므로 실패 아님)
+        assert repo.all()[1].status == PostStatus.PENDING
+        # 3번째 글은 시도조차 안 함
+        assert repo.all()[2].status == PostStatus.PENDING
+        assert browser.stopped is True
+
+    def test_일일_제한_포스트_발행대기_복원(self):
+        """일일 제한 걸린 포스트가 PUBLISHING→PENDING으로 복원."""
+
+        class ImmediateLimitBrowser(MockBrowserAdapter):
+            def publish(self, post):
+                raise DailyPublishLimitError("최대 15개까지")
+
+        post = make_publishable_post()
+        repo = InMemoryPostRepository([post])
+        browser = ImmediateLimitBrowser()
+        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+
+        stats = use_case.execute()
+
+        assert stats.published == 0
+        assert stats.failed == 0
+        saved = repo.all()[0]
+        assert saved.status == PostStatus.PENDING

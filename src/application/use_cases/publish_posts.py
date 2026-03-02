@@ -3,6 +3,7 @@ import logging
 from dataclasses import dataclass
 
 from src.domain.entities.post import Post
+from src.domain.exceptions import DailyPublishLimitError
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.post_repository import PostRepository
 
@@ -38,7 +39,14 @@ class PublishPostsUseCase:
                 return stats
 
             for post in posts:
-                self._publish_single(post, stats)
+                try:
+                    self._publish_single(post, stats)
+                except DailyPublishLimitError:
+                    logger.warning(
+                        "일일 발행 제한 도달 — 나머지 포스트 건너뜀 "
+                        f"(발행: {stats.published}, 실패: {stats.failed})"
+                    )
+                    break
 
         finally:
             self._browser.stop()
@@ -66,6 +74,10 @@ class PublishPostsUseCase:
                 stats.failed += 1
                 logger.error(f"발행 실패: {post.keyword} — {result.error}")
 
+        except DailyPublishLimitError:
+            post.reset_to_pending()  # 일일 제한 시 발행대기로 복원
+            self._repo.save(post)
+            raise
         except Exception as e:
             post.mark_failed(str(e))
             stats.failed += 1

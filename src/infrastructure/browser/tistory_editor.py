@@ -1,6 +1,7 @@
 """TistoryEditor — Tistory blog editor automation (2026-03-02 updated).
 
 변경 이력:
+  2026-03-02 — 일일 발행 제한 감지 + 배치 중단 (DailyPublishLimitError)
   2026-03-02 — 발행 후 HTTP 검증 + 비공개 자동 복구 (_verify / _fix_post_visibility)
   2026-03-01 — MD→HTML 변환: 마크다운 모드 대신 WYSIWYG 모드에서 HTML 주입 (방향 A)
   2026-02-28 — 비공개→공개 발행 전환
@@ -14,6 +15,7 @@ import time
 import markdown as md_lib
 
 from src.domain.entities.post import Post
+from src.domain.exceptions import DailyPublishLimitError
 from src.domain.value_objects.publish_result import PublishResult
 from src.infrastructure.browser.dom_selectors import (
     CONTENT_AREA_SELECTORS,
@@ -30,6 +32,8 @@ from src.infrastructure.browser.dom_selectors import (
 )
 
 logger = logging.getLogger(__name__)
+
+_DAILY_LIMIT_PATTERN = "최대 15개까지"
 
 
 def _safe_click(sb, selector: str) -> bool:
@@ -389,10 +393,15 @@ def _call_tistory_post_api(
                 logger.warning(f"URL 미추출, response: {resp_text[:300]}")
                 return f"https://{blog_name}.tistory.com"
             else:
+                resp_text = result.get("response", "")
                 logger.error(
                     f"API 발행 실패 (status={result.get('status')}): "
-                    f"{result.get('response', '')[:500]}"
+                    f"{resp_text[:500]}"
                 )
+                if _DAILY_LIMIT_PATTERN in resp_text:
+                    raise DailyPublishLimitError(resp_text[:200])
+    except DailyPublishLimitError:
+        raise
     except Exception as e:
         logger.error(f"API 발행 호출 예외: {e}")
 
@@ -513,6 +522,12 @@ def _try_publish_via_react_state(
                 logger.warning("React onClick 트리거 성공이나 레이어 미열림")
 
     except Exception as e:
+        err_msg = str(e)
+        if _DAILY_LIMIT_PATTERN in err_msg:
+            logger.error("일일 발행 제한 도달 — 배치 중단")
+            raise DailyPublishLimitError(
+                "하루에 새롭게 공개 발행할 수 있는 글은 최대 15개까지입니다."
+            ) from e
         logger.warning(f"React 발행 트리거 예외: {e}")
 
     return None

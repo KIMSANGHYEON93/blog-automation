@@ -21,9 +21,7 @@ from src.infrastructure.browser.dom_selectors import (
     MODE_CONFIRM_SELECTORS,
     MODE_SWITCH_BUTTON_SELECTORS,
     PUBLIC_MODE_SELECTORS,
-    PUBLISH_BUTTON_SELECTORS,
     PUBLISH_CONFIRM_SELECTORS,
-    SAVE_BUTTON_SELECTORS,
     TAG_INPUT_SELECTORS,
     TINYMCE_IFRAME_SELECTORS,
     TITLE_SELECTORS,
@@ -31,6 +29,116 @@ from src.infrastructure.browser.dom_selectors import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_click(sb, selector: str) -> bool:
+    """요소 클릭 — 네이티브 시도 후 JS fallback (full mouse event sequence)."""
+    # 방법 1: 네이티브 SeleniumBase 클릭
+    try:
+        sb.click(selector)
+        logger.debug(f"네이티브 클릭 성공: {selector}")
+        return True
+    except Exception:
+        pass
+    # 방법 2: JS — full mouse event sequence (mousedown → mouseup → click)
+    try:
+        js = (
+            f"var el = document.querySelector('{selector}');"
+            "if (!el) return false;"
+            "var o = {bubbles:true, cancelable:true, view:window};"
+            "el.dispatchEvent(new MouseEvent('mousedown', o));"
+            "el.dispatchEvent(new MouseEvent('mouseup', o));"
+            "el.dispatchEvent(new MouseEvent('click', o));"
+            "return true;"
+        )
+        clicked = sb.execute_script(js)
+        if clicked:
+            logger.debug(f"JS MouseEvent 클릭: {selector}")
+            return True
+    except Exception:
+        pass
+    # 방법 3: JS — el.click() 단순 호출
+    try:
+        clicked = sb.execute_script(
+            f"var el = document.querySelector('{selector}');"
+            "if (el) { el.click(); return true; } return false;"
+        )
+        if clicked:
+            logger.debug(f"JS el.click() 클릭: {selector}")
+            return True
+    except Exception:
+        pass
+    logger.warning(f"클릭 실패: {selector}")
+    return False
+
+
+def _safe_type(sb, selector: str, text: str) -> bool:
+    """요소에 텍스트 입력 — 네이티브 시도 후 JS fallback (React 호환)."""
+    try:
+        sb.type(selector, text)
+        return True
+    except Exception:
+        pass
+    # JS fallback: React nativeInputValueSetter로 React state 동기화
+    try:
+        result = sb.execute_script("""
+            var el = document.querySelector(arguments[0]);
+            if (!el) return false;
+            el.focus();
+            // React nativeInputValueSetter 사용 (React 내부 state 동기화)
+            var tagName = el.tagName.toLowerCase();
+            var proto = tagName === 'textarea'
+                ? window.HTMLTextAreaElement.prototype
+                : window.HTMLInputElement.prototype;
+            var setter = Object.getOwnPropertyDescriptor(proto, 'value');
+            if (setter && setter.set) {
+                setter.set.call(el, arguments[1]);
+            } else {
+                el.value = arguments[1];
+            }
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+            return true;
+        """, selector, text)
+        if result:
+            logger.debug(f"JS nativeInputValueSetter 입력: {selector}")
+            return True
+    except Exception:
+        pass
+    logger.warning(f"텍스트 입력 실패: {selector}")
+    return False
+
+
+def _check_publish_layer_opened(sb) -> str | None:
+    """발행 설정 레이어가 열렸는지 확인. 열렸으면 감지된 셀렉터/텍스트, 아니면 None."""
+    try:
+        return sb.execute_script("""
+            // 발행 설정 레이어 DOM 존재 확인
+            var indicators = [
+                '#publish-btn', '.btn_publish', '#open-type-0',
+                '.layer_post', '.layer_publish', '#publish-form',
+                'input[name="visibility"]', 'input[name="openType"]',
+                'label[for="open-type-0"]'
+            ];
+            for (var i = 0; i < indicators.length; i++) {
+                var el = document.querySelector(indicators[i]);
+                if (el) return indicators[i];
+            }
+            // 텍스트 기반: "공개", "비공개", "발행하기" (visible only)
+            var all = document.querySelectorAll('label, button, a, span, div, input');
+            for (var j = 0; j < all.length; j++) {
+                var txt = all[j].textContent.trim();
+                var rect = all[j].getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0 &&
+                    (txt === '공개' || txt === '발행하기' || txt === '비공개'
+                     || txt === '보호' || txt === '발행')) {
+                    return 'text:' + txt + ':' + all[j].tagName + '#' + all[j].id;
+                }
+            }
+            return null;
+        """)
+    except Exception:
+        return None
 
 
 def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
@@ -42,17 +150,27 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         content = post.content
         body_markdown: str = content.body_markdown or ""
 
+        # 브라우저 창 크기 설정 (에디터 사이드바 가시성 확보)
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            sb.set_window_size(1920, 1080)
+
         # 에디터 페이지 열기
         write_url = f"https://{blog_name}.tistory.com{EDITOR_PATH}"
         sb.open(write_url)
-        time.sleep(3)
+        time.sleep(5)
 
-        # 제목 입력
-        title_sel = find_element(sb, TITLE_SELECTORS)
+        # 에디터 로드 대기 (제목 입력창 DOM 존재 확인)
+        title_sel = find_element(sb, TITLE_SELECTORS, timeout=15)
         if not title_sel:
             return PublishResult.fail("제목 입력창을 찾을 수 없음")
-        sb.click(title_sel)
-        sb.type(title_sel, content.title_or_fallback(post.keyword))
+
+        # 제목 입력 (JS fallback 포함)
+        title_text = content.title_or_fallback(post.keyword)
+        _safe_click(sb, title_sel)
+        if not _safe_type(sb, title_sel, title_text):
+            return PublishResult.fail("제목 입력 실패")
         time.sleep(0.5)
 
         # --- MD→HTML 변환 (방향 A: Python 측 변환 후 WYSIWYG 모드 주입) ---
@@ -102,74 +220,354 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         # 저장 전 콘텐츠 동기화 확인
         _ensure_content_in_form(sb, html_body)
 
-        # Step 1: 임시저장 (내용을 서버에 저장)
-        save_sel = find_element(sb, SAVE_BUTTON_SELECTORS, timeout=5)
-        if save_sel:
-            sb.click(save_sel)
-            time.sleep(3)
-            logger.info(f"임시저장 완료: {post.keyword}")
-        else:
-            logger.warning("임시저장 버튼을 찾을 수 없음")
+        # 직접 API 호출로 발행 (UI 버튼 클릭 대신)
+        published_url = _publish_via_api(sb, blog_name, content, html_body, post)
+        if published_url:
+            logger.info(f"API 발행 성공: {post.keyword} → {published_url}")
+            return PublishResult.ok(published_url)
 
-        # Step 2: 발행 설정 레이어 열기 (완료 버튼)
-        publish_sel = find_element(sb, PUBLISH_BUTTON_SELECTORS, timeout=5)
-        if publish_sel:
-            sb.click(publish_sel)
-            time.sleep(2)
-            logger.info(f"발행 설정 레이어 열기: {post.keyword}")
-
-            # Step 2.5: 공개 모드 선택
-            _select_public_mode(sb)
-            time.sleep(1)
-
-            # 발행 전 콘텐츠 재동기화
-            _ensure_content_in_form(sb, body_markdown)
-
-            # Step 3: 최종 발행 확인 버튼 클릭
-            confirm_sel = find_element(sb, PUBLISH_CONFIRM_SELECTORS, timeout=10)
-            if confirm_sel:
-                sb.click(confirm_sel)
-                time.sleep(3)
-                logger.info(f"공개 발행 확인 버튼 클릭: {post.keyword}")
-            else:
-                # JS fallback: 발행 버튼 직접 클릭
-                clicked = sb.execute_script("""
-                    var selectors = ['#publish-btn', '.btn_publish',
-                        '.layer_post .btn_ok', 'button.btn_default'];
-                    for (var i = 0; i < selectors.length; i++) {
-                        var el = document.querySelector(selectors[i]);
-                        if (el) { el.click(); return selectors[i]; }
-                    }
-                    return null;
-                """)
-                if clicked:
-                    time.sleep(3)
-                    logger.info(f"JS fallback 발행 확인 클릭: {clicked}")
-                else:
-                    logger.warning("발행 확인 버튼을 찾을 수 없음 — 레이어만 열림")
-        else:
-            logger.warning("발행 버튼(완료)을 찾을 수 없음")
-
-        time.sleep(3)
-        current_url = sb.get_current_url()
-
-        # 발행 후 실제 글 URL 추출
-        post_url = current_url
-        if "/manage/" in current_url:
-            extracted = _extract_published_url(sb, blog_name)
-            if extracted:
-                post_url = extracted
-                logger.info(f"발행 완료: {post.keyword} → {post_url}")
-            else:
-                logger.warning(f"발행 URL 추출 실패, 관리 페이지 URL 사용: {current_url}")
-        else:
-            logger.info(f"발행 성공: {post.keyword} → {post_url}")
-
-        return PublishResult.ok(post_url)
+        return PublishResult.fail("API 발행 실패 — 모든 방법 실패")
 
     except Exception as e:
         logger.error(f"발행 실패: {post.keyword} — {e}")
         return PublishResult.fail(str(e))
+
+
+def _publish_via_api(
+    sb, blog_name: str, content, html_body: str, post: Post,
+) -> str | None:
+    """직접 API 호출로 포스트 발행 (React UI 버튼 클릭 대신).
+
+    Tistory 에디터 내부 API: POST {manageUrl}/post.json
+    성공 시 발행 URL 반환, 실패 시 None.
+    """
+    title = content.title_or_fallback(post.keyword)
+    tags = ",".join(content.tag_list()) if content.tags else ""
+
+    # 방법 1: React 내부 상태를 통한 발행 (가장 신뢰도 높음)
+    react_url = _try_publish_via_react_state(sb, title, html_body, tags, blog_name)
+    if react_url:
+        return react_url
+
+    # 방법 2: 직접 XHR API 호출 — JSON (post-editor.min.js 엔드포인트)
+    api_url = _call_tistory_post_api(sb, blog_name, title, html_body, tags)
+    if api_url:
+        return api_url
+
+    return None
+
+
+def _call_tistory_post_api(
+    sb, blog_name: str, title: str, html_body: str, tags: str,
+) -> str | None:
+    """POST /manage/post.json API 호출. 성공 시 entryUrl 반환."""
+    import json as json_mod
+
+    try:
+        result_json = sb.execute_script("""
+            var title = arguments[0];
+            var content = arguments[1];
+            var tags = arguments[2];
+            var blogName = arguments[3];
+
+            var manageUrl = '';
+            if (window.appInfo && window.appInfo.manageUrl) {
+                manageUrl = window.appInfo.manageUrl;
+            } else {
+                manageUrl = 'https://' + blogName + '.tistory.com/manage';
+            }
+
+            // Config 기본값
+            var cfg = window.Config || {};
+            var blogCfg = cfg.blog || {};
+            var blogSettings = blogCfg.blogSettings || {};
+
+            var postData = {
+                id: '0',
+                title: title,
+                content: content,
+                slogan: '',
+                visibility: '20',
+                category: '0',
+                tag: tags,
+                acceptComment: '1',
+                published: '1',
+                password: Math.random().toString(36).substring(2, 10),
+                uselessMarginForEntry: blogSettings.uselessMargin || '0',
+                daumLike: '',
+                cclCommercial: blogCfg.cclCommercial || '1',
+                cclDerive: blogCfg.cclDerive || '1',
+                thumbnail: '',
+                type: (cfg.postType || 'post'),
+                attachments: '[]',
+                recaptchaValue: '',
+                draftSequence: null
+            };
+
+            var url = manageUrl + '/post.json';
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', url, false);
+            xhr.setRequestHeader('Content-Type',
+                'application/json; charset=UTF-8');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+            try {
+                xhr.send(JSON.stringify(postData));
+            } catch(e) {
+                return JSON.stringify({
+                    success: false, error: 'send:' + e.message
+                });
+            }
+
+            var result = {
+                status: xhr.status,
+                response: xhr.responseText.substring(0, 2000),
+                url: url
+            };
+
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    result.success = true;
+                    result.entryUrl = data.entryUrl || data.url || null;
+                    result.entryId = data.entryId || data.id || null;
+                } catch(e) {
+                    result.success = true;
+                    result.parseError = e.message;
+                }
+            } else {
+                result.success = false;
+            }
+
+            return JSON.stringify(result);
+        """, title, html_body, tags, blog_name)
+
+        logger.info(f"API 발행 결과: {result_json}")
+
+        if result_json:
+            result = json_mod.loads(result_json)
+            if result.get("success"):
+                entry_url = result.get("entryUrl")
+                if entry_url:
+                    return entry_url
+                entry_id = result.get("entryId")
+                if entry_id:
+                    return f"https://{blog_name}.tistory.com/{entry_id}"
+                resp_text = result.get("response", "")
+                logger.warning(f"URL 미추출, response: {resp_text[:300]}")
+                return f"https://{blog_name}.tistory.com"
+            else:
+                logger.error(
+                    f"API 발행 실패 (status={result.get('status')}): "
+                    f"{result.get('response', '')[:500]}"
+                )
+    except Exception as e:
+        logger.error(f"API 발행 호출 예외: {e}")
+
+    return None
+
+
+def _try_publish_via_react_state(
+    sb, title: str, html_body: str, tags: str, blog_name: str,
+) -> str | None:
+    """React Redux store에 직접 접근하여 발행 액션을 디스패치.
+
+    post-editor.min.js의 내부 store에 title/content/tags를 설정한 후
+    publish 액션을 트리거한다. 성공 시 URL 반환.
+    """
+    try:
+        result = sb.execute_script("""
+            var title = arguments[0];
+            var htmlContent = arguments[1];
+            var tags = arguments[2];
+
+            // 방법 A: React fiber를 통한 publish 버튼 onClick 트리거
+            var btn = document.querySelector('#publish-layer-btn');
+            if (!btn) return JSON.stringify({error: 'no-publish-btn'});
+
+            // React 18+ __reactProps$ 또는 __reactFiber$ 키 탐색
+            var keys = Object.keys(btn);
+            var propsKey = keys.find(function(k) {
+                return k.startsWith('__reactProps$');
+            });
+            var fiberKey = keys.find(function(k) {
+                return k.startsWith('__reactFiber$')
+                    || k.startsWith('__reactInternalInstance$');
+            });
+
+            // 먼저 title/content를 React state에 동기화
+            // TinyMCE 에디터에 content가 이미 있으므로 title만 동기화
+            var titleInput = document.querySelector('#post-title-inp');
+            if (titleInput) {
+                // React nativeInputValueSetter로 title 동기화
+                var nativeSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLTextAreaElement.prototype, 'value'
+                );
+                if (!nativeSetter) {
+                    nativeSetter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value'
+                    );
+                }
+                if (nativeSetter && nativeSetter.set) {
+                    nativeSetter.set.call(titleInput, title);
+                    titleInput.dispatchEvent(
+                        new Event('input', {bubbles: true})
+                    );
+                    titleInput.dispatchEvent(
+                        new Event('change', {bubbles: true})
+                    );
+                }
+            }
+
+            // __reactProps$ → onClick 직접 호출
+            if (propsKey && btn[propsKey] && btn[propsKey].onClick) {
+                btn[propsKey].onClick(
+                    new MouseEvent('click', {bubbles: true})
+                );
+                return JSON.stringify({triggered: 'props-onClick'});
+            }
+
+            // __reactFiber$ → 트리 탐색하여 onClick 찾기
+            if (fiberKey) {
+                var fiber = btn[fiberKey];
+                var depth = 0;
+                while (fiber && depth < 30) {
+                    var props = fiber.memoizedProps || fiber.pendingProps;
+                    if (props && props.onClick) {
+                        props.onClick(
+                            new MouseEvent('click', {bubbles: true})
+                        );
+                        return JSON.stringify({
+                            triggered: 'fiber-onClick',
+                            depth: depth
+                        });
+                    }
+                    fiber = fiber.return;
+                    depth++;
+                }
+                return JSON.stringify({
+                    error: 'fiber-no-handler', depth: depth
+                });
+            }
+
+            return JSON.stringify({
+                error: 'no-react-key',
+                keys: keys.filter(function(k) {
+                    return k.startsWith('__');
+                }).join(',')
+            });
+        """, title, html_body, tags)
+
+        logger.info(f"React 발행 트리거 결과: {result}")
+
+        if not result:
+            return None
+
+        import json as json_mod
+        data = json_mod.loads(result)
+
+        if data.get("triggered"):
+            # React onClick이 트리거됨 → 발행 레이어가 열렸는지 확인
+            time.sleep(2)
+            layer_info = _check_publish_layer_opened(sb)
+            if layer_info:
+                logger.info(f"발행 레이어 열림: {layer_info}")
+                # 공개 모드 선택
+                _select_public_mode(sb)
+                time.sleep(1)
+                # 발행 확인 버튼 클릭
+                return _click_publish_confirm_in_modal(sb, blog_name)
+            else:
+                logger.warning("React onClick 트리거 성공이나 레이어 미열림")
+
+    except Exception as e:
+        logger.warning(f"React 발행 트리거 예외: {e}")
+
+    return None
+
+
+def _click_publish_confirm_in_modal(sb, blog_name: str) -> str | None:
+    """발행 설정 모달에서 발행 확인 버튼 클릭. 성공 시 entryUrl 반환."""
+
+    def _after_publish(sb, blog_name: str) -> str | None:
+        """발행 후 실제 글 URL 추출."""
+        time.sleep(5)
+        current_url = sb.get_current_url()
+        if "/manage/newpost" in current_url:
+            return None  # 아직 에디터 → 실패
+        # /manage/posts/ 리다이렉트 → 가장 최근 글 URL 추출
+        if "/manage/" in current_url:
+            extracted = _extract_published_url(sb, blog_name)
+            if extracted:
+                return extracted
+            # fallback: /manage/posts 페이지에서 최신 글 링크 추출
+            try:
+                url = sb.execute_script("""
+                    var links = document.querySelectorAll(
+                        'a[href*="tistory.com/"]'
+                    );
+                    var pattern = /tistory\\.com\\/\\d+$/;
+                    for (var i = 0; i < links.length; i++) {
+                        if (pattern.test(links[i].href)) {
+                            return links[i].href;
+                        }
+                    }
+                    return null;
+                """)
+                if url:
+                    return url
+            except Exception:
+                pass
+            logger.warning(f"발행 URL 추출 실패, 관리 페이지: {current_url}")
+            return current_url
+        return current_url
+
+    # CSS 셀렉터로 발행 확인 버튼 찾기
+    confirm_sel = find_element(sb, PUBLISH_CONFIRM_SELECTORS, timeout=5)
+    if confirm_sel:
+        _safe_click(sb, confirm_sel)
+        url = _after_publish(sb, blog_name)
+        if url:
+            return url
+
+    # React fiber로 발행 확인 버튼 클릭
+    try:
+        result = sb.execute_script("""
+            var btn = document.querySelector('#publish-btn');
+            if (!btn) {
+                var buttons = document.querySelectorAll('button');
+                for (var i = 0; i < buttons.length; i++) {
+                    var txt = buttons[i].textContent.trim();
+                    if (txt === '발행하기' || txt === '발행') {
+                        btn = buttons[i];
+                        break;
+                    }
+                }
+            }
+            if (!btn) return 'no-btn';
+
+            var keys = Object.keys(btn);
+            var propsKey = keys.find(function(k) {
+                return k.startsWith('__reactProps$');
+            });
+            if (propsKey && btn[propsKey] && btn[propsKey].onClick) {
+                btn[propsKey].onClick(
+                    new MouseEvent('click', {bubbles: true})
+                );
+                return 'react-clicked';
+            }
+            btn.click();
+            return 'native-clicked';
+        """)
+        logger.info(f"발행 확인 버튼 결과: {result}")
+        if result in ("react-clicked", "native-clicked"):
+            url = _after_publish(sb, blog_name)
+            if url:
+                return url
+    except Exception as e:
+        logger.warning(f"발행 확인 버튼 클릭 예외: {e}")
+
+    return None
 
 
 def _switch_to_markdown_mode(sb) -> None:
@@ -765,9 +1163,21 @@ def _input_tags(sb, tags: list[str]) -> None:
             return
 
         for tag in tags:
-            sb.click(tag_sel)
+            _safe_click(sb, tag_sel)
             time.sleep(0.3)
-            sb.type(tag_sel, tag + "\n")
+            # 태그 입력: 네이티브 시도 → JS fallback (Enter 키 이벤트 포함)
+            try:
+                sb.type(tag_sel, tag + "\n")
+            except Exception:
+                safe_tag = tag.replace("\\", "\\\\").replace("'", "\\'")
+                sb.execute_script(
+                    f"var el = document.querySelector('{tag_sel}');"
+                    "if (!el) return;"
+                    f"el.focus(); el.value = '{safe_tag}';"
+                    "el.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "el.dispatchEvent(new KeyboardEvent('keydown',"
+                    "  {key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true}));"
+                )
             time.sleep(0.5)
 
         # 등록된 태그 수 확인

@@ -64,7 +64,10 @@ PUBLIC_MODE_SELECTORS = [
 PUBLISH_CONFIRM_SELECTORS = [
     "#publish-btn",               # 발행하기 버튼
     ".btn_publish",               # 발행 버튼
+    ".btn_save",                  # 저장/발행 버튼
+    ".btn_submit",                # 등록 버튼
     ".layer_post .btn_ok",        # 확인 버튼
+    "button.btn_ok",              # OK 버튼
     "button.btn_default",         # 기본 확인 버튼
 ]
 

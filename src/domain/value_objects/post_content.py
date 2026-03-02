@@ -32,7 +32,11 @@ class PostContent:
         if not self.faq_schema:
             return ""
         try:
-            faq_list = json.loads(self.faq_schema) if isinstance(self.faq_schema, str) else self.faq_schema
+            faq_list = (
+                json.loads(self.faq_schema)
+                if isinstance(self.faq_schema, str)
+                else self.faq_schema
+            )
             if not isinstance(faq_list, list) or len(faq_list) == 0:
                 return ""
             main_entity = []

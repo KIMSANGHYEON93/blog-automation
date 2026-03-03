@@ -7,6 +7,7 @@ import os
 
 from dotenv import load_dotenv
 
+from src.application.use_cases.check_cwv import CheckCwvUseCase
 from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
 from src.domain.value_objects.credentials import Credentials
@@ -62,6 +63,25 @@ def main() -> None:
         f"실행 완료 — 발행: {stats.published}, "
         f"실패: {stats.failed}, 건너뜀: {stats.skipped}"
     )
+
+    # Step 3: CWV 점검 (발행완료 포스트 대상)
+    cwv_enabled = os.getenv("CWV_CHECK", "true").lower() == "true"
+    if cwv_enabled:
+        cwv_uc = CheckCwvUseCase(repo=repo)
+        published = repo.find_published(limit=20)
+        checked = 0
+        for post in published:
+            result = cwv_uc.execute(post)
+            if result.success:
+                checked += 1
+                logger.info(
+                    f"CWV: {result.post_keyword} — "
+                    f"LCP={result.lcp}s, CLS={result.cls}, "
+                    f"Score={result.score}, Passed={result.passed}"
+                )
+            elif result.error:
+                logger.warning(f"CWV 실패: {result.post_keyword} — {result.error}")
+        logger.info(f"CWV 점검 완료: {checked}/{len(published)}건")
 
 
 if __name__ == "__main__":

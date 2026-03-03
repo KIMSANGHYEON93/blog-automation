@@ -13,6 +13,7 @@ class PostContent:
     faq_schema: str = ""
     tags: str = ""
     thumbnail_url: str = ""
+    internal_link_keywords: str = ""
 
     def has_body(self) -> bool:
         return bool(self.body_markdown and self.body_markdown.strip())
@@ -21,6 +22,22 @@ class PostContent:
         if self.title and self.title.strip():
             return self.title
         return fallback
+
+    def internal_keyword_list(self) -> list[str]:
+        """내부 링크 키워드 JSON 문자열을 리스트로 반환."""
+        if not self.internal_link_keywords:
+            return []
+        try:
+            parsed = json.loads(self.internal_link_keywords)
+            if isinstance(parsed, list):
+                return [str(k).strip() for k in parsed if str(k).strip()]
+            return []
+        except (json.JSONDecodeError, TypeError):
+            return [
+                k.strip()
+                for k in self.internal_link_keywords.split(",")
+                if k.strip()
+            ]
 
     def tag_list(self) -> list[str]:
         """태그 문자열을 리스트로 반환 (쉼표 구분)."""

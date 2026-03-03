@@ -5,18 +5,25 @@ from src.infrastructure.seo.html_optimizer import optimize_html, validate_respon
 
 
 class TestOptimizeHtml:
-    def test_img_lazy_loading_추가(self):
-        """<img src="x"> → loading="lazy" 속성 부여."""
+    def test_img_첫번째_fetchpriority_high(self):
+        """첫 번째 img → fetchpriority="high", lazy 제거 (LCP candidate)."""
         html = '<html><body><img src="test.jpg"></body></html>'
         result = optimize_html(html)
-        assert 'loading="lazy"' in result
+        assert 'fetchpriority="high"' in result
         assert 'decoding="async"' in result
+        assert 'loading="lazy"' not in result
 
-    def test_img_이미_lazy면_중복_안함(self):
-        """기존 loading="lazy" → 변경 없음."""
-        html = '<html><body><img src="test.jpg" loading="lazy"></body></html>'
+    def test_img_두번째부터_lazy_loading(self):
+        """두 번째 img부터 loading="lazy" 적용."""
+        html = (
+            '<html><body>'
+            '<img src="first.jpg">'
+            '<img src="second.jpg">'
+            '</body></html>'
+        )
         result = optimize_html(html)
-        assert result.count('loading="lazy"') == 1
+        assert 'fetchpriority="high"' in result
+        assert 'loading="lazy"' in result
 
     def test_img_반응형_스타일_추가(self):
         """width/height 미지정 img → max-width:100% 스타일."""

@@ -49,6 +49,7 @@ class GoogleSheetsPostRepository(PostRepository):
                 faq_schema=get("faq"),
                 tags=get("tags"),
                 thumbnail_url=get("thumbnail_url"),
+                internal_link_keywords=get("internal_links"),
             )
 
         return Post(
@@ -59,6 +60,7 @@ class GoogleSheetsPostRepository(PostRepository):
             status=PostStatus(get("status")) if get("status") else PostStatus.PENDING,
             published_url=get("published_url"),
             error_message=get("error_msg"),
+            entry_id=get("entry_id"),
         )
 
     def find_pending(self, limit: int = 5) -> list[Post]:
@@ -101,6 +103,19 @@ class GoogleSheetsPostRepository(PostRepository):
                     break
         return result
 
+    def find_cwv_unchecked(self, limit: int = 10) -> list[Post]:
+        all_rows = self._sheet.get_all_values()
+        result = []
+        cwv_col = COL["cwv_checked_at"] - 1
+        for i, row in enumerate(all_rows[self._header_row:], start=self._header_row + 1):
+            status_val = row[COL["status"] - 1] if len(row) >= COL["status"] else ""
+            cwv_val = row[cwv_col] if len(row) > cwv_col else ""
+            if status_val == STATUS_PUBLISHED and not cwv_val.strip():
+                result.append(self._row_to_post(row, i))
+                if len(result) >= limit:
+                    break
+        return result
+
     def save(self, post: Post) -> None:
         row = post.row_index
         updates = {
@@ -110,6 +125,8 @@ class GoogleSheetsPostRepository(PostRepository):
         }
         if post.published_at:
             updates[COL["published_at"]] = post.published_at.strftime("%Y-%m-%d %H:%M:%S")
+        if post.entry_id:
+            updates[COL["entry_id"]] = post.entry_id
 
         for col, value in updates.items():
             self._sheet.update_cell(row, col, value)

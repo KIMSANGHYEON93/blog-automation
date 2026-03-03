@@ -1,4 +1,4 @@
-"""CheckCwvUseCase 테스트 — 4건."""
+"""CheckCwvUseCase 테스트 — 6건."""
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -76,3 +76,28 @@ class TestCheckCwvUseCase:
         assert 5 in repo._cwv_records
         assert repo._cwv_records[5]["lcp"] == 2.0
         assert repo._cwv_records[5]["cls"] == 0.1
+
+
+class TestFindCwvUnchecked:
+    def test_미점검_포스트만_반환(self):
+        """CWV 기록 없는 PUBLISHED 포스트만 반환."""
+        repo = InMemoryPostRepository([
+            _published_post(row=2),
+            _published_post(row=3),
+        ])
+        repo._cwv_records[2] = {"lcp": 1.5, "cls": 0.05}
+
+        unchecked = repo.find_cwv_unchecked()
+
+        assert len(unchecked) == 1
+        assert unchecked[0].row_index == 3
+
+    def test_PENDING_포스트_제외(self):
+        """PENDING 상태 포스트는 CWV 대상 아님."""
+        pending = Post(row_index=2, keyword="대기중")
+        repo = InMemoryPostRepository([pending, _published_post(row=3)])
+
+        unchecked = repo.find_cwv_unchecked()
+
+        assert len(unchecked) == 1
+        assert unchecked[0].row_index == 3

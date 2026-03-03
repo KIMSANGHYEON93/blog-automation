@@ -36,6 +36,28 @@ logger = logging.getLogger(__name__)
 
 _DAILY_LIMIT_PATTERN = "최대 15개까지"
 
+# Tistory 카테고리 이름 → ID 매핑 (관리자 페이지에서 확인)
+CATEGORY_MAP: dict[str, str] = {
+    "IT 기초 용어": "1152967",
+    "IT 트렌드": "1152966",
+    "트러블슈팅": "1152968",
+}
+
+
+def _resolve_category_id(category_name: str) -> str:
+    """카테고리 이름을 Tistory 카테고리 ID로 변환. 매칭 실패 시 '0'(미분류)."""
+    if not category_name:
+        return "0"
+    name = category_name.strip()
+    if name in CATEGORY_MAP:
+        return CATEGORY_MAP[name]
+    # 부분 매칭 시도
+    name_lower = name.lower()
+    for key, cid in CATEGORY_MAP.items():
+        if key.lower() in name_lower or name_lower in key.lower():
+            return cid
+    return "0"
+
 
 def _safe_click(sb, selector: str) -> bool:
     """요소 클릭 — 네이티브 시도 후 JS fallback (full mouse event sequence)."""
@@ -230,11 +252,12 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         _ensure_content_in_form(sb, html_body)
 
         # 직접 API 호출로 발행 (UI 버튼 클릭 대신)
-        published_url = _publish_via_api(sb, blog_name, content, html_body, post)
-        if not published_url:
+        api_result = _publish_via_api(sb, blog_name, content, html_body, post)
+        if not api_result:
             return PublishResult.fail("API 발행 실패 — 모든 방법 실패")
 
-        logger.info(f"API 발행 완료: {post.keyword} → {published_url}")
+        published_url, entry_id = api_result
+        logger.info(f"API 발행 완료: {post.keyword} → {published_url} (id={entry_id})")
 
         # --- 발행 후 공개 상태 검증 ---
         http_code = _verify_published_url(published_url)
@@ -248,7 +271,7 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
                     logger.info(f"FAQ 스키마 검증 성공: {published_url}")
                 else:
                     logger.warning(f"FAQ 스키마 미발견 (수동 확인 필요): {published_url}")
-            return PublishResult.ok(published_url)
+            return PublishResult.ok(published_url, entry_id=entry_id)
 
         if http_code in (403, 404):
             logger.warning(
@@ -262,7 +285,7 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
                     logger.info(
                         f"비공개→공개 복구 성공: {published_url}"
                     )
-                    return PublishResult.ok(published_url)
+                    return PublishResult.ok(published_url, entry_id=entry_id)
                 logger.warning(
                     f"비공개→공개 복구 후에도 {recheck}: {published_url}"
                 )
@@ -270,11 +293,11 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
             logger.warning(
                 f"비공개 상태로 발행됨 (수동 확인 필요): {published_url}"
             )
-            return PublishResult.ok(published_url)
+            return PublishResult.ok(published_url, entry_id=entry_id)
 
         # 기타 상태 코드 (5xx 등) — 일단 성공으로 기록
         logger.warning(f"발행 URL 검증 코드 {http_code}: {published_url}")
-        return PublishResult.ok(published_url)
+        return PublishResult.ok(published_url, entry_id=entry_id)
 
     except Exception as e:
         logger.error(f"발행 실패: {post.keyword} — {e}")
@@ -283,34 +306,40 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
 
 def _publish_via_api(
     sb, blog_name: str, content, html_body: str, post: Post,
-) -> str | None:
+) -> tuple[str, str] | None:
     """직접 API 호출로 포스트 발행 (React UI 버튼 클릭 대신).
 
     Tistory 에디터 내부 API: POST {manageUrl}/post.json
-    성공 시 발행 URL 반환, 실패 시 None.
+    성공 시 (발행 URL, entry_id) 튜플 반환, 실패 시 None.
     """
     title = content.title_or_fallback(post.keyword)
     tags = ",".join(content.tag_list()) if content.tags else ""
     thumbnail_url = content.thumbnail_url if content.thumbnail_url else ""
+    category_id = _resolve_category_id(post.category)
+    logger.info(f"카테고리 해석: '{post.category}' → ID {category_id}")
 
     # 방법 1: React 내부 상태를 통한 발행 (가장 신뢰도 높음)
-    react_url = _try_publish_via_react_state(sb, title, html_body, tags, blog_name)
+    react_url = _try_publish_via_react_state(
+        sb, title, html_body, tags, blog_name, category_id,
+    )
     if react_url:
-        return react_url
+        return (react_url, "")
 
     # 방법 2: 직접 XHR API 호출 — JSON (post-editor.min.js 엔드포인트)
-    api_url = _call_tistory_post_api(sb, blog_name, title, html_body, tags, thumbnail_url)
-    if api_url:
-        return api_url
+    api_result = _call_tistory_post_api(
+        sb, blog_name, title, html_body, tags, thumbnail_url, category_id,
+    )
+    if api_result:
+        return api_result
 
     return None
 
 
 def _call_tistory_post_api(
     sb, blog_name: str, title: str, html_body: str, tags: str,
-    thumbnail_url: str = "",
-) -> str | None:
-    """POST /manage/post.json API 호출. 성공 시 entryUrl 반환."""
+    thumbnail_url: str = "", category_id: str = "0",
+) -> tuple[str, str] | None:
+    """POST /manage/post.json API 호출. 성공 시 (entryUrl, entryId) 반환."""
     import json as json_mod
 
     try:
@@ -320,6 +349,7 @@ def _call_tistory_post_api(
             var tags = arguments[2];
             var blogName = arguments[3];
             var thumbnailUrl = arguments[4] || '';
+            var categoryId = arguments[5] || '0';
 
             var manageUrl = '';
             if (window.appInfo && window.appInfo.manageUrl) {
@@ -339,7 +369,7 @@ def _call_tistory_post_api(
                 content: content,
                 slogan: '',
                 visibility: '20',
-                category: '0',
+                category: categoryId,
                 tag: tags,
                 acceptComment: '1',
                 published: '1',
@@ -391,7 +421,7 @@ def _call_tistory_post_api(
             }
 
             return JSON.stringify(result);
-        """, title, html_body, tags, blog_name, thumbnail_url)
+        """, title, html_body, tags, blog_name, thumbnail_url, category_id)
 
         logger.info(f"API 발행 결과: {result_json}")
 
@@ -399,14 +429,14 @@ def _call_tistory_post_api(
             result = json_mod.loads(result_json)
             if result.get("success"):
                 entry_url = result.get("entryUrl")
+                entry_id = str(result.get("entryId") or result.get("id") or "")
                 if entry_url:
-                    return entry_url
-                entry_id = result.get("entryId")
+                    return (entry_url, entry_id)
                 if entry_id:
-                    return f"https://{blog_name}.tistory.com/{entry_id}"
+                    return (f"https://{blog_name}.tistory.com/{entry_id}", entry_id)
                 resp_text = result.get("response", "")
                 logger.warning(f"URL 미추출, response: {resp_text[:300]}")
-                return f"https://{blog_name}.tistory.com"
+                return (f"https://{blog_name}.tistory.com", "")
             else:
                 resp_text = result.get("response", "")
                 logger.error(
@@ -425,6 +455,7 @@ def _call_tistory_post_api(
 
 def _try_publish_via_react_state(
     sb, title: str, html_body: str, tags: str, blog_name: str,
+    category_id: str = "0",
 ) -> str | None:
     """React Redux store에 직접 접근하여 발행 액션을 디스패치.
 
@@ -530,6 +561,9 @@ def _try_publish_via_react_state(
                 logger.info(f"발행 레이어 열림: {layer_info}")
                 # 공개 모드 선택
                 _select_public_mode(sb)
+                # 카테고리 선택
+                if category_id and category_id != "0":
+                    _select_category_in_layer(sb, category_id)
                 time.sleep(1)
                 # 발행 확인 버튼 클릭
                 return _click_publish_confirm_in_modal(sb, blog_name)
@@ -546,6 +580,41 @@ def _try_publish_via_react_state(
         logger.warning(f"React 발행 트리거 예외: {e}")
 
     return None
+
+
+def _select_category_in_layer(sb, category_id: str) -> None:
+    """발행 레이어에서 카테고리 select 요소의 값을 설정."""
+    try:
+        sb.execute_script("""
+            var categoryId = arguments[0];
+            // 카테고리 select 요소 탐색 (Tistory 에디터의 카테고리 드롭다운)
+            var sel = document.querySelector(
+                'select[name="category"], #category-btn, .publish-setting select'
+            );
+            if (sel && sel.tagName === 'SELECT') {
+                sel.value = categoryId;
+                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                return true;
+            }
+            // React state 직접 변경 fallback
+            var inputs = document.querySelectorAll('select');
+            for (var i = 0; i < inputs.length; i++) {
+                var opts = inputs[i].options;
+                for (var j = 0; j < opts.length; j++) {
+                    if (opts[j].value === categoryId) {
+                        inputs[i].value = categoryId;
+                        inputs[i].dispatchEvent(
+                            new Event('change', {bubbles: true})
+                        );
+                        return true;
+                    }
+                }
+            }
+            return false;
+        """, category_id)
+        logger.debug(f"카테고리 선택: {category_id}")
+    except Exception as e:
+        logger.warning(f"카테고리 선택 실패 (무시): {e}")
 
 
 def _click_publish_confirm_in_modal(sb, blog_name: str) -> str | None:

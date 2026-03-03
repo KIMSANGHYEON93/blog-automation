@@ -108,7 +108,7 @@ class PublishPostsUseCase:
             result = self._browser.publish(post)
 
             if result.success:
-                post.mark_published(result.url)
+                post.mark_published(result.url, entry_id=result.entry_id)
                 stats.published += 1
                 logger.info(f"발행 완료: {post.keyword} → {result.url}")
             else:

@@ -23,7 +23,8 @@ COL = {
     "verified": 18,      # R: Haiku 검증 결과
     "internal_links": 19,  # S: 내부 링크 키워드
     "thumbnail_url": 20,   # T: 썸네일 URL (OG 이미지)
-    # U~V: 예약
+    "entry_id": 21,        # U: Tistory 포스트 ID (수정 API용)
+    # V: 예약
     # W~Y: Core Web Vitals 추적
     "cwv_lcp": 23,         # W: LCP (초)
     "cwv_cls": 24,         # X: CLS

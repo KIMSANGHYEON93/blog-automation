@@ -22,10 +22,17 @@ def optimize_html(html: str) -> str:
     """
     soup = BeautifulSoup(html, "html.parser")
 
-    # 1. <img> 최적화
-    for img in soup.find_all("img"):
-        if not img.get("loading"):
-            img["loading"] = "lazy"
+    # 1. <img> 최적화 — 첫 번째 이미지는 LCP candidate
+    all_imgs = soup.find_all("img")
+    for idx, img in enumerate(all_imgs):
+        if idx == 0:
+            # LCP candidate: fetchpriority="high", lazy loading 제거
+            img["fetchpriority"] = "high"
+            if img.get("loading") == "lazy":
+                del img["loading"]
+        else:
+            if not img.get("loading"):
+                img["loading"] = "lazy"
         if not img.get("decoding"):
             img["decoding"] = "async"
         if not img.get("width") and not img.get("height"):
@@ -50,8 +57,14 @@ def optimize_html(html: str) -> str:
     return str(soup)
 
 
+_DNS_PREFETCH_DOMAINS = [
+    "https://kroki.io",
+    "https://images.unsplash.com",
+]
+
+
 def _add_preconnect_hints(soup: BeautifulSoup) -> None:
-    """외부 도메인에 대한 rel="preconnect" 링크 힌트 추가."""
+    """외부 도메인에 대한 rel="preconnect" + dns-prefetch 링크 힌트 추가."""
     external_domains: set[str] = set()
 
     for link in soup.find_all("link", href=True):
@@ -66,11 +79,23 @@ def _add_preconnect_hints(soup: BeautifulSoup) -> None:
         if link.get("href"):
             existing_preconnects.add(link["href"])
 
+    existing_prefetch: set[str] = set()
+    for link in soup.find_all("link", rel="dns-prefetch"):
+        if link.get("href"):
+            existing_prefetch.add(link["href"])
+
     head = soup.find("head")
     for domain in external_domains - existing_preconnects:
         if head:
             new_link = soup.new_tag("link", rel="preconnect", href=domain)
             head.insert(0, new_link)
+
+    # 알려진 외부 도메인에 dns-prefetch 추가
+    if head:
+        for domain in _DNS_PREFETCH_DOMAINS:
+            if domain not in existing_prefetch:
+                prefetch = soup.new_tag("link", rel="dns-prefetch", href=domain)
+                head.insert(0, prefetch)
 
 
 def _ensure_viewport(soup: BeautifulSoup) -> None:
@@ -112,8 +137,11 @@ def validate_responsive(html: str) -> list[str]:
     if not soup.find("meta", attrs={"name": "viewport"}):
         issues.append("viewport 메타 태그가 없습니다")
 
-    # 2. img lazy loading 검증
-    for img in soup.find_all("img"):
+    # 2. img lazy loading 검증 (첫 번째 이미지는 LCP candidate이므로 제외)
+    all_imgs = soup.find_all("img")
+    for idx, img in enumerate(all_imgs):
+        if idx == 0:
+            continue  # LCP candidate — lazy loading 불필요
         if img.get("loading") != "lazy":
             issues.append(f"img 태그에 loading='lazy'가 없습니다: {img.get('src', '?')}")
 

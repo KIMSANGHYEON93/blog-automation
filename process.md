@@ -1,7 +1,7 @@
 # B2B IT 블로그 자동화 — 개발 프로세스 추적
 
 > **문서 용도**: 실행 진행 추적 (마스터 플랜 `masterplan_v2.3.md`의 실행 로그)
-> **최종 갱신**: 2026-03-02
+> **최종 갱신**: 2026-03-03
 
 ---
 
@@ -9,13 +9,13 @@
 
 | 항목 | 값 |
 |------|---|
-| **현재 Phase** | **Phase 5.14 완료** (일일 발행 제한 감지 + 대량 발행) |
-| **단위 테스트** | 129건 통과 (Domain 79 + App 10 + Infra 40) |
+| **현재 Phase** | **Phase 6 진행중** (콘텐츠 누적 + SEO 최적화) |
+| **단위 테스트** | 140건 통과 (Domain 79 + App 10 + Infra 51) |
 | **통합 테스트** | 9건 통과 (GoogleSheets 6 + Selenium 3) — 이전 2건 실패 → 0건 실패 |
 | **E2E 테스트** | 2건 스킵 (환경변수 미설정) |
 | **n8n E2E** | 3건 통과 (CI/CD 2개 이미지, Jenkins 1개 이미지, Terraform 4개 이미지) |
 | **Tistory 실발행** | 34건 성공 (최신: OAuth 2.0 인증 플로우 가이드 → https://kimsanghyeon.tistory.com/214) |
-| **전체 테스트** | 138건 통과 (단위 129 + 통합 9), 2건 스킵 |
+| **전체 테스트** | 169건 통과 (단위 140 + 통합 9 + Infra 20), 2건 스킵 |
 | **커버리지** | 92.05% (domain + application) |
 | **ruff** | 0 errors |
 | **mypy** | 0 errors (kakao_auth.py 포함) |
@@ -1248,6 +1248,37 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 1 | W8 색인 10건 미달 | 키워드 하향, 롱테일 집중, 제목/메타 교체 |
 | 2 | W10 CTR 1% 미달 | Matplotlib 차트 삽입, 원본 데이터 공개 |
 | 3 | W12 일 유입 10명 미달 | 워드프레스 전환 (REST API, 301 리다이렉트) |
+
+---
+
+## Phase 6: 콘텐츠 누적 + SEO 최적화 — 진행 중 (2026-03-03~)
+
+### 목표
+내부 링크 자동 삽입 + CWV 최적화 + 카테고리 자동 지정으로 SEO 경쟁력 확보
+
+### 완료된 작업
+
+| # | 항목 | 상태 | 비고 |
+|---|------|------|------|
+| 6.1 | PostContent에 internal_link_keywords 필드 추가 | ✅ 완료 | JSON 파싱 + 쉼표 fallback |
+| 6.2 | GoogleSheetsRepo에서 Column S(internal_links) 읽기 | ✅ 완료 | |
+| 6.3 | 내부 링크 자동 삽입 모듈 (internal_linker.py) | ✅ 완료 | 최대 5개, h1~h3/a/code/pre 제외 |
+| 6.4 | PublishPostsUseCase에 내부 링크 주입 연결 | ✅ 완료 | _inject_contextual_links() |
+| 6.5 | 카테고리 자동 지정 (CATEGORY_MAP + API 전달) | ✅ 완료 | IT 기초 용어/IT 트렌드/트러블슈팅 |
+| 6.6 | CWV 최적화: fetchpriority="high" + dns-prefetch | ✅ 완료 | 첫 이미지 LCP candidate 처리 |
+| 6.7 | Mermaid 이미지에 width="800" 추가 (CLS 방지) | ✅ 완료 | inject_images.js |
+| 6.8 | 내부 링크 단위 테스트 11건 | ✅ 완료 | test_internal_linker.py |
+
+### 주간 KPI (W1: 2026-03-03)
+
+| 지표 | 목표 | 실측 |
+|------|------|------|
+| 발행 글 수 | 50건 | 34건 (12건 대기) |
+| 단위 테스트 | 130+ | 140건 (169 전체) |
+| ruff/mypy | 0 errors | 0 errors |
+| LCP | < 4s | 17.6~20.9s (POOR, Tistory 제한) |
+| 내부 링크 | 글당 3~5개 | 구현 완료, 실발행 검증 필요 |
+| 카테고리 지정 | 100% | 구현 완료, 실발행 검증 필요 |
 
 ---
 

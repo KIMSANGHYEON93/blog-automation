@@ -36,6 +36,11 @@ class InMemoryPostRepository(PostRepository):
         return [p for p in self._posts
                 if p.status == PostStatus.PUBLISHED][:limit]
 
+    def find_cwv_unchecked(self, limit: int = 10) -> list[Post]:
+        return [p for p in self._posts
+                if p.status == PostStatus.PUBLISHED
+                and p.row_index not in self._cwv_records][:limit]
+
     def save_cwv_record(
         self, row_index: int,
         lcp: float, cls_score: float,

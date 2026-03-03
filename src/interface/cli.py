@@ -68,9 +68,9 @@ def main() -> None:
     cwv_enabled = os.getenv("CWV_CHECK", "true").lower() == "true"
     if cwv_enabled:
         cwv_uc = CheckCwvUseCase(repo=repo)
-        published = repo.find_published(limit=20)
+        unchecked = repo.find_cwv_unchecked(limit=10)
         checked = 0
-        for post in published:
+        for post in unchecked:
             result = cwv_uc.execute(post)
             if result.success:
                 checked += 1
@@ -81,7 +81,7 @@ def main() -> None:
                 )
             elif result.error:
                 logger.warning(f"CWV 실패: {result.post_keyword} — {result.error}")
-        logger.info(f"CWV 점검 완료: {checked}/{len(published)}건")
+        logger.info(f"CWV 점검 완료: {checked}/{len(unchecked)}건")
 
 
 if __name__ == "__main__":

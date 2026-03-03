@@ -131,7 +131,7 @@ function mermaidToImgTag(code, altText) {
   const url = mermaidToKrokiUrl(code);
   if (!url) return null;
   const safeAlt = altText.replace(/"/g, '&quot;');
-  return `<img src="${url}" alt="${safeAlt}" style="max-width:100%;height:auto;margin:16px 0;" />`;
+  return `<img src="${url}" alt="${safeAlt}" width="800" height="auto" style="max-width:100%;height:auto;margin:16px 0;" />`;
 }
 
 // === Step 1: [MERMAID]...[/MERMAID] 마커 추출 ===

@@ -19,6 +19,7 @@ class Post:
     published_url: str = ""
     published_at: datetime | None = None
     error_message: str = ""
+    entry_id: str = ""
 
     def mark_publishing(self) -> None:
         """PENDING → PUBLISHING (only from PENDING)."""
@@ -26,11 +27,13 @@ class Post:
             raise InvalidStatusTransitionError(self.status, PostStatus.PUBLISHING)
         self.status = PostStatus.PUBLISHING
 
-    def mark_published(self, url: str) -> None:
+    def mark_published(self, url: str, entry_id: str = "") -> None:
         """PUBLISHING → PUBLISHED with URL and timestamp."""
         self.status = PostStatus.PUBLISHED
         self.published_url = url
         self.published_at = datetime.now()
+        if entry_id:
+            self.entry_id = entry_id
 
     def mark_failed(self, reason: str) -> None:
         """PUBLISHING → FAILED with reason (truncated to 200 chars)."""

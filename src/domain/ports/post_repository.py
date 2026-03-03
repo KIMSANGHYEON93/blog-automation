@@ -33,6 +33,11 @@ class PostRepository(ABC):
         ...
 
     @abstractmethod
+    def find_cwv_unchecked(self, limit: int = 10) -> list[Post]:
+        """발행완료 상태이면서 CWV 미점검 포스트 목록."""
+        ...
+
+    @abstractmethod
     def save_cwv_record(
         self, row_index: int,
         lcp: float, cls_score: float,

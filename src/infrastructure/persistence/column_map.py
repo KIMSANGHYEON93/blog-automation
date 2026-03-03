@@ -1,5 +1,5 @@
 """
-Google Sheets 컬럼 매핑 (A~T열 = 1~20)
+Google Sheets 컬럼 매핑 (A~Y열 = 1~25)
 masterplan_v2.2 스키마 섹션 7 기준
 """
 COL = {
@@ -23,6 +23,11 @@ COL = {
     "verified": 18,      # R: Haiku 검증 결과
     "internal_links": 19,  # S: 내부 링크 키워드
     "thumbnail_url": 20,   # T: 썸네일 URL (OG 이미지)
+    # U~V: 예약
+    # W~Y: Core Web Vitals 추적
+    "cwv_lcp": 23,         # W: LCP (초)
+    "cwv_cls": 24,         # X: CLS
+    "cwv_checked_at": 25,  # Y: CWV 점검 일시
 }
 
 STATUS_WAITING = "대기"

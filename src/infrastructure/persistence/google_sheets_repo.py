@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 import gspread
 from google.oauth2.service_account import Credentials as GoogleCredentials
@@ -113,3 +114,15 @@ class GoogleSheetsPostRepository(PostRepository):
         for col, value in updates.items():
             self._sheet.update_cell(row, col, value)
         logger.debug(f"시트 업데이트: row={row}, status={post.status.value}")
+
+    def save_cwv_record(
+        self, row_index: int,
+        lcp: float, cls_score: float,
+    ) -> None:
+        self._sheet.update_cell(row_index, COL["cwv_lcp"], f"{lcp:.2f}")
+        self._sheet.update_cell(row_index, COL["cwv_cls"], f"{cls_score:.3f}")
+        self._sheet.update_cell(
+            row_index, COL["cwv_checked_at"],
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+        )
+        logger.debug(f"CWV 기록: row={row_index}, LCP={lcp:.2f}, CLS={cls_score:.3f}")

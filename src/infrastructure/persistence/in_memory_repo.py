@@ -11,6 +11,7 @@ class InMemoryPostRepository(PostRepository):
 
     def __init__(self, posts: list[Post] | None = None):
         self._posts: list[Post] = posts or []
+        self._cwv_records: dict[int, dict] = {}
 
     def find_pending(self, limit: int = 5) -> list[Post]:
         return [p for p in self._posts
@@ -34,6 +35,12 @@ class InMemoryPostRepository(PostRepository):
     def find_published(self, limit: int = 50) -> list[Post]:
         return [p for p in self._posts
                 if p.status == PostStatus.PUBLISHED][:limit]
+
+    def save_cwv_record(
+        self, row_index: int,
+        lcp: float, cls_score: float,
+    ) -> None:
+        self._cwv_records[row_index] = {"lcp": lcp, "cls": cls_score}
 
     def all(self) -> list[Post]:
         """테스트 검증용: 전체 포스트 반환."""

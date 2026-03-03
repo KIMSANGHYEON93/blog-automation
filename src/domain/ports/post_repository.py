@@ -31,3 +31,11 @@ class PostRepository(ABC):
     def find_published(self, limit: int = 50) -> list[Post]:
         """발행완료 상태의 포스트 목록 (내부 링크용)."""
         ...
+
+    @abstractmethod
+    def save_cwv_record(
+        self, row_index: int,
+        lcp: float, cls_score: float,
+    ) -> None:
+        """CWV 측정 결과를 시트에 기록."""
+        ...

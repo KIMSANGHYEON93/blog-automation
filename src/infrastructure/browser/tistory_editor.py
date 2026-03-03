@@ -30,6 +30,7 @@ from src.infrastructure.browser.dom_selectors import (
     TITLE_SELECTORS,
     find_element,
 )
+from src.infrastructure.seo.html_optimizer import optimize_html
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +196,9 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         faq_ld_json = content.faq_ld_json() if hasattr(content, 'faq_ld_json') else ""
         if faq_ld_json:
             html_body = _append_faq_schema(html_body, faq_ld_json)
+
+        # 반응형 + 성능 최적화 (img lazy/decoding, iframe lazy, preconnect)
+        html_body = optimize_html(html_body)
 
         # [마크다운 모드 전환 — 비활성화: WYSIWYG 기본모드 사용]
         # sb.execute_script("window.confirm = function() { return true; };")

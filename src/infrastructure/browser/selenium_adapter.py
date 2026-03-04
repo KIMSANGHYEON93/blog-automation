@@ -31,10 +31,11 @@ class SeleniumBrowserAdapter(BrowserPort):
         from seleniumbase import SB
         # 쿠키 영속화: user_data_dir 설정 시 브라우저 세션 유지 (2FA 1회만)
         if self._user_data_dir:
-            os.makedirs(self._user_data_dir, exist_ok=True)
+            abs_path = os.path.abspath(self._user_data_dir)
+            os.makedirs(abs_path, exist_ok=True)
             self._sb_context = SB(
                 headless=self._headless,
-                user_data_dir=self._user_data_dir,
+                chromium_arg=f"--user-data-dir={abs_path}",
             )
         else:
             self._sb_context = SB(headless=self._headless)

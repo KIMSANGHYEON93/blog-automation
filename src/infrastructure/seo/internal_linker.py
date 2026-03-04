@@ -3,10 +3,17 @@
 본문 HTML에서 키워드 첫 출현 위치를 내부 링크로 교체한다.
 - 한 글에 최대 5개 내부 링크 제한
 - <h1>~<h3>, <a>, <code>, <pre> 내부는 변환 제외
+
+전략:
+  1) internal_link_keywords → published URL 매칭 (정확/부분 문자열)
+  2) published 키워드를 HTML 본문에서 직접 검색 (1번에서 빈 슬롯 보충)
 """
 from __future__ import annotations
 
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 _SKIP_TAGS = frozenset({"h1", "h2", "h3", "a", "code", "pre"})
 _MAX_LINKS = 5
@@ -21,7 +28,7 @@ def inject_internal_links(
 
     Args:
         html: 원본 HTML 본문
-        keywords: 현재 포스트의 internal_link_keywords 리스트
+        keywords: 현재 포스트의 internal_link_keywords 리스트 (빈 리스트 가능)
         published_posts: 발행 완료된 Post 객체 리스트 (keyword, published_url 사용)
 
     Returns:
@@ -30,35 +37,65 @@ def inject_internal_links(
     if not html or not published_posts:
         return html
 
-    # 키워드 → URL 매핑 (published_posts 기반)
+    # published keyword(lower) → URL 매핑
     keyword_url_map: dict[str, str] = {}
+    # published keyword(original) → URL (원본 케이스 보존)
+    keyword_url_orig: dict[str, str] = {}
     for post in published_posts:
         if post.keyword and post.published_url:
-            keyword_url_map[post.keyword.strip().lower()] = post.published_url
+            kw = post.keyword.strip()
+            keyword_url_map[kw.lower()] = post.published_url
+            keyword_url_orig[kw] = post.published_url
 
     if not keyword_url_map:
         return html
 
-    # 매칭할 키워드 결정: internal_link_keywords가 있으면 그 중에서,
-    # 없으면 published_posts의 키워드를 직접 사용
-    target_keywords: list[str] = []
+    # --- 전략 1: internal_link_keywords → URL 매칭 ---
+    kw_to_url: dict[str, str] = {}
     if keywords:
         for kw in keywords:
-            if kw.lower() in keyword_url_map:
-                target_keywords.append(kw)
-    else:
-        target_keywords = [
-            post.keyword for post in published_posts
-            if post.keyword and post.published_url
-        ]
+            kw_lower = kw.lower()
+            # 정확 매칭
+            if kw_lower in keyword_url_map:
+                kw_to_url[kw] = keyword_url_map[kw_lower]
+                continue
+            # 양방향 부분 문자열 매칭
+            for pub_kw, url in keyword_url_map.items():
+                if kw_lower in pub_kw or pub_kw in kw_lower:
+                    kw_to_url[kw] = url
+                    break
 
-    if not target_keywords:
+    matched_from_keywords = len(kw_to_url)
+
+    # --- 전략 2: published 키워드를 직접 후보에 추가 (빈 슬롯 보충) ---
+    if len(kw_to_url) < _MAX_LINKS:
+        used_urls = set(kw_to_url.values())
+        for orig_kw, url in keyword_url_orig.items():
+            if len(kw_to_url) >= _MAX_LINKS:
+                break
+            if url in used_urls:
+                continue
+            if orig_kw not in kw_to_url:
+                kw_to_url[orig_kw] = url
+                used_urls.add(url)
+
+    if not kw_to_url:
         return html
+
+    logger.debug(
+        "내부 링크 후보: keyword매칭=%d, published직접=%d, 총=%d",
+        matched_from_keywords,
+        len(kw_to_url) - matched_from_keywords,
+        len(kw_to_url),
+    )
 
     # 교체 가능한 텍스트 구간 식별
     replaceable_ranges = _find_replaceable_ranges(html)
     if not replaceable_ranges:
         return html
+
+    # 키워드 길이 내림차순 정렬 (긴 키워드 우선 매칭, 부분 중복 방지)
+    target_keywords = sorted(kw_to_url.keys(), key=len, reverse=True)
 
     # 키워드별 첫 출현 위치 찾기 + 링크 교체 (최대 _MAX_LINKS개)
     replacements: list[tuple[int, int, str, str]] = []
@@ -71,11 +108,10 @@ def inject_internal_links(
         if kw_lower in used_keywords:
             continue
 
-        url = keyword_url_map.get(kw_lower)
+        url = kw_to_url.get(kw)
         if not url:
             continue
 
-        # 대소문자 무시 매칭
         pattern = re.compile(re.escape(kw), re.IGNORECASE)
         for match in pattern.finditer(html):
             start, end = match.start(), match.end()

@@ -42,6 +42,7 @@ class PublishPostsUseCase:
 
             for post in posts:
                 self._enrich_with_related_links(post, published_posts)
+                self._attach_internal_link_map(post, published_posts)
                 try:
                     self._publish_single(post, stats)
                 except DailyPublishLimitError:
@@ -94,6 +95,24 @@ class PublishPostsUseCase:
         post.content = replace(
             post.content, body_markdown=post.content.body_markdown + html,
         )
+
+    def _attach_internal_link_map(
+        self, post: Post, published: list[Post],
+    ) -> None:
+        """발행 완료 포스트의 keyword→URL 매핑을 post에 첨부.
+
+        tistory_editor가 HTML 변환 후 inject_internal_links()에 전달한다.
+        """
+        if not post.content or not post.content.has_body():
+            return
+        link_map = {
+            p.keyword: p.published_url
+            for p in published
+            if p.keyword and p.published_url
+            and p.row_index != post.row_index
+        }
+        if link_map:
+            post._internal_link_map = link_map  # noqa: SLF001
 
     def _publish_single(self, post: Post, stats: PublishStats) -> None:
         if not post.is_publishable():

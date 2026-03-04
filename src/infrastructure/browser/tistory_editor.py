@@ -23,7 +23,6 @@ from src.infrastructure.browser.dom_selectors import (
     MARKDOWN_MODE_SELECTORS,
     MODE_CONFIRM_SELECTORS,
     MODE_SWITCH_BUTTON_SELECTORS,
-    PUBLIC_MODE_SELECTORS,
     PUBLISH_CONFIRM_SELECTORS,
     TAG_INPUT_SELECTORS,
     TINYMCE_IFRAME_SELECTORS,
@@ -210,6 +209,30 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         # 외부 링크에 nofollow/noopener 속성 추가
         html_body = _add_nofollow_to_external_links(html_body, blog_name)
 
+        # 내부 링크 자동 삽입 (published 매핑이 있으면)
+        internal_link_map = getattr(post, '_internal_link_map', None)
+        if internal_link_map:
+            from src.infrastructure.seo.internal_linker import (
+                inject_internal_links,
+            )
+
+            class _LinkPost:
+                def __init__(self, kw, url):
+                    self.keyword = kw
+                    self.published_url = url
+
+            link_posts = [
+                _LinkPost(kw, url) for kw, url in internal_link_map.items()
+            ]
+            keywords = content.internal_keyword_list()
+            prev_len = len(html_body)
+            html_body = inject_internal_links(html_body, keywords, link_posts)
+            logger.info(
+                f"내부 링크 삽입: keywords={len(keywords)}, "
+                f"published={len(link_posts)}, "
+                f"body: {prev_len}→{len(html_body)}자"
+            )
+
         # HTML 변환 검증
         if not validate_html(html_body):
             logger.warning("HTML 변환 검증 실패 — 그대로 진행")
@@ -318,19 +341,19 @@ def _publish_via_api(
     category_id = _resolve_category_id(post.category)
     logger.info(f"카테고리 해석: '{post.category}' → ID {category_id}")
 
-    # 방법 1: React 내부 상태를 통한 발행 (가장 신뢰도 높음)
-    react_url = _try_publish_via_react_state(
-        sb, title, html_body, tags, blog_name, category_id,
-    )
-    if react_url:
-        return (react_url, "")
-
-    # 방법 2: 직접 XHR API 호출 — JSON (post-editor.min.js 엔드포인트)
+    # 방법 1: 직접 XHR API 호출 (visibility=20 명시적 전송, 가장 신뢰도 높음)
     api_result = _call_tistory_post_api(
         sb, blog_name, title, html_body, tags, thumbnail_url, category_id,
     )
     if api_result:
         return api_result
+
+    # 방법 2: React 내부 상태를 통한 발행 (API 실패 시 fallback)
+    react_url = _try_publish_via_react_state(
+        sb, title, html_body, tags, blog_name, category_id,
+    )
+    if react_url:
+        return (react_url, "")
 
     return None
 
@@ -363,13 +386,15 @@ def _call_tistory_post_api(
             var blogCfg = cfg.blog || {};
             var blogSettings = blogCfg.blogSettings || {};
 
+            var catNum = parseInt(categoryId, 10) || 0;
             var postData = {
                 id: '0',
                 title: title,
                 content: content,
                 slogan: '',
                 visibility: '20',
-                category: categoryId,
+                category: catNum,
+                categoryId: catNum,
                 tag: tags,
                 acceptComment: '1',
                 published: '1',
@@ -430,6 +455,11 @@ def _call_tistory_post_api(
             if result.get("success"):
                 entry_url = result.get("entryUrl")
                 entry_id = str(result.get("entryId") or result.get("id") or "")
+                # 카테고리 후처리: 생성 후 수정 API로 카테고리 재설정
+                if entry_id and category_id and category_id != "0":
+                    _update_category_after_create(
+                        sb, blog_name, entry_id, category_id,
+                    )
                 if entry_url:
                     return (entry_url, entry_id)
                 if entry_id:
@@ -451,6 +481,48 @@ def _call_tistory_post_api(
         logger.error(f"API 발행 호출 예외: {e}")
 
     return None
+
+
+def _update_category_after_create(
+    sb, blog_name: str, entry_id: str, category_id: str,
+) -> None:
+    """생성된 포스트의 카테고리를 수정 API로 재설정."""
+    try:
+        result = sb.execute_script("""
+            var blogName = arguments[0];
+            var entryId = arguments[1];
+            var catId = parseInt(arguments[2], 10) || 0;
+            if (!catId || !entryId) return 'skip';
+
+            var manageUrl = '';
+            if (window.appInfo && window.appInfo.manageUrl) {
+                manageUrl = window.appInfo.manageUrl;
+            } else {
+                manageUrl = 'https://' + blogName + '.tistory.com/manage';
+            }
+
+            var url = manageUrl + '/post.json';
+            var xhr = new XMLHttpRequest();
+            xhr.open('PUT', url, false);
+            xhr.setRequestHeader('Content-Type',
+                'application/json; charset=UTF-8');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+            var patchData = {
+                id: entryId,
+                category: catId,
+                categoryId: catId
+            };
+            try {
+                xhr.send(JSON.stringify(patchData));
+                return 'status:' + xhr.status;
+            } catch(e) {
+                return 'error:' + e.message;
+            }
+        """, blog_name, entry_id, category_id)
+        logger.info(f"카테고리 후처리: entry={entry_id}, cat={category_id} → {result}")
+    except Exception as e:
+        logger.warning(f"카테고리 후처리 실패 (무시): {e}")
 
 
 def _try_publish_via_react_state(
@@ -1315,43 +1387,93 @@ def _inject_html_content(sb, html_text: str) -> bool:
 
 
 def _select_public_mode(sb) -> None:
-    """발행 설정 레이어에서 공개 모드를 선택."""
-    try:
-        # 방법 1: CSS/XPath 셀렉터로 공개 라디오 버튼 클릭
-        public_sel = find_element(sb, PUBLIC_MODE_SELECTORS, timeout=3)
-        if public_sel:
-            sb.click(public_sel)
-            logger.info(f"공개 모드 선택: {public_sel}")
-            return
+    """발행 설정 레이어에서 공개 모드를 선택.
 
-        # 방법 2: JS로 공개 라디오 버튼 선택
-        clicked = sb.execute_script("""
-            // value=0이 공개, value=1이 보호, value=3이 비공개
+    React SPA이므로 DOM 클릭만으로는 React state가 갱신되지 않는다.
+    React fiber의 onChange 핸들러를 직접 호출하여 state를 동기화한다.
+    """
+    try:
+        result = sb.execute_script("""
+            // 공개 라디오 버튼 찾기 (value='0')
             var radios = document.querySelectorAll(
-                'input[name="visibility"], input[name="openType"]'
+                'input[name="visibility"], input[name="openType"], '
+                + 'input[type="radio"]'
             );
+            var publicRadio = null;
             for (var i = 0; i < radios.length; i++) {
-                if (radios[i].value === '0' || radios[i].value === '20') {
-                    radios[i].checked = true;
-                    radios[i].click();
-                    radios[i].dispatchEvent(
-                        new Event('change', {bubbles: true})
-                    );
-                    return 'selected: ' + radios[i].id;
+                if (radios[i].value === '0') {
+                    publicRadio = radios[i];
+                    break;
                 }
             }
-            // label 텍스트로 찾기
-            var labels = document.querySelectorAll('label');
-            for (var j = 0; j < labels.length; j++) {
-                if (labels[j].textContent.trim() === '공개') {
-                    labels[j].click();
-                    return 'clicked label: 공개';
+            if (!publicRadio) {
+                // ID 기반 fallback
+                publicRadio = document.querySelector('#open-type-0');
+            }
+            if (!publicRadio) return 'not-found';
+
+            // 1단계: DOM 상태 변경
+            publicRadio.checked = true;
+
+            // 2단계: React fiber의 onChange 핸들러 직접 호출
+            var keys = Object.keys(publicRadio);
+            var propsKey = keys.find(function(k) {
+                return k.startsWith('__reactProps$');
+            });
+            if (propsKey && publicRadio[propsKey]
+                    && publicRadio[propsKey].onChange) {
+                publicRadio[propsKey].onChange({
+                    target: publicRadio,
+                    currentTarget: publicRadio,
+                    type: 'change',
+                    preventDefault: function() {},
+                    stopPropagation: function() {}
+                });
+                return 'react-onChange:' + publicRadio.id;
+            }
+
+            // 3단계: fiber 트리 탐색으로 onChange 찾기
+            var fiberKey = keys.find(function(k) {
+                return k.startsWith('__reactFiber$')
+                    || k.startsWith('__reactInternalInstance$');
+            });
+            if (fiberKey) {
+                var fiber = publicRadio[fiberKey];
+                var depth = 0;
+                while (fiber && depth < 15) {
+                    var props = fiber.memoizedProps || fiber.pendingProps;
+                    if (props && props.onChange) {
+                        props.onChange({
+                            target: publicRadio,
+                            currentTarget: publicRadio,
+                            type: 'change',
+                            preventDefault: function() {},
+                            stopPropagation: function() {}
+                        });
+                        return 'fiber-onChange:depth=' + depth;
+                    }
+                    fiber = fiber.return;
+                    depth++;
                 }
             }
-            return null;
+
+            // 4단계: native event fallback
+            publicRadio.click();
+            publicRadio.dispatchEvent(
+                new Event('change', {bubbles: true})
+            );
+            publicRadio.dispatchEvent(
+                new Event('input', {bubbles: true})
+            );
+            // label 클릭도 시도
+            var label = document.querySelector(
+                'label[for="' + publicRadio.id + '"]'
+            );
+            if (label) label.click();
+            return 'native-event:' + publicRadio.id;
         """)
-        if clicked:
-            logger.info(f"JS로 공개 모드 선택: {clicked}")
+        if result and result != 'not-found':
+            logger.info(f"공개 모드 선택: {result}")
         else:
             logger.warning("공개 옵션을 찾지 못함 — 기본 상태로 발행")
     except Exception as e:

@@ -9,9 +9,9 @@
 
 | 항목 | 값 |
 |------|---|
-| **현재 Phase** | **Phase 6 완료 → Phase 7 시작** |
+| **현재 Phase** | **Phase 7 진행 중** |
 | **단위 테스트** | 169건 통과 |
-| **Tistory 실발행** | 39건 성공 (최신: Datadog vs New Relic 비교 → /219) |
+| **Tistory 실발행** | 46건 성공 (최신: SSH 접속 Permission denied 해결 → /225) |
 | **ruff** | 0 errors |
 | **콘텐츠 생성 모델** | Gemini 2.0 Flash (Phase 5.6에서 LLM_PROVIDER 추상화, `.env`로 전환 가능) |
 
@@ -1228,8 +1228,8 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 
 | # | 항목 | 상태 | 비고 |
 |---|------|------|------|
-| 7.0a | 잔여 7건 발행대기 포스트 일괄 발행 | 🔄 | MAX_POSTS=5 × 2배치 |
-| 7.0b | Tistory sitemap.xml 존재 확인 + Search Console 제출 | 🔲 | 색인 시작 전제 |
+| 7.0a | 잔여 발행대기 포스트 일괄 발행 | ✅ 완료 | /220~/225 (7건 발행, 에디터 리로드 수정 포함) |
+| 7.0b | Tistory sitemap.xml 확인 | ✅ 완료 | 498 URL, /220~/225 포함 확인. GSC 수동 제출 필요 |
 | 7.0c | 기 발행 39건 중 색인 현황 확인 | 🔲 | GSC URL 검사 |
 
 ### 중기 목표

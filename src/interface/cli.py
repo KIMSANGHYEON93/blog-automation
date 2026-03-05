@@ -67,10 +67,14 @@ def main() -> None:
     # Step 3: CWV 점검 (발행완료 포스트 대상)
     cwv_enabled = os.getenv("CWV_CHECK", "true").lower() == "true"
     if cwv_enabled:
+        import time as _time
+
         cwv_uc = CheckCwvUseCase(repo=repo)
         unchecked = repo.find_cwv_unchecked(limit=10)
         checked = 0
-        for post in unchecked:
+        for idx, post in enumerate(unchecked):
+            if idx > 0:
+                _time.sleep(3)  # PageSpeed API rate limit 회피
             result = cwv_uc.execute(post)
             if result.success:
                 checked += 1
@@ -81,6 +85,8 @@ def main() -> None:
                 )
             elif result.error:
                 logger.warning(f"CWV 실패: {result.post_keyword} — {result.error}")
+                if "429" in result.error:
+                    _time.sleep(10)  # rate limit 시 추가 대기
         logger.info(f"CWV 점검 완료: {checked}/{len(unchecked)}건")
 
 

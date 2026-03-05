@@ -458,6 +458,11 @@ def _call_tistory_post_api(
             if result.get("success"):
                 entry_url = result.get("entryUrl")
                 entry_id = str(result.get("entryId") or result.get("id") or "")
+                # entryId가 없으면 URL에서 추출 (/219 → 219)
+                if not entry_id and entry_url:
+                    url_parts = entry_url.rstrip("/").split("/")
+                    if url_parts and url_parts[-1].isdigit():
+                        entry_id = url_parts[-1]
                 # 카테고리 후처리: 생성 후 수정 API로 카테고리 재설정
                 if entry_id and category_id and category_id != "0":
                     _update_category_after_create(

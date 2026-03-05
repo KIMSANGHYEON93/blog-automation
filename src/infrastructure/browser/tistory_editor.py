@@ -62,6 +62,24 @@ def _resolve_category_id(category_name: str) -> str:
     return "0"
 
 
+def _extract_first_image_url(html: str) -> str:
+    """HTML 본문에서 첫 번째 <img> src URL 추출 (대표이미지 자동 선택용).
+
+    - data: URI, 상대 경로는 건너뜀
+    - http/https URL만 반환, 없으면 빈 문자열
+    """
+    if not html:
+        return ""
+    for match in re.finditer(r'<img\s[^>]*?src=["\']([^"\']+)["\']', html):
+        src = match.group(1).strip()
+        if src.startswith("data:"):
+            continue
+        if not src.startswith(("http://", "https://")):
+            continue
+        return src
+    return ""
+
+
 def _safe_click(sb, selector: str) -> bool:
     """요소 클릭 — 네이티브 시도 후 JS fallback (full mouse event sequence)."""
     # 방법 1: 네이티브 SeleniumBase 클릭
@@ -343,6 +361,10 @@ def _publish_via_api(
     title = content.title_or_fallback(post.keyword)
     tags = ",".join(content.tag_list()) if content.tags else ""
     thumbnail_url = content.thumbnail_url if content.thumbnail_url else ""
+    if not thumbnail_url:
+        thumbnail_url = _extract_first_image_url(html_body)
+        if thumbnail_url:
+            logger.info(f"대표이미지 자동 선택: {thumbnail_url[:80]}")
     category_id = _resolve_category_id(post.category)
     logger.info(f"카테고리 해석: '{post.category}' → ID {category_id}")
 

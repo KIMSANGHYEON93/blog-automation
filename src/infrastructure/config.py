@@ -14,6 +14,8 @@ class Config:
     headless: bool
     min_delay: int
     max_delay: int
+    contact_email: str
+    owner_name: str
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -27,6 +29,8 @@ class Config:
             headless=os.getenv("HEADLESS", "true").lower() == "true",
             min_delay=int(os.getenv("MIN_DELAY", "300")),
             max_delay=int(os.getenv("MAX_DELAY", "900")),
+            contact_email=os.getenv("CONTACT_EMAIL", ""),
+            owner_name=os.getenv("OWNER_NAME", ""),
         )
 
     def validate(self) -> None:
@@ -42,3 +46,21 @@ class Config:
             missing.append(f"GOOGLE_CREDS (파일 없음: {self.google_creds})")
         if missing:
             raise OSError(f"필수 환경 변수 누락: {', '.join(missing)}")
+
+    def validate_pages(self) -> None:
+        """--publish-pages 전용 검증. GOOGLE_CREDS 불필요."""
+        missing = []
+        if not self.kakao_id:
+            missing.append("KAKAO_ID")
+        if not self.kakao_pw:
+            missing.append("KAKAO_PW")
+        if not self.tistory_blog:
+            missing.append("TISTORY_BLOG")
+        if not self.contact_email:
+            missing.append("CONTACT_EMAIL")
+        if not self.owner_name:
+            missing.append("OWNER_NAME")
+        if missing:
+            raise OSError(
+                f"--publish-pages 필수 환경 변수 누락: {', '.join(missing)}"
+            )

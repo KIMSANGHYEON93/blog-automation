@@ -388,6 +388,7 @@ def _publish_via_api(
 def _call_tistory_post_api(
     sb, blog_name: str, title: str, html_body: str, tags: str,
     thumbnail_url: str = "", category_id: str = "0",
+    content_type: str = "",
 ) -> tuple[str, str] | None:
     """POST /manage/post.json API 호출. 성공 시 (entryUrl, entryId) 반환."""
     import json as json_mod
@@ -400,6 +401,7 @@ def _call_tistory_post_api(
             var blogName = arguments[3];
             var thumbnailUrl = arguments[4] || '';
             var categoryId = arguments[5] || '0';
+            var contentType = arguments[6] || '';
 
             var manageUrl = '';
             if (window.appInfo && window.appInfo.manageUrl) {
@@ -431,7 +433,7 @@ def _call_tistory_post_api(
                 cclCommercial: blogCfg.cclCommercial || '1',
                 cclDerive: blogCfg.cclDerive || '1',
                 thumbnail: thumbnailUrl,
-                type: (cfg.postType || 'post'),
+                type: contentType || (cfg.postType || 'post'),
                 attachments: '[]',
                 recaptchaValue: '',
                 draftSequence: null
@@ -473,7 +475,7 @@ def _call_tistory_post_api(
             }
 
             return JSON.stringify(result);
-        """, title, html_body, tags, blog_name, thumbnail_url, category_id)
+        """, title, html_body, tags, blog_name, thumbnail_url, category_id, content_type)
 
         logger.info(f"API 발행 결과: {result_json}")
 

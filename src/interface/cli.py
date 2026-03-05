@@ -2,6 +2,7 @@
 Composition Root — 유일하게 모든 구체 클래스를 아는 진입점.
 의존성 역전(DIP): Application/Domain은 Port만 알고, 여기서 구체 구현을 조립.
 """
+import argparse
 import logging
 import os
 
@@ -19,13 +20,72 @@ from src.infrastructure.persistence.google_sheets_repo import GoogleSheetsPostRe
 logger = logging.getLogger(__name__)
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Tistory 블로그 자동 발행 시스템",
+    )
+    parser.add_argument(
+        "--publish-pages",
+        action="store_true",
+        help="AdSense 필수 페이지(소개, 개인정보처리방침, 문의) 발행",
+    )
+    return parser.parse_args()
+
+
+def _publish_pages(config: Config) -> None:
+    """AdSense 필수 페이지 발행 워크플로우."""
+    from src.infrastructure.browser.adsense_pages import publish_pages
+
+    config.validate_pages()
+
+    credentials = Credentials(
+        kakao_id=config.kakao_id,
+        kakao_pw=config.kakao_pw,
+        tistory_blog=config.tistory_blog,
+    )
+    browser = SeleniumBrowserAdapter(
+        credentials=credentials,
+        headless=config.headless,
+        user_data_dir=".browser_data",
+    )
+
+    browser.start()
+    try:
+        if not browser.login():
+            logger.error("로그인 실패 — 페이지 발행 중단")
+            return
+
+        results = publish_pages(
+            browser._sb,
+            blog_name=config.tistory_blog,
+            contact_email=config.contact_email,
+            owner_name=config.owner_name,
+        )
+
+        published = sum(1 for r in results if r.success and r.url)
+        skipped = sum(1 for r in results if r.success and not r.url)
+        failed = sum(1 for r in results if not r.success)
+        logger.info(
+            f"AdSense 페이지 발행 완료 — "
+            f"발행: {published}, 건너뜀: {skipped}, 실패: {failed}"
+        )
+    finally:
+        browser.stop()
+
+
 def main() -> None:
     # 환경 변수 로드
     load_dotenv()
     setup_logging()
 
-    # 설정 검증 (Fail-fast)
+    args = _parse_args()
     config = Config.from_env()
+
+    if args.publish_pages:
+        _publish_pages(config)
+        return
+
+    # --- 기존 파이프라인 (변경 없음) ---
     config.validate()
 
     # 의존성 조립 (Composition Root)

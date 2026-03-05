@@ -1,10 +1,12 @@
 """PageSpeed Insights API 연동 — Core Web Vitals 측정.
 
-공개 REST API 사용 (API key 불요, rate limit 있음).
+API key 설정 시 하루 25,000건, 미설정 시 ~25건 제한.
+환경변수: PAGESPEED_API_KEY
 """
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 
 import requests
@@ -36,11 +38,11 @@ def check_cwv(url: str, strategy: str = "mobile") -> CwvResult:
         CwvResult — 네트워크 오류 시 error 필드에 메시지 포함
     """
     try:
-        resp = requests.get(
-            PSI_URL,
-            params={"url": url, "strategy": strategy},
-            timeout=60,
-        )
+        params: dict[str, str] = {"url": url, "strategy": strategy}
+        api_key = os.getenv("PAGESPEED_API_KEY", "")
+        if api_key:
+            params["key"] = api_key
+        resp = requests.get(PSI_URL, params=params, timeout=60)
         resp.raise_for_status()
         data = resp.json()
     except requests.RequestException as e:

@@ -86,7 +86,8 @@ def main() -> None:
             elif result.error:
                 logger.warning(f"CWV 실패: {result.post_keyword} — {result.error}")
                 if "429" in result.error:
-                    _time.sleep(10)  # rate limit 시 추가 대기
+                    logger.warning("PageSpeed API rate limit — CWV 점검 중단")
+                    break
         logger.info(f"CWV 점검 완료: {checked}/{len(unchecked)}건")
 
 

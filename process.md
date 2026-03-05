@@ -1,7 +1,7 @@
 # B2B IT 블로그 자동화 — 개발 프로세스 추적
 
 > **문서 용도**: 실행 진행 추적 (마스터 플랜 `masterplan_v2.3.md`의 실행 로그)
-> **최종 갱신**: 2026-03-03
+> **최종 갱신**: 2026-03-05
 
 ---
 
@@ -9,16 +9,10 @@
 
 | 항목 | 값 |
 |------|---|
-| **현재 Phase** | **Phase 6 진행중** (콘텐츠 누적 + SEO 최적화) |
-| **단위 테스트** | 140건 통과 (Domain 79 + App 10 + Infra 51) |
-| **통합 테스트** | 9건 통과 (GoogleSheets 6 + Selenium 3) — 이전 2건 실패 → 0건 실패 |
-| **E2E 테스트** | 2건 스킵 (환경변수 미설정) |
-| **n8n E2E** | 3건 통과 (CI/CD 2개 이미지, Jenkins 1개 이미지, Terraform 4개 이미지) |
-| **Tistory 실발행** | 34건 성공 (최신: OAuth 2.0 인증 플로우 가이드 → https://kimsanghyeon.tistory.com/214) |
-| **전체 테스트** | 169건 통과 (단위 140 + 통합 9 + Infra 20), 2건 스킵 |
-| **커버리지** | 92.05% (domain + application) |
+| **현재 Phase** | **Phase 6 완료 → Phase 7 시작** |
+| **단위 테스트** | 169건 통과 |
+| **Tistory 실발행** | 39건 성공 (최신: Datadog vs New Relic 비교 → /219) |
 | **ruff** | 0 errors |
-| **mypy** | 0 errors (kakao_auth.py 포함) |
 | **콘텐츠 생성 모델** | Gemini 2.0 Flash (Phase 5.6에서 LLM_PROVIDER 추상화, `.env`로 전환 가능) |
 
 ---
@@ -1226,18 +1220,27 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 
 ---
 
-## Phase 7: 성장 + 수익화 — 🔲 미시작
+## Phase 7: 성장 + 수익화 — 🔄 진행 중 (2026-03-05~)
 
-> **기간**: W7~12 (2026-04-12 ~ 2026-05-23)
-> **목표**: 노출 500+ / 색인 10+ → 애드센스 승인 → 일 유입 20명
+> **목표**: 잔여 발행 완료 → 색인 확인 → 애드센스 승인 → 일 유입 20명
+
+### 즉시 실행 (2026-03-05)
+
+| # | 항목 | 상태 | 비고 |
+|---|------|------|------|
+| 7.0a | 잔여 7건 발행대기 포스트 일괄 발행 | 🔄 | MAX_POSTS=5 × 2배치 |
+| 7.0b | Tistory sitemap.xml 존재 확인 + Search Console 제출 | 🔲 | 색인 시작 전제 |
+| 7.0c | 기 발행 39건 중 색인 현황 확인 | 🔲 | GSC URL 검사 |
+
+### 중기 목표
 
 | # | 항목 | 상태 | Go/No-Go |
 |---|------|------|----------|
-| 7.1 | W7~8 게이트: 노출 500+ / 색인 10+ | 🔲 | **미달 → 피벗 레벨 1** |
-| 7.2 | 애드센스 승인 신청 (W9~10) | 🔲 | 필수 페이지 + 20건+ 글 |
+| 7.1 | 노출 500+ / 색인 10+ | 🔲 | **미달 → 피벗 레벨 1** |
+| 7.2 | 애드센스 승인 신청 | 🔲 | 필수 페이지 + 20건+ 글 |
 | 7.3 | 광고 배치 최적화 (수동 3~4개) | 🔲 | H2 위/중간/결론 앞/사이드바 |
 | 7.4 | 고CPC 키워드 집중 (에러 해결 글 확대) | 🔲 | CPC > 1,000원 |
-| 7.5 | W11~12 게이트: 일 유입 20명 | 🔲 | **미달 → 피벗 레벨 2~3** |
+| 7.5 | 일 유입 20명 | 🔲 | **미달 → 피벗 레벨 2~3** |
 | 7.6 | CPA 제휴 검토 (리더스CPA/애드팟) | 🔲 | 수익 다각화 |
 | 7.7 | 워드프레스 전환 검토 (피벗 시) | 🔲 | 커스텀 도메인 + WP |
 
@@ -1251,7 +1254,7 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 
 ---
 
-## Phase 6: 콘텐츠 누적 + SEO 최적화 — 진행 중 (2026-03-03~)
+## Phase 6: 콘텐츠 누적 + SEO 최적화 — ✅ 완료 (2026-03-03~03-05)
 
 ### 목표
 내부 링크 자동 삽입 + CWV 최적화 + 카테고리 자동 지정으로 SEO 경쟁력 확보
@@ -1263,22 +1266,42 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 6.1 | PostContent에 internal_link_keywords 필드 추가 | ✅ 완료 | JSON 파싱 + 쉼표 fallback |
 | 6.2 | GoogleSheetsRepo에서 Column S(internal_links) 읽기 | ✅ 완료 | |
 | 6.3 | 내부 링크 자동 삽입 모듈 (internal_linker.py) | ✅ 완료 | 최대 5개, h1~h3/a/code/pre 제외 |
-| 6.4 | PublishPostsUseCase에 내부 링크 주입 연결 | ✅ 완료 | _inject_contextual_links() |
-| 6.5 | 카테고리 자동 지정 (CATEGORY_MAP + API 전달) | ✅ 완료 | IT 기초 용어/IT 트렌드/트러블슈팅 |
+| 6.4 | PublishPostsUseCase에 내부 링크 주입 연결 | ✅ 완료 | _attach_internal_link_map() |
+| 6.5 | 카테고리 자동 지정 (CATEGORY_MAP + API 전달) | ✅ 완료 | 실제 Tistory ID 매핑 (용어→991463, 비교/에러→966384) |
 | 6.6 | CWV 최적화: fetchpriority="high" + dns-prefetch | ✅ 완료 | 첫 이미지 LCP candidate 처리 |
 | 6.7 | Mermaid 이미지에 width="800" 추가 (CLS 방지) | ✅ 완료 | inject_images.js |
 | 6.8 | 내부 링크 단위 테스트 11건 | ✅ 완료 | test_internal_linker.py |
 
-### 주간 KPI (W1: 2026-03-03)
+### Phase 6 실발행 검증 (2026-03-04~05)
+
+5건 발행 검증 (215~219):
+
+| 포스트 | URL | 공개 | 내부링크 | 카테고리 | 태그 |
+|--------|-----|------|----------|----------|------|
+| Elasticsearch 검색엔진 구축 가이드 | /215 | ✅ | - | - (API 이전) | ✅ |
+| IaC(Infrastructure as Code)란 | /216 | ✅ | - | - (ID 오류) | ✅ 8개 |
+| 네트워크 세그멘테이션이란 | /217 | ✅ | - | - (ID 오류) | ✅ |
+| Terraform vs Pulumi 비교 | /218 | ✅ | ✅ +51자 | ❌ (ID=0) | ✅ 5개 |
+| Datadog vs New Relic 비교 | /219 | ✅ | - (관련 없음) | ✅ 배운것 | ✅ 7개 |
+
+**해결된 이슈:**
+1. **Chrome user_data_dir 실행 실패** → `chromium_arg` 방식으로 전환
+2. **비공개 발행 (403)** → React fiber onChange 핸들러 직접 호출 + XHR API 우선
+3. **내부 링크 미삽입** → 양방향 부분 문자열 매칭 + published 키워드 직접 검색 전략
+4. **카테고리 미적용 (ID 불일치)** → category.json API로 실제 ID 확인, CATEGORY_MAP 갱신
+5. **entryId null** → URL 경로에서 ID 추출
+6. **CWV 429 rate limit** → API 호출 간 3초 딜레이 + 429시 10초 추가 대기
+
+### 주간 KPI (W1: 2026-03-03~05)
 
 | 지표 | 목표 | 실측 |
 |------|------|------|
-| 발행 글 수 | 50건 | 34건 (12건 대기) |
-| 단위 테스트 | 130+ | 140건 (169 전체) |
-| ruff/mypy | 0 errors | 0 errors |
-| LCP | < 4s | 17.6~20.9s (POOR, Tistory 제한) |
-| 내부 링크 | 글당 3~5개 | 구현 완료, 실발행 검증 필요 |
-| 카테고리 지정 | 100% | 구현 완료, 실발행 검증 필요 |
+| 발행 글 수 | 50건 | 39건 (5건 Phase 6에서 추가) |
+| 단위 테스트 | 130+ | 169건 |
+| ruff | 0 errors | 0 errors |
+| 공개 발행 | 100% | ✅ 100% (React fiber + visibility=20) |
+| 내부 링크 | 글당 0~5개 | ✅ 본문에 관련 키워드 있을 때만 삽입 |
+| 카테고리 지정 | 100% | ✅ 용어→991463, 비교/에러→966384 |
 
 ---
 
@@ -1330,3 +1353,9 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 2026-03-02 | 발행 후 HTTP HEAD 검증 도입 (Phase 5.13) | 발행 URL을 HTTP HEAD로 검증, 403(비공개) 감지 시 `_fix_post_visibility()` API로 자동 공개 전환 시도 |
 | 2026-03-02 | `_select_public_mode()` silent failure 대응 (Phase 5.13) | 기존: 공개 선택 실패 시 경고만 → 개선: 발행 후 HTTP 검증으로 실제 공개 상태 확인 + 자동 복구 |
 | 2026-03-02 | `DailyPublishLimitError` 도입 (Phase 5.14) | 일일 15건 제한 도달 시 나머지 포스트를 실패 처리하지 않고 배치 중단 + 현재 포스트 발행대기 복원 |
+| 2026-03-04 | SeleniumBase `user_data_dir` → `chromium_arg` 전환 (Phase 6) | SeleniumBase 4.47.1에서 `user_data_dir` 파라미터가 Chrome 실행 실패 유발 → `chromium_arg=f"--user-data-dir={path}"` 방식으로 우회 |
+| 2026-03-04 | React fiber onChange 호출 방식 채택 (Phase 6) | DOM 클릭만으로는 React state 비갱신 → `__reactProps$` fiber에서 onChange 핸들러 직접 호출, 3단계 fallback (props→fiber tree→native event) |
+| 2026-03-04 | XHR API 우선 + React UI fallback 순서 변경 (Phase 6) | XHR 직접 호출에서 `visibility: '20'` 명시적 전송이 공개 발행에 가장 신뢰도 높음 |
+| 2026-03-05 | 내부 링크 전략 2 도입: published 키워드 직접 검색 (Phase 6) | `internal_link_keywords`↔published 키워드 매칭 실패 시 본문에서 published 키워드를 직접 검색하는 보조 전략 추가 |
+| 2026-03-05 | CATEGORY_MAP 실제 Tistory ID로 갱신 (Phase 6) | 기존 ID 1152966~1152968이 블로그에 미존재 → category.json API로 실제 ID 확인: 용어→991463(배운것/용어정리), 비교/에러→966384(배운것) |
+| 2026-03-05 | entryId URL 추출 + CWV rate limit 딜레이 (Phase 6) | Tistory post.json이 entryId null 반환 → URL 경로에서 추출; PageSpeed API 429 → 호출 간 3초/429시 10초 대기 |

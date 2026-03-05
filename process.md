@@ -11,7 +11,7 @@
 |------|---|
 | **현재 Phase** | **Phase 7 진행 중** |
 | **단위 테스트** | 169건 통과 |
-| **Tistory 실발행** | 46건 성공 (최신: SSH 접속 Permission denied 해결 → /225) |
+| **Tistory 실발행** | 47건 성공 (최신: CORS 에러 원인과 해결 방법 → /226) |
 | **ruff** | 0 errors |
 | **콘텐츠 생성 모델** | Gemini 2.0 Flash (Phase 5.6에서 LLM_PROVIDER 추상화, `.env`로 전환 가능) |
 

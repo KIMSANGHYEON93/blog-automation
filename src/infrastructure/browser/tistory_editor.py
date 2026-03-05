@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import logging
+import random as _rnd
 import re
 import time
 
@@ -186,9 +187,10 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         with contextlib.suppress(Exception):
             sb.set_window_size(1920, 1080)
 
-        # 에디터 페이지 열기
+        # 에디터 페이지 열기 (같은 URL 재방문 시 강제 리로드)
         write_url = f"https://{blog_name}.tistory.com{EDITOR_PATH}"
-        sb.open(write_url)
+        fresh_url = f"{write_url}?_t={int(time.time())}{_rnd.randint(0, 999)}"
+        sb.open(fresh_url)
         time.sleep(5)
 
         # 에디터 로드 대기 (제목 입력창 DOM 존재 확인)
@@ -463,11 +465,6 @@ def _call_tistory_post_api(
                     url_parts = entry_url.rstrip("/").split("/")
                     if url_parts and url_parts[-1].isdigit():
                         entry_id = url_parts[-1]
-                # 카테고리 후처리: 생성 후 수정 API로 카테고리 재설정
-                if entry_id and category_id and category_id != "0":
-                    _update_category_after_create(
-                        sb, blog_name, entry_id, category_id,
-                    )
                 if entry_url:
                     return (entry_url, entry_id)
                 if entry_id:
@@ -489,48 +486,6 @@ def _call_tistory_post_api(
         logger.error(f"API 발행 호출 예외: {e}")
 
     return None
-
-
-def _update_category_after_create(
-    sb, blog_name: str, entry_id: str, category_id: str,
-) -> None:
-    """생성된 포스트의 카테고리를 수정 API로 재설정."""
-    try:
-        result = sb.execute_script("""
-            var blogName = arguments[0];
-            var entryId = arguments[1];
-            var catId = parseInt(arguments[2], 10) || 0;
-            if (!catId || !entryId) return 'skip';
-
-            var manageUrl = '';
-            if (window.appInfo && window.appInfo.manageUrl) {
-                manageUrl = window.appInfo.manageUrl;
-            } else {
-                manageUrl = 'https://' + blogName + '.tistory.com/manage';
-            }
-
-            var url = manageUrl + '/post.json';
-            var xhr = new XMLHttpRequest();
-            xhr.open('PUT', url, false);
-            xhr.setRequestHeader('Content-Type',
-                'application/json; charset=UTF-8');
-            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-
-            var patchData = {
-                id: entryId,
-                category: catId,
-                categoryId: catId
-            };
-            try {
-                xhr.send(JSON.stringify(patchData));
-                return 'status:' + xhr.status;
-            } catch(e) {
-                return 'error:' + e.message;
-            }
-        """, blog_name, entry_id, category_id)
-        logger.info(f"카테고리 후처리: entry={entry_id}, cat={category_id} → {result}")
-    except Exception as e:
-        logger.warning(f"카테고리 후처리 실패 (무시): {e}")
 
 
 def _try_publish_via_react_state(

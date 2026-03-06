@@ -1,7 +1,7 @@
 """Post — Aggregate Root entity with state machine."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from src.domain.exceptions import InvalidStatusTransitionError
@@ -20,6 +20,7 @@ class Post:
     published_at: datetime | None = None
     error_message: str = ""
     entry_id: str = ""
+    internal_link_keywords: list[str] = field(default_factory=list)
 
     def mark_publishing(self) -> None:
         """PENDING → PUBLISHING (only from PENDING)."""

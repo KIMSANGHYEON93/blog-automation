@@ -4,6 +4,7 @@ Composition Root — 유일하게 모든 구체 클래스를 아는 진입점.
 """
 import logging
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -18,11 +19,14 @@ from src.infrastructure.persistence.google_sheets_repo import GoogleSheetsPostRe
 
 logger = logging.getLogger(__name__)
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/interface/cli.py → 프로젝트 루트
+LOG_FILE = str(PROJECT_ROOT / "logs" / "blog-publisher.log")
+
 
 def main() -> None:
     # 환경 변수 로드
     load_dotenv()
-    setup_logging()
+    setup_logging(LOG_FILE)
 
     # 설정 검증 (Fail-fast)
     config = Config.from_env()

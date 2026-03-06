@@ -1,4 +1,5 @@
 """Unit tests for PublishPostsUseCase — TDD RED phase."""
+from __future__ import annotations
 
 from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.domain.entities.post import Post
@@ -192,6 +193,7 @@ class TestRelatedLinks:
     def _make_published_post(
         self, row_index: int, keyword: str, category: str = "IT",
         url: str = "https://test.tistory.com/1",
+        keywords: list[str] | None = None,
     ) -> Post:
         post = Post(
             row_index=row_index,
@@ -200,6 +202,7 @@ class TestRelatedLinks:
             status=PostStatus.PUBLISHED,
             content=PostContent(title=keyword, body_markdown="본문"),
             published_url=url,
+            internal_link_keywords=keywords or [],
         )
         return post
 
@@ -268,3 +271,105 @@ class TestRelatedLinks:
         assert "SSO란" in saved.content.body_markdown
         # 자기 자신(AD란)은 관련 글 링크에 포함되지 않아야 함
         assert 'href="https://test.tistory.com/1"' not in saved.content.body_markdown
+
+
+class TestHubSpokeLinks:
+    """허브-스포크 모델 통합 테스트."""
+
+    def _make_published_post(
+        self, row_index: int, keyword: str, category: str = "IT",
+        url: str = "", keywords: list[str] | None = None,
+    ) -> Post:
+        return Post(
+            row_index=row_index,
+            keyword=keyword,
+            category=category,
+            status=PostStatus.PUBLISHED,
+            content=PostContent(title=keyword, body_markdown="본문"),
+            published_url=url or f"https://test.tistory.com/{row_index}",
+            internal_link_keywords=keywords or [],
+        )
+
+    def test_허브_글이_관련_글에서_우선_링크됨(self):
+        """Hub posts appear first in related links when keywords match."""
+        pending = Post(
+            row_index=10,
+            keyword="제로 트러스트란",
+            category="보안",
+            status=PostStatus.PENDING,
+            content=PostContent(title="제로 트러스트란", body_markdown="## 내용\n본문"),
+            internal_link_keywords=["SSO", "LDAP"],
+        )
+        # SSO란 is a hub: mentioned by multiple posts
+        hub_sso = self._make_published_post(
+            1, "SSO란", "보안", keywords=[],
+        )
+        normal1 = self._make_published_post(
+            2, "Docker란", "DevOps", keywords=["SSO"],
+        )
+        normal2 = self._make_published_post(
+            3, "K8s란", "DevOps", keywords=["SSO"],
+        )
+
+        repo = InMemoryPostRepository([pending, hub_sso, normal1, normal2])
+        browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
+        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+
+        use_case.execute()
+
+        saved = repo.all()[0]
+        assert "관련 글" in saved.content.body_markdown
+        assert "SSO란" in saved.content.body_markdown
+
+    def test_키워드_없는_글은_카테고리_폴백(self):
+        """Posts without keywords fall back to category-based selection."""
+        pending = Post(
+            row_index=10,
+            keyword="AD란",
+            category="IT",
+            status=PostStatus.PENDING,
+            content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+            internal_link_keywords=[],  # no keywords
+        )
+        same_cat = self._make_published_post(1, "SSO란", "IT", keywords=[])
+        diff_cat = self._make_published_post(2, "Docker란", "DevOps", keywords=[])
+
+        repo = InMemoryPostRepository([pending, same_cat, diff_cat])
+        browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
+        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+
+        use_case.execute()
+
+        saved = repo.all()[0]
+        assert "관련 글" in saved.content.body_markdown
+        assert "SSO란" in saved.content.body_markdown
+
+    def test_키워드_겹침_기반_우선순위(self):
+        """Posts with higher keyword overlap rank higher in related links."""
+        pending = Post(
+            row_index=10,
+            keyword="SSO 구축 가이드",
+            category="보안",
+            status=PostStatus.PENDING,
+            content=PostContent(title="SSO 구축", body_markdown="## SSO\n본문"),
+            internal_link_keywords=["LDAP", "OAuth", "SAML"],
+        )
+        high_overlap = self._make_published_post(
+            1, "LDAP 인증", "보안", keywords=["LDAP", "OAuth", "SAML"],
+        )
+        low_overlap = self._make_published_post(
+            2, "Docker 설치", "DevOps", keywords=["컨테이너"],
+        )
+
+        repo = InMemoryPostRepository([pending, high_overlap, low_overlap])
+        browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
+        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+
+        use_case.execute()
+
+        saved = repo.all()[0]
+        body = saved.content.body_markdown
+        # High overlap post should appear before low overlap
+        ldap_pos = body.find("LDAP 인증")
+        docker_pos = body.find("Docker 설치")
+        assert ldap_pos < docker_pos

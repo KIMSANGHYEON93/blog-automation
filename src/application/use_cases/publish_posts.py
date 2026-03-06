@@ -6,6 +6,7 @@ from src.domain.entities.post import Post
 from src.domain.exceptions import DailyPublishLimitError
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.post_repository import PostRepository
+from src.domain.services.internal_link_service import InternalLinkService
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class PublishPostsUseCase:
         self._repo = repo
         self._browser = browser
         self._max_posts = max_posts
+        self._link_service = InternalLinkService()
 
     def execute(self) -> PublishStats:
         stats = PublishStats()
@@ -33,6 +35,7 @@ class PublishPostsUseCase:
             return stats
 
         published_posts = self._repo.find_published(limit=50)
+        hubs = self._link_service.identify_hubs(published_posts)
 
         self._browser.start()
         try:
@@ -41,7 +44,7 @@ class PublishPostsUseCase:
                 return stats
 
             for post in posts:
-                self._enrich_with_related_links(post, published_posts)
+                self._enrich_with_related_links(post, published_posts, hubs)
                 self._attach_internal_link_map(post, published_posts)
                 try:
                     self._publish_single(post, stats)
@@ -58,24 +61,12 @@ class PublishPostsUseCase:
         return stats
 
     def _enrich_with_related_links(
-        self, post: Post, published: list[Post],
+        self, post: Post, published: list[Post], hubs: list[Post],
     ) -> None:
         if not post.content or not post.content.has_body():
             return
 
-        same_cat = [
-            p for p in published
-            if p.category == post.category
-            and p.row_index != post.row_index
-            and p.published_url
-        ]
-        diff_cat = [
-            p for p in published
-            if p.category != post.category
-            and p.row_index != post.row_index
-            and p.published_url
-        ]
-        related = same_cat[:3] + diff_cat[: max(0, 5 - len(same_cat[:3]))]
+        related = self._link_service.select_links(post, published, hubs)
         if not related:
             return
 

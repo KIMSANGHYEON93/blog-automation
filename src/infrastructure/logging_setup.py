@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 
-def setup_logging(log_file: str = "/var/log/blog-publisher.log") -> None:
+def setup_logging(log_file: str = "logs/blog-publisher.log") -> None:
     log_path = Path(log_file)
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
 

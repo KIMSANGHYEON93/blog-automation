@@ -1,7 +1,7 @@
 # B2B IT 블로그 자동화 — 개발 프로세스 추적
 
 > **문서 용도**: 실행 진행 추적 (마스터 플랜 `masterplan_v2.3.md`의 실행 로그)
-> **최종 갱신**: 2026-03-05
+> **최종 갱신**: 2026-03-06
 
 ---
 
@@ -10,7 +10,7 @@
 | 항목 | 값 |
 |------|---|
 | **현재 Phase** | **Phase 7 진행 중** |
-| **단위 테스트** | 169건 통과 |
+| **단위 테스트** | 201건 통과 |
 | **Tistory 실발행** | 47건 성공 (최신: CORS 에러 원인과 해결 방법 → /226) |
 | **ruff** | 0 errors |
 | **콘텐츠 생성 모델** | Gemini 2.0 Flash (Phase 5.6에서 LLM_PROVIDER 추상화, `.env`로 전환 가능) |
@@ -1271,6 +1271,11 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 6.6 | CWV 최적화: fetchpriority="high" + dns-prefetch | ✅ 완료 | 첫 이미지 LCP candidate 처리 |
 | 6.7 | Mermaid 이미지에 width="800" 추가 (CLS 방지) | ✅ 완료 | inject_images.js |
 | 6.8 | 내부 링크 단위 테스트 11건 | ✅ 완료 | test_internal_linker.py |
+| 6.9 | 허브-스포크 내부 링크 서비스 도입 | ✅ 완료 | InternalLinkService — 키워드 겹침 기반 허브 식별 + 우선순위 링크 선정 |
+| 6.10 | Post 엔티티에 internal_link_keywords 필드 추가 | ✅ 완료 | `dataclass(field)` + GoogleSheetsRepo JSON 파싱 |
+| 6.11 | 로그 시스템 정상화 | ✅ 완료 | 기본 경로 `/var/log` → `logs/`, cli.py에서 PROJECT_ROOT 기준 절대 경로 전달 |
+| 6.12 | run_pipeline_b.sh PROJECT_DIR 경로 수정 | ✅ 완료 | `claudeagent/` → `Core Web Vitals/` |
+| 6.13 | 허브-스포크 + 내부 링크 단위 테스트 | ✅ 완료 | test_internal_link_service.py 18건 + test_post_entity.py 2건 추가 |
 
 ### Phase 6 실발행 검증 (2026-03-04~05)
 
@@ -1297,7 +1302,7 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 지표 | 목표 | 실측 |
 |------|------|------|
 | 발행 글 수 | 50건 | 39건 (5건 Phase 6에서 추가) |
-| 단위 테스트 | 130+ | 169건 |
+| 단위 테스트 | 130+ | 201건 |
 | ruff | 0 errors | 0 errors |
 | 공개 발행 | 100% | ✅ 100% (React fiber + visibility=20) |
 | 내부 링크 | 글당 0~5개 | ✅ 본문에 관련 키워드 있을 때만 삽입 |
@@ -1359,3 +1364,6 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 2026-03-05 | 내부 링크 전략 2 도입: published 키워드 직접 검색 (Phase 6) | `internal_link_keywords`↔published 키워드 매칭 실패 시 본문에서 published 키워드를 직접 검색하는 보조 전략 추가 |
 | 2026-03-05 | CATEGORY_MAP 실제 Tistory ID로 갱신 (Phase 6) | 기존 ID 1152966~1152968이 블로그에 미존재 → category.json API로 실제 ID 확인: 용어→991463(배운것/용어정리), 비교/에러→966384(배운것) |
 | 2026-03-05 | entryId URL 추출 + CWV rate limit 딜레이 (Phase 6) | Tistory post.json이 entryId null 반환 → URL 경로에서 추출; PageSpeed API 429 → 호출 간 3초/429시 10초 대기 |
+| 2026-03-06 | 허브-스포크 InternalLinkService 도입 (Phase 6) | 카테고리만 보던 관련 글 선정 → 키워드 겹침 기반 스코어링 + 허브 글 우선순위로 내부 링크 품질 향상 |
+| 2026-03-06 | 로그 기본 경로 `/var/log` → `logs/` 변경 (Phase 6) | macOS에서 PermissionError로 파일 로그 미생성 → 프로젝트 내 `logs/` + cli.py에서 PROJECT_ROOT 절대 경로 |
+| 2026-03-06 | run_pipeline_b.sh PROJECT_DIR 경로 수정 (Phase 6) | `claudeagent/blog-automation` → `Core Web Vitals/blog-automation` — 실제 프로젝트 위치와 일치 |

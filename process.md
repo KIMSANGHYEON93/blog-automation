@@ -1232,6 +1232,15 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 7.0b | Tistory sitemap.xml 확인 | ✅ 완료 | 498 URL, /220~/225 포함 확인. GSC 수동 제출 필요 |
 | 7.0c | 기 발행 39건 중 색인 현황 확인 | 🔲 | GSC URL 검사 |
 
+### 2026-03-06: 로그 시스템 정상화 + 발행 테스트
+
+| # | 항목 | 상태 | 비고 |
+|---|------|------|------|
+| 7.0d | 로그 시스템 정상화 | ✅ 완료 | `/var/log` → `logs/`, cli.py PROJECT_ROOT 절대 경로, run_pipeline_b.sh 경로 수정 |
+| 7.0e | 허브-스포크 내부 링크 서비스 도입 | ✅ 완료 | InternalLinkService + 단위 테스트 20건 추가 (총 201건) |
+| 7.0f | Pipeline B 발행 테스트 | ✅ 완료 | 발행 대기 0건 정상 종료, `logs/blog-publisher.log` 생성 확인 |
+| 7.0g | CWV 점검 | ⚠️ 실패 | PageSpeed API 429 rate limit — 시간 경과 후 재시도 필요 |
+
 ### 중기 목표
 
 | # | 항목 | 상태 | Go/No-Go |

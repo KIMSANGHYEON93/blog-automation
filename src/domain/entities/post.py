@@ -20,6 +20,9 @@ class Post:
     published_at: datetime | None = None
     error_message: str = ""
     entry_id: str = ""
+    internal_link_map: dict[str, str] | None = None
+    retry_count: int = 0
+    next_retry_at: datetime | None = None
 
     def mark_publishing(self) -> None:
         """PENDING → PUBLISHING (only from PENDING)."""

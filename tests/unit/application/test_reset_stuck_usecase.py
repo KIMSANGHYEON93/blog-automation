@@ -1,7 +1,9 @@
 """Unit tests for ResetStuckPostsUseCase — TDD RED phase."""
+from datetime import datetime, timedelta
 
 from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
 from src.domain.entities.post import Post
+from src.domain.services.retry_policy import RetryPolicy
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
 from src.infrastructure.persistence.in_memory_repo import InMemoryPostRepository
@@ -74,7 +76,7 @@ class TestRetryFailed:
     """실패 포스트 재시도 테스트."""
 
     def test_retry_failed_옵트인_동작(self):
-        """retry_failed=True 시 FAILED→PENDING 전이."""
+        """retry_failed=True 시 FAILED→PENDING 전이 + retry_count 증가."""
         failed_post = Post(
             row_index=12,
             keyword="Jenkins vs GitHub Actions",
@@ -91,6 +93,8 @@ class TestRetryFailed:
         recovered = repo.all()[0]
         assert recovered.status == PostStatus.PENDING
         assert recovered.error_message == ""
+        assert recovered.retry_count == 1
+        assert recovered.next_retry_at is not None
 
     def test_retry_failed_기본_비활성(self):
         """기본값(retry_failed=False) 시 FAILED 포스트 무시."""
@@ -108,6 +112,46 @@ class TestRetryFailed:
 
         assert count == 0
         assert repo.all()[0].status == PostStatus.FAILED  # 그대로
+
+    def test_retry_최대횟수_초과_건너뜀(self):
+        """retry_count >= max_retries → 재시도 건너뜀."""
+        failed_post = Post(
+            row_index=12,
+            keyword="초과",
+            status=PostStatus.FAILED,
+            error_message="실패",
+            content=PostContent(title="제목", body_markdown="내용"),
+            retry_count=3,
+        )
+        repo = InMemoryPostRepository([failed_post])
+        policy = RetryPolicy(max_retries=3)
+        use_case = ResetStuckPostsUseCase(
+            repo=repo, retry_failed=True, retry_policy=policy,
+        )
+
+        count = use_case.execute()
+
+        assert count == 0
+        assert repo.all()[0].status == PostStatus.FAILED
+
+    def test_retry_시간_미도래_건너뜀(self):
+        """next_retry_at이 미래 → 건너뜀."""
+        failed_post = Post(
+            row_index=12,
+            keyword="이르다",
+            status=PostStatus.FAILED,
+            error_message="실패",
+            content=PostContent(title="제목", body_markdown="내용"),
+            retry_count=1,
+            next_retry_at=datetime.now() + timedelta(hours=5),
+        )
+        repo = InMemoryPostRepository([failed_post])
+        use_case = ResetStuckPostsUseCase(repo=repo, retry_failed=True)
+
+        count = use_case.execute()
+
+        assert count == 0
+        assert repo.all()[0].status == PostStatus.FAILED
 
 
 class TestResetRevisingStuck:

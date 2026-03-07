@@ -1,13 +1,21 @@
 """CheckCwvUseCase 테스트 — 6건."""
 from __future__ import annotations
 
-from unittest.mock import patch
-
 from src.application.use_cases.check_cwv import CheckCwvUseCase
 from src.domain.entities.post import Post
+from src.domain.ports.seo_port import CwvPort, CwvResult
 from src.domain.value_objects.post_status import PostStatus
 from src.infrastructure.persistence.in_memory_repo import InMemoryPostRepository
-from src.infrastructure.seo.cwv_checker import CwvResult
+
+
+class _StubCwv(CwvPort):
+    """테스트용 CwvPort 스텁."""
+
+    def __init__(self, result: CwvResult):
+        self._result = result
+
+    def check(self, url: str) -> CwvResult:
+        return self._result
 
 
 def _published_post(row: int = 2, keyword: str = "테스트") -> Post:
@@ -27,12 +35,11 @@ def _mock_cwv_result(lcp: float = 1.5, cls_val: float = 0.05, score: int = 90) -
 
 
 class TestCheckCwvUseCase:
-    @patch("src.application.use_cases.check_cwv.check_cwv")
-    def test_CWV_통과(self, mock_check):
+    def test_CWV_통과(self):
         """mock API 응답 (LCP 1.5s) → passed=True."""
-        mock_check.return_value = _mock_cwv_result(lcp=1.5)
+        cwv = _StubCwv(_mock_cwv_result(lcp=1.5))
         repo = InMemoryPostRepository([_published_post()])
-        uc = CheckCwvUseCase(repo)
+        uc = CheckCwvUseCase(repo, cwv=cwv)
 
         result = uc.execute(_published_post())
 
@@ -40,12 +47,11 @@ class TestCheckCwvUseCase:
         assert result.passed is True
         assert result.lcp == 1.5
 
-    @patch("src.application.use_cases.check_cwv.check_cwv")
-    def test_CWV_미통과(self, mock_check):
+    def test_CWV_미통과(self):
         """mock API 응답 (LCP 3.0s) → passed=False."""
-        mock_check.return_value = _mock_cwv_result(lcp=3.0)
+        cwv = _StubCwv(_mock_cwv_result(lcp=3.0))
         repo = InMemoryPostRepository([_published_post()])
-        uc = CheckCwvUseCase(repo)
+        uc = CheckCwvUseCase(repo, cwv=cwv)
 
         result = uc.execute(_published_post())
 
@@ -55,8 +61,9 @@ class TestCheckCwvUseCase:
 
     def test_미발행_포스트_실패(self):
         """PENDING post → error."""
+        cwv = _StubCwv(_mock_cwv_result())
         repo = InMemoryPostRepository()
-        uc = CheckCwvUseCase(repo)
+        uc = CheckCwvUseCase(repo, cwv=cwv)
         post = Post(row_index=2, keyword="테스트")  # status=PENDING (default)
 
         result = uc.execute(post)
@@ -64,12 +71,11 @@ class TestCheckCwvUseCase:
         assert result.success is False
         assert "발행완료 상태가 아닙니다" in result.error
 
-    @patch("src.application.use_cases.check_cwv.check_cwv")
-    def test_CWV_결과_시트_저장(self, mock_check):
+    def test_CWV_결과_시트_저장(self):
         """execute 후 cwv_records에 기록 확인."""
-        mock_check.return_value = _mock_cwv_result(lcp=2.0, cls_val=0.1)
+        cwv = _StubCwv(_mock_cwv_result(lcp=2.0, cls_val=0.1))
         repo = InMemoryPostRepository([_published_post(row=5)])
-        uc = CheckCwvUseCase(repo)
+        uc = CheckCwvUseCase(repo, cwv=cwv)
 
         uc.execute(_published_post(row=5))
 

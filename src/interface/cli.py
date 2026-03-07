@@ -9,6 +9,7 @@ import os
 from dotenv import load_dotenv
 
 from src.application.use_cases.check_cwv import CheckCwvUseCase
+from src.application.use_cases.check_indexing import CheckIndexingUseCase
 from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
 from src.application.use_cases.revise_posts import RevisePostsUseCase
@@ -34,6 +35,11 @@ def _parse_args() -> argparse.Namespace:
         "--revise",
         action="store_true",
         help="수정대기 포스트를 기존 Tistory 글에 업데이트",
+    )
+    parser.add_argument(
+        "--check-index",
+        action="store_true",
+        help="발행완료 포스트의 Google 색인 상태 점검 (미색인 → 수정대기)",
     )
     return parser.parse_args()
 
@@ -118,6 +124,58 @@ def _revise(config: Config) -> None:
     )
 
 
+def _check_index(config: Config) -> None:
+    """발행완료 포스트의 Google 색인 상태 점검 워크플로우."""
+    import time as _time
+
+    config.validate()
+
+    repo = GoogleSheetsPostRepository(
+        creds_path=config.google_creds,
+        sheet_name=config.sheet_name,
+    )
+
+    from src.infrastructure.seo.indexing_checker import GscIndexingAdapter
+
+    indexing = GscIndexingAdapter()
+    uc = CheckIndexingUseCase(repo=repo, indexing=indexing)
+    published = repo.find_published(limit=50)
+    if not published:
+        logger.info("색인 점검 대상 포스트 없음")
+        return
+
+    checked = 0
+    indexed = 0
+    marked = 0
+    for idx, post in enumerate(published):
+        if idx > 0:
+            _time.sleep(1)  # API rate limit 회피
+        result = uc.execute(post)
+        if result.success:
+            checked += 1
+            if result.is_indexed:
+                indexed += 1
+            if result.marked_revision:
+                marked += 1
+            logger.info(
+                f"색인 점검: {result.post_keyword} — "
+                f"indexed={result.is_indexed}, "
+                f"verdict={result.verdict}"
+            )
+        elif result.error:
+            logger.warning(
+                f"색인 점검 실패: {result.post_keyword} — {result.error}"
+            )
+            if "quota" in result.error.lower() or "429" in result.error:
+                logger.warning("GSC API rate limit — 색인 점검 중단")
+                break
+
+    logger.info(
+        f"색인 점검 완료: {checked}/{len(published)}건 점검, "
+        f"색인됨: {indexed}, 미색인→수정대기: {marked}"
+    )
+
+
 def main() -> None:
     # 환경 변수 로드
     load_dotenv()
@@ -132,6 +190,10 @@ def main() -> None:
 
     if args.revise:
         _revise(config)
+        return
+
+    if args.check_index:
+        _check_index(config)
         return
 
     # --- 기존 파이프라인 (변경 없음) ---
@@ -178,7 +240,10 @@ def main() -> None:
     if cwv_enabled:
         import time as _time
 
-        cwv_uc = CheckCwvUseCase(repo=repo)
+        from src.infrastructure.seo.cwv_checker import PageSpeedCwvAdapter
+
+        cwv = PageSpeedCwvAdapter()
+        cwv_uc = CheckCwvUseCase(repo=repo, cwv=cwv)
         unchecked = repo.find_cwv_unchecked(limit=10)
         checked = 0
         for idx, post in enumerate(unchecked):

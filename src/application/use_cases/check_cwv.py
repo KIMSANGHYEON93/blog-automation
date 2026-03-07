@@ -6,8 +6,8 @@ from dataclasses import dataclass
 
 from src.domain.entities.post import Post
 from src.domain.ports.post_repository import PostRepository
+from src.domain.ports.seo_port import CwvPort, CwvResult
 from src.domain.value_objects.post_status import PostStatus
-from src.infrastructure.seo.cwv_checker import CwvResult, check_cwv
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +29,9 @@ class CwvCheckResult:
 class CheckCwvUseCase:
     """발행 완료 포스트의 CWV를 측정하고 시트에 기록."""
 
-    def __init__(self, repo: PostRepository):
+    def __init__(self, repo: PostRepository, cwv: CwvPort):
         self._repo = repo
+        self._cwv = cwv
 
     def execute(self, post: Post) -> CwvCheckResult:
         # 1. PUBLISHED 상태 검증
@@ -59,7 +60,7 @@ class CheckCwvUseCase:
             )
 
         # 2. CWV 측정
-        cwv: CwvResult = check_cwv(post.published_url)
+        cwv: CwvResult = self._cwv.check(post.published_url)
 
         if cwv.error:
             return CwvCheckResult(

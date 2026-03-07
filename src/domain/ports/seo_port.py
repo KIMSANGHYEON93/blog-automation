@@ -38,3 +38,19 @@ class IndexingPort(ABC):
 class CwvPort(ABC):
     @abstractmethod
     def check(self, url: str) -> CwvResult: ...
+
+
+@dataclass(frozen=True)
+class IndexingSubmitResult:
+    """색인 제출 결과."""
+
+    url: str
+    success: bool = False
+    error: str = ""
+
+
+class IndexingSubmitPort(ABC):
+    @abstractmethod
+    def submit(self, url: str) -> IndexingSubmitResult:
+        """Google Indexing API로 URL 크롤링 요청."""
+        ...

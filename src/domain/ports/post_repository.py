@@ -54,3 +54,8 @@ class PostRepository(ABC):
     def find_revising_stuck(self) -> list[Post]:
         """Find posts stuck in REVISING status."""
         ...
+
+    @abstractmethod
+    def find_all(self) -> list[Post]:
+        """전체 포스트 조회 (상태 대시보드용)."""
+        ...

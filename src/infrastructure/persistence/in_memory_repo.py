@@ -55,6 +55,9 @@ class InMemoryPostRepository(PostRepository):
     ) -> None:
         self._cwv_records[row_index] = {"lcp": lcp, "cls": cls_score}
 
+    def find_all(self) -> list[Post]:
+        return list(self._posts)
+
     def all(self) -> list[Post]:
         """테스트 검증용: 전체 포스트 반환."""
         return list(self._posts)

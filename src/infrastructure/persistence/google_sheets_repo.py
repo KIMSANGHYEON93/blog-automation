@@ -139,6 +139,13 @@ class GoogleSheetsPostRepository(PostRepository):
                 result.append(self._row_to_post(row, i))
         return result
 
+    def find_all(self) -> list[Post]:
+        all_rows = self._sheet.get_all_values()
+        result = []
+        for i, row in enumerate(all_rows[self._header_row:], start=self._header_row + 1):
+            result.append(self._row_to_post(row, i))
+        return result
+
     def save(self, post: Post, _prev_status: str = "") -> None:
         row = post.row_index
         updates = {

@@ -1,6 +1,7 @@
 """GoogleSheetsPostRepository — PostRepository implementation using gspread."""
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 
@@ -55,7 +56,7 @@ class GoogleSheetsPostRepository(PostRepository):
                 internal_link_keywords=get("internal_links"),
             )
 
-        return Post(
+        post = Post(
             row_index=row_index,
             keyword=get("keyword"),
             category=get("category"),
@@ -65,6 +66,17 @@ class GoogleSheetsPostRepository(PostRepository):
             error_message=get("error_msg"),
             entry_id=get("entry_id"),
         )
+
+        raw_links = get("internal_links")
+        if raw_links:
+            try:
+                parsed = json.loads(raw_links)
+                if isinstance(parsed, list):
+                    post.internal_link_keywords = [str(k) for k in parsed]
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        return post
 
     def find_pending(self, limit: int = 5) -> list[Post]:
         all_rows = self._sheet.get_all_values()

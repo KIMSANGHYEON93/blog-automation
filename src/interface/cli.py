@@ -5,6 +5,7 @@ Composition Root — 유일하게 모든 구체 클래스를 아는 진입점.
 import argparse
 import logging
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -24,6 +25,9 @@ from src.infrastructure.logging_setup import setup_logging
 from src.infrastructure.persistence.google_sheets_repo import GoogleSheetsPostRepository
 
 logger = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/interface/cli.py → 프로젝트 루트
+LOG_FILE = str(PROJECT_ROOT / "logs" / "blog-publisher.log")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -317,7 +321,7 @@ def _discover_keywords(config: Config) -> None:
 def main() -> None:
     # 환경 변수 로드
     load_dotenv()
-    setup_logging()
+    setup_logging(LOG_FILE)
 
     args = _parse_args()
     config = Config.from_env()

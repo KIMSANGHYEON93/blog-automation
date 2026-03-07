@@ -215,3 +215,17 @@ class TestIsRevisable:
         post = Post(row_index=1, keyword="test", content=content,
                     status=PostStatus.REVISION_PENDING, entry_id="")
         assert post.is_revisable() is False
+
+
+class TestInternalLinkKeywords:
+    def test_default_empty_list(self):
+        post = Post(row_index=1, keyword="test")
+        assert post.internal_link_keywords == []
+
+    def test_create_with_keywords(self):
+        post = Post(
+            row_index=1, keyword="SSO란",
+            internal_link_keywords=["LDAP", "OAuth", "SAML"],
+        )
+        assert post.internal_link_keywords == ["LDAP", "OAuth", "SAML"]
+        assert len(post.internal_link_keywords) == 3

@@ -1,7 +1,7 @@
 """Post — Aggregate Root entity with state machine."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from src.domain.exceptions import InvalidStatusTransitionError
@@ -21,6 +21,7 @@ class Post:
     error_message: str = ""
     entry_id: str = ""
     internal_link_map: dict[str, str] | None = None
+    internal_link_keywords: list[str] = field(default_factory=list)
     retry_count: int = 0
     next_retry_at: datetime | None = None
 

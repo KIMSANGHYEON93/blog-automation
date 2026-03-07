@@ -21,6 +21,7 @@ def _make_config(**overrides) -> Config:
         max_delay=2,
         contact_email="test@example.com",
         owner_name="테스터",
+        sitemap_output="sitemap.xml",
     )
     defaults.update(overrides)
     return Config(**defaults)

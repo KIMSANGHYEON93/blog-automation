@@ -16,6 +16,7 @@ class Config:
     max_delay: int
     contact_email: str
     owner_name: str
+    sitemap_output: str
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -31,6 +32,7 @@ class Config:
             max_delay=int(os.getenv("MAX_DELAY", "900")),
             contact_email=os.getenv("CONTACT_EMAIL", ""),
             owner_name=os.getenv("OWNER_NAME", ""),
+            sitemap_output=os.getenv("SITEMAP_OUTPUT", "sitemap.xml"),
         )
 
     def validate(self) -> None:

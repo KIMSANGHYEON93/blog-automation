@@ -1,4 +1,4 @@
-"""PostStatus — 7-state Enum for blog post lifecycle."""
+"""PostStatus — 9-state Enum for blog post lifecycle."""
 from enum import Enum
 
 
@@ -10,6 +10,8 @@ class PostStatus(Enum):
     PUBLISHED = "발행완료"
     FAILED = "발행실패"
     HOLD = "보류"
+    REVISION_PENDING = "수정대기"
+    REVISING = "수정중"
 
     @classmethod
     def from_string(cls, value: str) -> "PostStatus":

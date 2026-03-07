@@ -36,6 +36,14 @@ class InMemoryPostRepository(PostRepository):
         return [p for p in self._posts
                 if p.status == PostStatus.PUBLISHED][:limit]
 
+    def find_revision_pending(self, limit: int = 5) -> list[Post]:
+        return [p for p in self._posts
+                if p.status == PostStatus.REVISION_PENDING][:limit]
+
+    def find_revising_stuck(self) -> list[Post]:
+        return [p for p in self._posts
+                if p.status == PostStatus.REVISING]
+
     def find_cwv_unchecked(self, limit: int = 10) -> list[Post]:
         return [p for p in self._posts
                 if p.status == PostStatus.PUBLISHED

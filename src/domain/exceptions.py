@@ -26,3 +26,7 @@ class ContentMissingError(DomainError):
 
 class DailyPublishLimitError(DomainError):
     """Raised when the blog platform's daily publish limit is reached."""
+
+
+class PostNotRevisableError(DomainError):
+    """수정 불가 상태에서 수정 시도 시 발생."""

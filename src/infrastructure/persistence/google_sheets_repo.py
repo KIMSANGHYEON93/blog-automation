@@ -17,6 +17,8 @@ from src.infrastructure.persistence.column_map import (
     STATUS_PENDING,
     STATUS_PUBLISHED,
     STATUS_PUBLISHING,
+    STATUS_REVISING,
+    STATUS_REVISION_PENDING,
 )
 
 logger = logging.getLogger(__name__)
@@ -116,7 +118,27 @@ class GoogleSheetsPostRepository(PostRepository):
                     break
         return result
 
-    def save(self, post: Post) -> None:
+    def find_revision_pending(self, limit: int = 5) -> list[Post]:
+        all_rows = self._sheet.get_all_values()
+        result = []
+        for i, row in enumerate(all_rows[self._header_row:], start=self._header_row + 1):
+            status_val = row[COL["status"] - 1] if len(row) >= COL["status"] else ""
+            if status_val == STATUS_REVISION_PENDING:
+                result.append(self._row_to_post(row, i))
+                if len(result) >= limit:
+                    break
+        return result
+
+    def find_revising_stuck(self) -> list[Post]:
+        all_rows = self._sheet.get_all_values()
+        result = []
+        for i, row in enumerate(all_rows[self._header_row:], start=self._header_row + 1):
+            status_val = row[COL["status"] - 1] if len(row) >= COL["status"] else ""
+            if status_val == STATUS_REVISING:
+                result.append(self._row_to_post(row, i))
+        return result
+
+    def save(self, post: Post, _prev_status: str = "") -> None:
         row = post.row_index
         updates = {
             COL["status"]: post.status.value,
@@ -127,6 +149,17 @@ class GoogleSheetsPostRepository(PostRepository):
             updates[COL["published_at"]] = post.published_at.strftime("%Y-%m-%d %H:%M:%S")
         if post.entry_id:
             updates[COL["entry_id"]] = post.entry_id
+
+        # 수정 완료 시 revision 컬럼 업데이트
+        if post.status == PostStatus.PUBLISHED and _prev_status == STATUS_REVISING:
+            # revision_count 증가
+            try:
+                cur = self._sheet.cell(row, COL["revision_count"]).value
+                count = int(cur) if cur else 0
+            except (ValueError, TypeError):
+                count = 0
+            updates[COL["revision_count"]] = str(count + 1)
+            updates[COL["revised_at"]] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         for col, value in updates.items():
             self._sheet.update_cell(row, col, value)

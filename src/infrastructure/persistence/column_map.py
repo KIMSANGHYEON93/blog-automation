@@ -24,11 +24,13 @@ COL = {
     "internal_links": 19,  # S: 내부 링크 키워드
     "thumbnail_url": 20,   # T: 썸네일 URL (OG 이미지)
     "entry_id": 21,        # U: Tistory 포스트 ID (수정 API용)
-    # V: 예약
+    "revision_count": 22,  # V: 수정 횟수
     # W~Y: Core Web Vitals 추적
     "cwv_lcp": 23,         # W: LCP (초)
     "cwv_cls": 24,         # X: CLS
     "cwv_checked_at": 25,  # Y: CWV 점검 일시
+    "revised_at": 26,      # Z: 최종 수정 일시
+    "revision_reason": 27, # AA: 수정 사유
 }
 
 STATUS_WAITING = "대기"
@@ -36,3 +38,5 @@ STATUS_PENDING = "발행대기"
 STATUS_PUBLISHING = "발행중"
 STATUS_PUBLISHED = "발행완료"
 STATUS_FAILED = "발행실패"
+STATUS_REVISION_PENDING = "수정대기"
+STATUS_REVISING = "수정중"

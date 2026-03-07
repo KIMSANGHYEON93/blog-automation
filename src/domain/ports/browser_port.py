@@ -25,3 +25,8 @@ class BrowserPort(ABC):
     def publish(self, post: Post) -> PublishResult:
         """Publish a single post. Returns PublishResult."""
         ...
+
+    @abstractmethod
+    def update(self, post: Post) -> PublishResult:
+        """Update an existing published post. entry_id required."""
+        ...

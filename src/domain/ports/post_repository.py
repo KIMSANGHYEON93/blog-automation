@@ -44,3 +44,13 @@ class PostRepository(ABC):
     ) -> None:
         """CWV 측정 결과를 시트에 기록."""
         ...
+
+    @abstractmethod
+    def find_revision_pending(self, limit: int = 5) -> list[Post]:
+        """Find posts with REVISION_PENDING status."""
+        ...
+
+    @abstractmethod
+    def find_revising_stuck(self) -> list[Post]:
+        """Find posts stuck in REVISING status."""
+        ...

@@ -1,4 +1,4 @@
-"""Post entity tests — 15+ tests for state machine."""
+"""Post entity tests — 25+ tests for state machine."""
 from datetime import datetime
 
 import pytest
@@ -121,3 +121,97 @@ class TestIsPublishable:
         content = PostContent(title="제목", body_markdown="")
         post = Post(row_index=1, keyword="test", content=content)
         assert post.is_publishable() is False
+
+
+class TestMarkRevisionPending:
+    def test_published_to_revision_pending(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.PUBLISHED)
+        post.mark_revision_pending("본문 짧음")
+        assert post.status == PostStatus.REVISION_PENDING
+        assert post.error_message == "본문 짧음"
+
+    def test_non_published_raises(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.PENDING)
+        with pytest.raises(InvalidStatusTransitionError):
+            post.mark_revision_pending("이유")
+
+    def test_empty_reason(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.PUBLISHED)
+        post.mark_revision_pending()
+        assert post.status == PostStatus.REVISION_PENDING
+        assert post.error_message == ""
+
+    def test_truncates_reason_to_200(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.PUBLISHED)
+        post.mark_revision_pending("x" * 500)
+        assert len(post.error_message) == 200
+
+
+class TestMarkRevising:
+    def test_revision_pending_to_revising(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.REVISION_PENDING)
+        post.mark_revising()
+        assert post.status == PostStatus.REVISING
+
+    def test_non_revision_pending_raises(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.PUBLISHED)
+        with pytest.raises(InvalidStatusTransitionError):
+            post.mark_revising()
+
+
+class TestMarkRevised:
+    def test_revising_to_published(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.REVISING)
+        post.mark_revised("https://blog.tistory.com/123")
+        assert post.status == PostStatus.PUBLISHED
+        assert post.published_url == "https://blog.tistory.com/123"
+        assert isinstance(post.published_at, datetime)
+
+    def test_non_revising_raises(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.PUBLISHED)
+        with pytest.raises(InvalidStatusTransitionError):
+            post.mark_revised("https://blog.tistory.com/123")
+
+
+class TestResetRevisingToRevisionPending:
+    def test_revising_to_revision_pending(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.REVISING)
+        post.reset_revising_to_revision_pending()
+        assert post.status == PostStatus.REVISION_PENDING
+        assert "자동 복구" in post.error_message
+
+    def test_non_revising_does_nothing(self):
+        post = Post(row_index=1, keyword="test", status=PostStatus.FAILED)
+        post.reset_revising_to_revision_pending()
+        assert post.status == PostStatus.FAILED
+
+
+class TestIsRevisable:
+    def test_true_when_revision_pending_with_body_and_entry_id(self):
+        content = PostContent(title="제목", body_markdown="본문 있음")
+        post = Post(row_index=1, keyword="test", content=content,
+                    status=PostStatus.REVISION_PENDING, entry_id="123")
+        assert post.is_revisable() is True
+
+    def test_false_when_not_revision_pending(self):
+        content = PostContent(title="제목", body_markdown="본문")
+        post = Post(row_index=1, keyword="test", content=content,
+                    status=PostStatus.PUBLISHED, entry_id="123")
+        assert post.is_revisable() is False
+
+    def test_false_when_no_content(self):
+        post = Post(row_index=1, keyword="test",
+                    status=PostStatus.REVISION_PENDING, entry_id="123")
+        assert post.is_revisable() is False
+
+    def test_false_when_body_empty(self):
+        content = PostContent(title="제목", body_markdown="")
+        post = Post(row_index=1, keyword="test", content=content,
+                    status=PostStatus.REVISION_PENDING, entry_id="123")
+        assert post.is_revisable() is False
+
+    def test_false_when_no_entry_id(self):
+        content = PostContent(title="제목", body_markdown="본문 있음")
+        post = Post(row_index=1, keyword="test", content=content,
+                    status=PostStatus.REVISION_PENDING, entry_id="")
+        assert post.is_revisable() is False

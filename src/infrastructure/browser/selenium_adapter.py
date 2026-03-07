@@ -8,7 +8,7 @@ from src.domain.ports.browser_port import BrowserPort
 from src.domain.value_objects.credentials import Credentials
 from src.domain.value_objects.publish_result import PublishResult
 from src.infrastructure.browser.kakao_auth import kakao_login
-from src.infrastructure.browser.tistory_editor import publish_post
+from src.infrastructure.browser.tistory_editor import publish_post, update_post
 
 logger = logging.getLogger(__name__)
 
@@ -66,5 +66,12 @@ class SeleniumBrowserAdapter(BrowserPort):
         # 건별 딜레이 (봇 탐지 회피)
         delay = random.randint(self._min_delay, self._max_delay)
         logger.info(f"다음 발행까지 {delay}초 대기")
+        time.sleep(delay)
+        return result
+
+    def update(self, post: Post) -> PublishResult:
+        result = update_post(self._sb, post, self._credentials.tistory_blog)
+        delay = random.randint(self._min_delay, self._max_delay)
+        logger.info(f"다음 수정까지 {delay}초 대기")
         time.sleep(delay)
         return result

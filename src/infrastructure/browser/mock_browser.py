@@ -9,14 +9,19 @@ class MockBrowserAdapter(BrowserPort):
 
     def __init__(self, login_success: bool = True,
                  publish_url: str = "https://test.tistory.com/1",
-                 publish_error: str = ""):
+                 publish_error: str = "",
+                 update_url: str = "https://test.tistory.com/1",
+                 update_error: str = ""):
         self._login_success = login_success
         self._publish_url = publish_url
         self._publish_error = publish_error
+        self._update_url = update_url
+        self._update_error = update_error
         self.started = False
         self.stopped = False
         self.logged_in = False
         self.published_posts: list = []
+        self.updated_posts: list = []
 
     def start(self) -> None:
         self.started = True
@@ -33,3 +38,9 @@ class MockBrowserAdapter(BrowserPort):
         if self._publish_error:
             return PublishResult.fail(self._publish_error)
         return PublishResult.ok(self._publish_url)
+
+    def update(self, post: Post) -> PublishResult:
+        self.updated_posts.append(post)
+        if self._update_error:
+            return PublishResult.fail(self._update_error)
+        return PublishResult.ok(self._update_url)

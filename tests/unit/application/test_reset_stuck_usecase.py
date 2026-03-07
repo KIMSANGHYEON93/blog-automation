@@ -108,3 +108,64 @@ class TestRetryFailed:
 
         assert count == 0
         assert repo.all()[0].status == PostStatus.FAILED  # 그대로
+
+
+class TestResetRevisingStuck:
+    """수정중 고스트 포스트 복구 테스트."""
+
+    def test_수정중_1건_복구(self):
+        stuck = Post(
+            row_index=1,
+            keyword="AD란",
+            status=PostStatus.REVISING,
+            content=PostContent(title="제목", body_markdown="내용"),
+            entry_id="100",
+        )
+        repo = InMemoryPostRepository([stuck])
+        use_case = ResetStuckPostsUseCase(repo=repo)
+
+        count = use_case.execute()
+
+        assert count == 1
+        recovered = repo.all()[0]
+        assert recovered.status == PostStatus.REVISION_PENDING
+        assert "자동 복구" in recovered.error_message
+
+    def test_수정중_여러건_복구(self):
+        posts = [
+            Post(row_index=1, keyword="AD란", status=PostStatus.REVISING,
+                 content=PostContent(title="제목1", body_markdown="내용1"),
+                 entry_id="100"),
+            Post(row_index=2, keyword="SSO란", status=PostStatus.REVISING,
+                 content=PostContent(title="제목2", body_markdown="내용2"),
+                 entry_id="101"),
+            Post(row_index=3, keyword="SAML이란", status=PostStatus.REVISION_PENDING,
+                 content=PostContent(title="제목3", body_markdown="내용3"),
+                 entry_id="102"),
+        ]
+        repo = InMemoryPostRepository(posts)
+        use_case = ResetStuckPostsUseCase(repo=repo)
+
+        count = use_case.execute()
+
+        assert count == 2
+        assert repo.all()[0].status == PostStatus.REVISION_PENDING
+        assert repo.all()[1].status == PostStatus.REVISION_PENDING
+        assert repo.all()[2].status == PostStatus.REVISION_PENDING  # 원래 그대로
+
+    def test_publishing_and_revising_동시_복구(self):
+        posts = [
+            Post(row_index=1, keyword="발행중", status=PostStatus.PUBLISHING,
+                 content=PostContent(title="제목", body_markdown="내용")),
+            Post(row_index=2, keyword="수정중", status=PostStatus.REVISING,
+                 content=PostContent(title="제목", body_markdown="내용"),
+                 entry_id="200"),
+        ]
+        repo = InMemoryPostRepository(posts)
+        use_case = ResetStuckPostsUseCase(repo=repo)
+
+        count = use_case.execute()
+
+        assert count == 2
+        assert repo.all()[0].status == PostStatus.PENDING
+        assert repo.all()[1].status == PostStatus.REVISION_PENDING

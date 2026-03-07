@@ -350,6 +350,100 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         return PublishResult.fail(str(e))
 
 
+def update_post(sb, post: Post, blog_name: str) -> PublishResult:
+    """기존 발행 글 수정. entry_id를 사용하여 Tistory API로 업데이트."""
+    try:
+        if not post.entry_id:
+            return PublishResult.fail("entry_id 없음 — 수정 불가")
+        if post.content is None or not post.content.body_markdown:
+            return PublishResult.fail("포스트 콘텐츠가 없음")
+
+        content = post.content
+        body_markdown: str = content.body_markdown or ""
+
+        # 에디터 페이지 열기 (API 컨텍스트 확보용)
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            sb.set_window_size(1920, 1080)
+
+        write_url = f"https://{blog_name}.tistory.com{EDITOR_PATH}"
+        fresh_url = f"{write_url}?_t={int(time.time())}{_rnd.randint(0, 999)}"
+        sb.open(fresh_url)
+        time.sleep(5)
+
+        # MD→HTML 변환 (publish_post와 동일 파이프라인)
+        html_body = convert_markdown_to_html(body_markdown)
+        html_body = _add_lazy_loading(html_body)
+        html_body = _add_nofollow_to_external_links(html_body, blog_name)
+
+        # 내부 링크 자동 삽입
+        internal_link_map = getattr(post, '_internal_link_map', None)
+        if internal_link_map:
+            from src.infrastructure.seo.internal_linker import (
+                inject_internal_links,
+            )
+
+            class _LinkPost:
+                def __init__(self, kw, url):
+                    self.keyword = kw
+                    self.published_url = url
+
+            link_posts = [
+                _LinkPost(kw, url) for kw, url in internal_link_map.items()
+            ]
+            keywords = content.internal_keyword_list()
+            html_body = inject_internal_links(html_body, keywords, link_posts)
+
+        # FAQ LD+JSON 스키마 주입
+        faq_ld_json = content.faq_ld_json() if hasattr(content, 'faq_ld_json') else ""
+        if faq_ld_json:
+            html_body = _append_faq_schema(html_body, faq_ld_json)
+
+        # 반응형 + 성능 최적화
+        html_body = optimize_html(html_body)
+
+        # API 호출로 수정 (entry_id 전달)
+        title = content.title_or_fallback(post.keyword)
+        tags = ",".join(content.tag_list()) if content.tags else ""
+        thumbnail_url = content.thumbnail_url if content.thumbnail_url else ""
+        if not thumbnail_url:
+            thumbnail_url = _extract_first_image_url(html_body)
+        category_id = _resolve_category_id(post.category)
+
+        api_result = _call_tistory_post_api(
+            sb, blog_name, title, html_body, tags, thumbnail_url,
+            category_id, entry_id=post.entry_id,
+        )
+        if not api_result:
+            return PublishResult.fail("API 수정 실패")
+
+        published_url, entry_id = api_result
+        logger.info(f"API 수정 완료: {post.keyword} → {published_url} (id={entry_id})")
+
+        # 공개 상태 검증
+        http_code = _verify_published_url(published_url)
+        if http_code == 200:
+            logger.info(f"공개 검증 성공 (200): {published_url}")
+            return PublishResult.ok(published_url, entry_id=entry_id)
+
+        if http_code in (403, 404):
+            logger.warning(f"수정 URL 비공개 감지 ({http_code}): {published_url}")
+            fixed = _fix_post_visibility(sb, blog_name, published_url)
+            if fixed:
+                recheck = _verify_published_url(published_url)
+                if recheck == 200:
+                    return PublishResult.ok(published_url, entry_id=entry_id)
+            return PublishResult.ok(published_url, entry_id=entry_id)
+
+        logger.warning(f"수정 URL 검증 코드 {http_code}: {published_url}")
+        return PublishResult.ok(published_url, entry_id=entry_id)
+
+    except Exception as e:
+        logger.error(f"수정 실패: {post.keyword} — {e}")
+        return PublishResult.fail(str(e))
+
+
 def _publish_via_api(
     sb, blog_name: str, content, html_body: str, post: Post,
 ) -> tuple[str, str] | None:
@@ -388,9 +482,12 @@ def _publish_via_api(
 def _call_tistory_post_api(
     sb, blog_name: str, title: str, html_body: str, tags: str,
     thumbnail_url: str = "", category_id: str = "0",
-    content_type: str = "",
+    content_type: str = "", entry_id: str = "0",
 ) -> tuple[str, str] | None:
-    """POST /manage/post.json API 호출. 성공 시 (entryUrl, entryId) 반환."""
+    """POST /manage/post.json API 호출. 성공 시 (entryUrl, entryId) 반환.
+
+    entry_id='0'이면 신규 생성, entry_id=<postId>이면 기존 글 수정.
+    """
     import json as json_mod
 
     try:
@@ -402,6 +499,7 @@ def _call_tistory_post_api(
             var thumbnailUrl = arguments[4] || '';
             var categoryId = arguments[5] || '0';
             var contentType = arguments[6] || '';
+            var entryId = arguments[7] || '0';
 
             var manageUrl = '';
             if (window.appInfo && window.appInfo.manageUrl) {
@@ -417,7 +515,7 @@ def _call_tistory_post_api(
 
             var catNum = parseInt(categoryId, 10) || 0;
             var postData = {
-                id: '0',
+                id: entryId,
                 title: title,
                 content: content,
                 slogan: '',
@@ -475,7 +573,8 @@ def _call_tistory_post_api(
             }
 
             return JSON.stringify(result);
-        """, title, html_body, tags, blog_name, thumbnail_url, category_id, content_type)
+        """, title, html_body, tags, blog_name, thumbnail_url, category_id,
+            content_type, entry_id)
 
         logger.info(f"API 발행 결과: {result_json}")
 

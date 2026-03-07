@@ -61,3 +61,40 @@ class Post:
             and self.content is not None
             and self.content.has_body()
         )
+
+    def mark_revision_pending(self, reason: str = "") -> None:
+        """PUBLISHED → REVISION_PENDING. reason을 error_message에 저장."""
+        if self.status != PostStatus.PUBLISHED:
+            raise InvalidStatusTransitionError(self.status, PostStatus.REVISION_PENDING)
+        self.status = PostStatus.REVISION_PENDING
+        self.error_message = reason[:200] if reason else ""
+
+    def mark_revising(self) -> None:
+        """REVISION_PENDING → REVISING."""
+        if self.status != PostStatus.REVISION_PENDING:
+            raise InvalidStatusTransitionError(self.status, PostStatus.REVISING)
+        self.status = PostStatus.REVISING
+
+    def mark_revised(self, url: str) -> None:
+        """REVISING → PUBLISHED with updated timestamp."""
+        if self.status != PostStatus.REVISING:
+            raise InvalidStatusTransitionError(self.status, PostStatus.PUBLISHED)
+        self.status = PostStatus.PUBLISHED
+        self.published_url = url
+        self.published_at = datetime.now()
+
+    def reset_revising_to_revision_pending(self) -> None:
+        """Ghost recovery: REVISING → REVISION_PENDING."""
+        if self.status != PostStatus.REVISING:
+            return
+        self.status = PostStatus.REVISION_PENDING
+        self.error_message = "이전 실행 중단으로 자동 복구됨"
+
+    def is_revisable(self) -> bool:
+        """True when REVISION_PENDING + content has body + entry_id exists."""
+        return (
+            self.status == PostStatus.REVISION_PENDING
+            and self.content is not None
+            and self.content.has_body()
+            and bool(self.entry_id)
+        )

@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from src.application.use_cases.check_cwv import CheckCwvUseCase
 from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
+from src.application.use_cases.revise_posts import RevisePostsUseCase
 from src.domain.value_objects.credentials import Credentials
 from src.infrastructure.browser.selenium_adapter import SeleniumBrowserAdapter
 from src.infrastructure.config import Config
@@ -28,6 +29,11 @@ def _parse_args() -> argparse.Namespace:
         "--publish-pages",
         action="store_true",
         help="AdSense 필수 페이지(소개, 개인정보처리방침, 문의) 발행",
+    )
+    parser.add_argument(
+        "--revise",
+        action="store_true",
+        help="수정대기 포스트를 기존 Tistory 글에 업데이트",
     )
     return parser.parse_args()
 
@@ -73,6 +79,45 @@ def _publish_pages(config: Config) -> None:
         browser.stop()
 
 
+def _revise(config: Config) -> None:
+    """수정대기 포스트를 기존 Tistory 글에 업데이트하는 워크플로우."""
+    config.validate()
+
+    repo = GoogleSheetsPostRepository(
+        creds_path=config.google_creds,
+        sheet_name=config.sheet_name,
+    )
+    credentials = Credentials(
+        kakao_id=config.kakao_id,
+        kakao_pw=config.kakao_pw,
+        tistory_blog=config.tistory_blog,
+    )
+    browser = SeleniumBrowserAdapter(
+        credentials=credentials,
+        headless=config.headless,
+        min_delay=config.min_delay,
+        max_delay=config.max_delay,
+        user_data_dir=".browser_data",
+    )
+
+    # Step 1: 고스트 복구 (PUBLISHING + REVISING 모두 복구)
+    reset_count = ResetStuckPostsUseCase(repo=repo).execute()
+    if reset_count > 0:
+        logger.warning(f"고스트 복구 완료: {reset_count}건")
+
+    # Step 2: 수정
+    stats = RevisePostsUseCase(
+        repo=repo,
+        browser=browser,
+        max_posts=config.max_posts,
+    ).execute()
+
+    logger.info(
+        f"수정 완료 — 수정: {stats.revised}, "
+        f"실패: {stats.failed}, 건너뜀: {stats.skipped}"
+    )
+
+
 def main() -> None:
     # 환경 변수 로드
     load_dotenv()
@@ -83,6 +128,10 @@ def main() -> None:
 
     if args.publish_pages:
         _publish_pages(config)
+        return
+
+    if args.revise:
+        _revise(config)
         return
 
     # --- 기존 파이프라인 (변경 없음) ---

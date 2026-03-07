@@ -21,6 +21,16 @@ class ResetStuckPostsUseCase:
             count += 1
             logger.warning(f"고스트 복구: row={post.row_index}, keyword={post.keyword}")
 
+        # 수정중 고스트 복구 (REVISING → REVISION_PENDING)
+        revising_stuck = self._repo.find_revising_stuck()
+        for post in revising_stuck:
+            post.reset_revising_to_revision_pending()
+            self._repo.save(post)
+            count += 1
+            logger.warning(
+                f"수정중 고스트 복구: row={post.row_index}, keyword={post.keyword}"
+            )
+
         # 실패 포스트 재시도 (옵트인)
         if self._retry_failed:
             failed_posts = self._repo.find_failed()

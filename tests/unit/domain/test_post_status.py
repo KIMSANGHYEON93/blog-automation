@@ -5,10 +5,10 @@ from src.domain.value_objects.post_status import PostStatus
 
 
 class TestPostStatus:
-    """PostStatus Enum should have exactly 7 states."""
+    """PostStatus Enum should have exactly 9 states."""
 
-    def test_has_seven_states(self):
-        assert len(PostStatus) == 7
+    def test_has_nine_states(self):
+        assert len(PostStatus) == 9
 
     def test_waiting_state(self):
         assert PostStatus.WAITING.value == "대기"
@@ -33,6 +33,18 @@ class TestPostStatus:
 
     def test_from_string_valid(self):
         assert PostStatus.from_string("발행대기") == PostStatus.PENDING
+
+    def test_revision_pending_state(self):
+        assert PostStatus.REVISION_PENDING.value == "수정대기"
+
+    def test_revising_state(self):
+        assert PostStatus.REVISING.value == "수정중"
+
+    def test_from_string_revision_pending(self):
+        assert PostStatus.from_string("수정대기") == PostStatus.REVISION_PENDING
+
+    def test_from_string_revising(self):
+        assert PostStatus.from_string("수정중") == PostStatus.REVISING
 
     def test_from_string_invalid_raises(self):
         with pytest.raises(ValueError):

@@ -205,6 +205,10 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         with contextlib.suppress(Exception):
             sb.set_window_size(1920, 1080)
 
+        # async script timeout 확장 (Fetch API 호출 대기용, 기본 30초 → 120초)
+        with contextlib.suppress(Exception):
+            sb.driver.set_script_timeout(120)
+
         # 에디터 페이지 열기 (같은 URL 재방문 시 강제 리로드)
         write_url = f"https://{blog_name}.tistory.com{EDITOR_PATH}"
         fresh_url = f"{write_url}?_t={int(time.time())}{_rnd.randint(0, 999)}"
@@ -233,7 +237,7 @@ def publish_post(sb, post: Post, blog_name: str) -> PublishResult:
         html_body = _add_nofollow_to_external_links(html_body, blog_name)
 
         # 내부 링크 자동 삽입 (published 매핑이 있으면)
-        internal_link_map = getattr(post, '_internal_link_map', None)
+        internal_link_map = post.internal_link_map
         if internal_link_map:
             from src.infrastructure.seo.internal_linker import (
                 inject_internal_links,
@@ -367,6 +371,10 @@ def update_post(sb, post: Post, blog_name: str) -> PublishResult:
         with contextlib.suppress(Exception):
             sb.set_window_size(1920, 1080)
 
+        # async script timeout 확장 (Fetch API 호출 대기용, 기본 30초 → 120초)
+        with contextlib.suppress(Exception):
+            sb.driver.set_script_timeout(120)
+
         write_url = f"https://{blog_name}.tistory.com{EDITOR_PATH}"
         fresh_url = f"{write_url}?_t={int(time.time())}{_rnd.randint(0, 999)}"
         sb.open(fresh_url)
@@ -378,7 +386,7 @@ def update_post(sb, post: Post, blog_name: str) -> PublishResult:
         html_body = _add_nofollow_to_external_links(html_body, blog_name)
 
         # 내부 링크 자동 삽입
-        internal_link_map = getattr(post, '_internal_link_map', None)
+        internal_link_map = post.internal_link_map
         if internal_link_map:
             from src.infrastructure.seo.internal_linker import (
                 inject_internal_links,
@@ -491,7 +499,8 @@ def _call_tistory_post_api(
     import json as json_mod
 
     try:
-        result_json = sb.execute_script("""
+        result_json = sb.driver.execute_async_script("""
+            var callback = arguments[arguments.length - 1];
             var title = arguments[0];
             var content = arguments[1];
             var tags = arguments[2];
@@ -538,41 +547,49 @@ def _call_tistory_post_api(
             };
 
             var url = manageUrl + '/post.json';
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', url, false);
-            xhr.setRequestHeader('Content-Type',
-                'application/json; charset=UTF-8');
-            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
 
-            try {
-                xhr.send(JSON.stringify(postData));
-            } catch(e) {
-                return JSON.stringify({
-                    success: false, error: 'send:' + e.message
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(postData),
+                credentials: 'include'
+            })
+            .then(function(resp) {
+                return resp.text().then(function(text) {
+                    return { status: resp.status, text: text };
                 });
-            }
+            })
+            .then(function(r) {
+                var result = {
+                    status: r.status,
+                    response: r.text.substring(0, 2000),
+                    url: url
+                };
 
-            var result = {
-                status: xhr.status,
-                response: xhr.responseText.substring(0, 2000),
-                url: url
-            };
-
-            if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                    var data = JSON.parse(xhr.responseText);
-                    result.success = true;
-                    result.entryUrl = data.entryUrl || data.url || null;
-                    result.entryId = data.entryId || data.id || null;
-                } catch(e) {
-                    result.success = true;
-                    result.parseError = e.message;
+                if (r.status >= 200 && r.status < 300) {
+                    try {
+                        var data = JSON.parse(r.text);
+                        result.success = true;
+                        result.entryUrl = data.entryUrl || data.url || null;
+                        result.entryId = data.entryId || data.id || null;
+                    } catch(e) {
+                        result.success = true;
+                        result.parseError = e.message;
+                    }
+                } else {
+                    result.success = false;
                 }
-            } else {
-                result.success = false;
-            }
 
-            return JSON.stringify(result);
+                callback(JSON.stringify(result));
+            })
+            .catch(function(e) {
+                callback(JSON.stringify({
+                    success: false, error: 'fetch:' + e.message
+                }));
+            });
         """, title, html_body, tags, blog_name, thumbnail_url, category_id,
             content_type, entry_id)
 
@@ -1640,8 +1657,9 @@ def _fix_post_visibility(sb, blog_name: str, published_url: str) -> bool:
     logger.info(f"비공개→공개 복구 시도: post_id={post_id}")
 
     try:
-        result_json = sb.execute_script(
+        result_json = sb.driver.execute_async_script(
             """
+            var callback = arguments[arguments.length - 1];
             var postId = arguments[0];
             var blogName = arguments[1];
 
@@ -1653,11 +1671,6 @@ def _fix_post_visibility(sb, blog_name: str, published_url: str) -> bool:
             }
 
             var url = manageUrl + '/post.json';
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', url, false);
-            xhr.setRequestHeader('Content-Type',
-                'application/json; charset=UTF-8');
-            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
 
             // 최소 수정 요청: ID + visibility만 전송
             var payload = {
@@ -1666,16 +1679,31 @@ def _fix_post_visibility(sb, blog_name: str, published_url: str) -> bool:
                 published: '1'
             };
 
-            try {
-                xhr.send(JSON.stringify(payload));
-            } catch(e) {
-                return JSON.stringify({success: false, error: e.message});
-            }
-
-            return JSON.stringify({
-                success: xhr.status >= 200 && xhr.status < 300,
-                status: xhr.status,
-                response: xhr.responseText.substring(0, 500)
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(payload),
+                credentials: 'include'
+            })
+            .then(function(resp) {
+                return resp.text().then(function(text) {
+                    return { status: resp.status, text: text };
+                });
+            })
+            .then(function(r) {
+                callback(JSON.stringify({
+                    success: r.status >= 200 && r.status < 300,
+                    status: r.status,
+                    response: r.text.substring(0, 500)
+                }));
+            })
+            .catch(function(e) {
+                callback(JSON.stringify({
+                    success: false, error: 'fetch:' + e.message
+                }));
             });
         """,
             post_id,

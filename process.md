@@ -10,8 +10,8 @@
 | 항목 | 값 |
 |------|---|
 | **현재 Phase** | **Phase 7 진행 중** |
-| **단위 테스트** | 201건 통과 |
-| **Tistory 실발행** | 47건 성공 (최신: CORS 에러 원인과 해결 방법 → /226) |
+| **단위 테스트** | 246건 통과 |
+| **Tistory 실발행** | 51건 성공 + 수정 재발행 진행 중 (39건 미색인 → 수정대기 → 재발행) |
 | **ruff** | 0 errors |
 | **콘텐츠 생성 모델** | Gemini 2.0 Flash (Phase 5.6에서 LLM_PROVIDER 추상화, `.env`로 전환 가능) |
 
@@ -1232,7 +1232,7 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 7.0b | Tistory sitemap.xml 확인 | ✅ 완료 | 498 URL, /220~/225 포함 확인. GSC 수동 제출 필요 |
 | 7.0c | 기 발행 39건 중 색인 현황 확인 | 🔲 | GSC URL 검사 |
 
-### 2026-03-06: 로그 시스템 정상화 + 발행 테스트
+### 2026-03-06: 로그 정상화 + 내부 링크 + 발행
 
 | # | 항목 | 상태 | 비고 |
 |---|------|------|------|
@@ -1240,6 +1240,65 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 7.0e | 허브-스포크 내부 링크 서비스 도입 | ✅ 완료 | InternalLinkService + 단위 테스트 20건 추가 (총 201건) |
 | 7.0f | Pipeline B 발행 테스트 | ✅ 완료 | 발행 대기 0건 정상 종료, `logs/blog-publisher.log` 생성 확인 |
 | 7.0g | CWV 점검 | ⚠️ 실패 | PageSpeed API 429 rate limit — 시간 경과 후 재시도 필요 |
+| 7.0h | 신규 키워드 10건 시트 등록 (Row 48~57) | ✅ 완료 | SSO, Vault vs AWS SM, GraphQL, K8s HPA, EKS/GKE/AKS, OOM Killer, Serverless, RabbitMQ, Helm, Docker vs Podman |
+| 7.0i | Pipeline A 수동 실행 (콘텐츠 생성) | ✅ 완료 | 10건 생성 → "발행대기" 전환 (cron DNS 에러로 미실행되어 수동 트리거) |
+| 7.0j | Pipeline B 발행 (4/10) | ✅ 완료 | /231~/234 발행 성공 (총 51건), SSO 글 script timeout 실패 (FAILED → 재시도 필요), 나머지 5건 다음 실행 |
+
+### 2026-03-07: XHR 타임아웃 수정 + GSC 색인 자동화 + 미색인 재발행
+
+| # | 항목 | 상태 | 비고 |
+|---|------|------|------|
+| 7.1a | `_call_tistory_post_api()` 동기 XHR → Fetch API 전환 | ✅ 완료 | `execute_async_script` + `fetch()` + `credentials: 'include'` |
+| 7.1b | `_fix_post_visibility()` 동기 XHR → Fetch API 전환 | ✅ 완료 | 동일 패턴 적용 |
+| 7.1c | `sb.execute_async_script` → `sb.driver.execute_async_script` | ✅ 완료 | SeleniumBase 다중 인자 호환성 수정 |
+| 7.1d | script timeout 120초 확장 | ✅ 완료 | `publish_post()`, `update_post()` 진입 시 설정 |
+| 7.1e | Docker n8n 1.76.1 → 2.10.4 업데이트 | ✅ 완료 | docker-compose.yml 반영, 실배포 미진행 |
+| 7.1f | `pyproject.toml`에 `google-api-python-client` 추가 | ✅ 완료 | GSC API 의존성 |
+| 7.1g | GSC URL Inspection API 클라이언트 | ✅ 완료 | `src/infrastructure/seo/indexing_checker.py` 신규 |
+| 7.1h | `CheckIndexingUseCase` 신규 | ✅ 완료 | 미색인 → REVISION_PENDING 전환, 6건 테스트 |
+| 7.1i | CLI `--check-index` 플래그 | ✅ 완료 | `src/interface/cli.py` |
+| 7.1j | `SEO_SETUP_GUIDE.md` GSC API 섹션 추가 | ✅ 완료 | 셋업 절차 + 동작 흐름 + API 제한 문서화 |
+| 7.1k | GSC API 셋업 (API 활성화 + 서비스 계정 권한) | ✅ 완료 | Search Console API 활성화 + 서비스 계정 전체 권한 |
+| 7.1l | `--check-index` 실행 — 29건 미색인 감지 | ✅ 완료 | 전부 "Discovered - currently not indexed" |
+| 7.1m | `entry_id` 일괄 복구 40건 | ✅ 완료 | published_url에서 추출 → 시트 저장 |
+| 7.1n | `--revise` 미색인 포스트 재발행 | 🔄 진행 중 | 39건 중 2건 완료 (/238, /239 공개 200) |
+
+#### 발견 및 해결한 버그 (3건)
+
+| # | 문제 | 원인 | 해결 |
+|---|------|------|------|
+| B1 | `script timeout` — `_call_tistory_post_api()` | 동기 XHR(`xhr.open('POST', url, false)`)이 Chrome 30초 script timeout 초과 | Fetch API + `execute_async_script` 전환 |
+| B2 | `execute_async_script() takes from 2 to 3 positional arguments but 10 were given` | SeleniumBase `BaseCase.execute_async_script()`가 다중 인자 미지원 | `sb.driver.execute_async_script()` WebDriver 직접 호출 |
+| B3 | fetch() 인증 쿠키 누락 가능성 | `fetch()` 기본 `credentials: 'same-origin'` — cross-origin 시 쿠키 미전송 | `credentials: 'include'` 명시 |
+
+#### 신규 파일
+
+| 파일 | 설명 |
+|------|------|
+| `src/infrastructure/seo/indexing_checker.py` | GSC URL Inspection API 클라이언트 |
+| `src/application/use_cases/check_indexing.py` | CheckIndexingUseCase — 미색인 감지 + 수정대기 전환 |
+| `tests/unit/application/test_check_indexing.py` | 6건 테스트 |
+
+#### 수정 파일
+
+| 파일 | 변경 |
+|------|------|
+| `src/infrastructure/browser/tistory_editor.py` | XHR→Fetch 전환 (2곳), `sb.driver.execute_async_script`, `credentials: 'include'`, script timeout 120초 |
+| `src/interface/cli.py` | `--check-index` 플래그 + `_check_index()` 워크플로우 + `CheckIndexingUseCase` import |
+| `docker-compose.yml` | n8n `1.76.1` → `2.10.4` |
+| `pyproject.toml` | `google-api-python-client>=2.0` 의존성 추가 |
+| `SEO_SETUP_GUIDE.md` | GSC API 자동화 섹션 + 체크리스트 업데이트 |
+
+#### 검증 결과
+
+| 항목 | 결과 |
+|------|------|
+| 단위 테스트 | **246 passed** (기존 240 + 신규 6) |
+| ruff | 0 errors |
+| GSC API 실연동 | 29건 점검 성공 (색인 0건, 미색인 29건) |
+| 실발행 (Fetch API) | 2건 수정 완료 (/238, /239 — HTTP 200 공개) |
+
+---
 
 ### 중기 목표
 
@@ -1376,3 +1435,9 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 2026-03-06 | 허브-스포크 InternalLinkService 도입 (Phase 6) | 카테고리만 보던 관련 글 선정 → 키워드 겹침 기반 스코어링 + 허브 글 우선순위로 내부 링크 품질 향상 |
 | 2026-03-06 | 로그 기본 경로 `/var/log` → `logs/` 변경 (Phase 6) | macOS에서 PermissionError로 파일 로그 미생성 → 프로젝트 내 `logs/` + cli.py에서 PROJECT_ROOT 절대 경로 |
 | 2026-03-06 | run_pipeline_b.sh PROJECT_DIR 경로 수정 (Phase 6) | `claudeagent/blog-automation` → `Core Web Vitals/blog-automation` — 실제 프로젝트 위치와 일치 |
+| 2026-03-07 | 동기 XHR → Fetch API + execute_async_script 전환 (Phase 7) | Chrome script timeout(30초) 초과로 `_call_tistory_post_api()` 실패 → fetch() 비동기 + `sb.driver.execute_async_script()` 콜백 패턴으로 전환, `credentials: 'include'` 추가 |
+| 2026-03-07 | Script timeout 120초 확장 (Phase 7) | `sb.driver.set_script_timeout(120)` — publish_post/update_post 진입 시 async script 타임아웃 확장 |
+| 2026-03-07 | `sb.execute_async_script` → `sb.driver.execute_async_script` (Phase 7) | SeleniumBase BaseCase의 `execute_async_script()`가 다중 인자 미지원 → WebDriver 직접 호출로 전환 |
+| 2026-03-07 | GSC URL Inspection API 자동화 도입 (Phase 7) | 발행완료 포스트의 색인 상태를 자동 점검, 미색인 시 REVISION_PENDING 전환 → `--check-index` CLI 플래그 |
+| 2026-03-07 | Docker n8n 1.76.1 → 2.10.4 업데이트 (Phase 7) | 메이저 업그레이드, docker compose pull 후 워크플로우 검증 필요 |
+| 2026-03-07 | entry_id 일괄 복구 40건 (Phase 7) | 비공개 발행 문제로 entry_id 미저장된 포스트 — published_url에서 추출하여 시트 복구 |

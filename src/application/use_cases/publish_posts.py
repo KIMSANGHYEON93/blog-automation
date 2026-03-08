@@ -84,7 +84,7 @@ class PublishPostsUseCase:
             "</div>"
         )
         post.content = replace(
-            post.content, body_markdown=post.content.body_markdown + html,
+            post.content, body_markdown=(post.content.body_markdown or "") + html,
         )
 
     def _attach_internal_link_map(
@@ -103,7 +103,7 @@ class PublishPostsUseCase:
             and p.row_index != post.row_index
         }
         if link_map:
-            post._internal_link_map = link_map  # noqa: SLF001
+            post.internal_link_map = link_map
 
     def _publish_single(self, post: Post, stats: PublishStats) -> None:
         if not post.is_publishable():

@@ -36,7 +36,7 @@ def optimize_html(html: str) -> str:
         if not img.get("decoding"):
             img["decoding"] = "async"
         if not img.get("width") and not img.get("height"):
-            existing_style = img.get("style", "")
+            existing_style = str(img.get("style", ""))
             if "max-width" not in existing_style:
                 new_style = "max-width:100%;height:auto"
                 if existing_style:
@@ -68,7 +68,7 @@ def _add_preconnect_hints(soup: BeautifulSoup) -> None:
     external_domains: set[str] = set()
 
     for link in soup.find_all("link", href=True):
-        href = link["href"]
+        href = str(link["href"])
         parsed = urlparse(href)
         if parsed.scheme in ("http", "https") and parsed.netloc:
             external_domains.add(f"{parsed.scheme}://{parsed.netloc}")
@@ -77,12 +77,12 @@ def _add_preconnect_hints(soup: BeautifulSoup) -> None:
     existing_preconnects: set[str] = set()
     for link in soup.find_all("link", rel="preconnect"):
         if link.get("href"):
-            existing_preconnects.add(link["href"])
+            existing_preconnects.add(str(link["href"]))
 
     existing_prefetch: set[str] = set()
     for link in soup.find_all("link", rel="dns-prefetch"):
         if link.get("href"):
-            existing_prefetch.add(link["href"])
+            existing_prefetch.add(str(link["href"]))
 
     head = soup.find("head")
     for domain in external_domains - existing_preconnects:
@@ -148,7 +148,7 @@ def validate_responsive(html: str) -> list[str]:
     # 3. 고정 width px 인라인 스타일 검증
     fixed_width_pattern = re.compile(r"width\s*:\s*\d+px")
     for tag in soup.find_all(style=True):
-        if fixed_width_pattern.search(tag["style"]):
+        if fixed_width_pattern.search(str(tag["style"])):
             issues.append(f"고정 width px 스타일 감지: {tag.name}")
 
     return issues

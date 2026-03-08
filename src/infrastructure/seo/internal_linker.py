@@ -108,8 +108,8 @@ def inject_internal_links(
         if kw_lower in used_keywords:
             continue
 
-        url = kw_to_url.get(kw)
-        if not url:
+        target_url = kw_to_url.get(kw)
+        if not target_url:
             continue
 
         pattern = re.compile(re.escape(kw), re.IGNORECASE)
@@ -117,7 +117,7 @@ def inject_internal_links(
             start, end = match.start(), match.end()
             if _is_in_replaceable_range(start, end, replaceable_ranges):
                 original = match.group()
-                link = f'<a href="{url}">{original}</a>'
+                link = f'<a href="{target_url}">{original}</a>'
                 replacements.append((start, end, original, link))
                 used_keywords.add(kw_lower)
                 break

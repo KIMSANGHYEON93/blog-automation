@@ -93,7 +93,7 @@ class RevisePostsUseCase:
             "</div>"
         )
         post.content = replace(
-            post.content, body_markdown=post.content.body_markdown + html,
+            post.content, body_markdown=(post.content.body_markdown or "") + html,
         )
 
     def _attach_internal_link_map(
@@ -108,7 +108,7 @@ class RevisePostsUseCase:
             and p.row_index != post.row_index
         }
         if link_map:
-            post._internal_link_map = link_map  # noqa: SLF001
+            post.internal_link_map = link_map
 
     def _revise_single(self, post: Post, stats: ReviseStats) -> None:
         if not post.is_revisable():

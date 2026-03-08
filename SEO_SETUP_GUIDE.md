@@ -138,13 +138,96 @@ Google Search Console 등록 후 진행합니다.
 
 ---
 
+## 5.7 GSC URL Inspection API 자동화 설정
+
+> **목적**: 발행 완료 포스트의 색인 상태를 자동 점검하고, 미색인 포스트를 수정대기로 전환하여 재발행
+
+### 사전 조건
+
+| 항목 | 상태 | 비고 |
+|------|------|------|
+| Google Cloud 프로젝트 | ✅ | `serene-essence-413408` |
+| 서비스 계정 | ✅ | `951086225000-compute@developer.gserviceaccount.com` |
+| credentials.json | ✅ | 프로젝트 루트에 위치 |
+| Search Console API | ✅ 활성화 필요 | GCP 콘솔에서 활성화 |
+| 서비스 계정 GSC 권한 | ✅ 추가 필요 | Search Console에서 사용자 추가 |
+
+### Step 1: Search Console API 활성화
+
+1. Google Cloud Console 접속
+2. API 및 서비스 → 라이브러리
+3. "Google Search Console API" 검색
+4. **사용** 클릭
+
+직접 링크: `https://console.cloud.google.com/apis/library/searchconsole.googleapis.com?project=serene-essence-413408`
+
+### Step 2: 서비스 계정에 GSC 속성 접근 권한 부여
+
+1. https://search.google.com/search-console 접속
+2. 속성 `https://kimsanghyeon.tistory.com/` 선택
+3. 좌측 메뉴 **설정** → **사용자 및 권한**
+4. **사용자 추가** 클릭
+5. 이메일: `951086225000-compute@developer.gserviceaccount.com`
+6. 권한: **전체** (URL Inspection API에 전체 권한 필요)
+
+### Step 3: 의존성 확인
+
+```bash
+pip install -e ".[dev]"
+# google-api-python-client >= 2.0 자동 설치됨
+```
+
+### Step 4: 색인 점검 실행
+
+```bash
+# 발행완료 포스트 색인 상태 일괄 점검
+python -m src.interface.cli --check-index
+```
+
+### 동작 흐름
+
+```
+발행완료(PUBLISHED) 포스트 조회
+    ↓
+GSC URL Inspection API 호출 (포스트별)
+    ↓
+색인됨 (verdict=PASS) → 상태 유지
+    ↓
+미색인 (verdict≠PASS) → 수정대기(REVISION_PENDING) 전환
+                         error_message에 사유 기록
+    ↓
+이후 --revise로 관련 기사 + 내부 링크 보강 후 재발행
+```
+
+### API 제한
+
+| 항목 | 값 |
+|------|-----|
+| 일일 요청 한도 | 2,000건/일/속성 |
+| 호출 간격 | 1초 (코드에서 자동 적용) |
+| 응답 verdict | `PASS` (색인됨), `NEUTRAL`/`FAIL` (미색인) |
+
+### coverage_state 주요 값
+
+| 상태 | 의미 | 대응 |
+|------|------|------|
+| Submitted and indexed | 색인 완료 | 정상 |
+| Crawled - currently not indexed | 크롤링됨, 색인 미생성 | 콘텐츠 보강 후 재발행 |
+| Discovered - currently not indexed | 발견됨, 크롤링 미수행 | 내부 링크 보강 후 재발행 |
+| Page with redirect | 리다이렉트 | URL 확인 |
+| Not found (404) | 페이지 없음 | URL/발행 상태 확인 |
+
+---
+
 ## 체크리스트
 
-- [ ] 비공개 글 → 공개 전환 (6건)
-- [ ] Google Search Console 등록 + 소유권 확인
-- [ ] Search Console에 sitemap.xml + rss 제출
+- [x] 비공개 글 → 공개 전환 (6건)
+- [x] Google Search Console 등록 + 소유권 확인
+- [x] Search Console에 sitemap.xml + rss 제출
 - [ ] GA4 속성 생성 + 추적 코드 삽입
-- [ ] 네이버 서치어드바이저 등록 + 소유 확인
-- [ ] 네이버에 사이트맵 + RSS 제출
+- [x] 네이버 서치어드바이저 등록 + 소유 확인
+- [x] 네이버에 사이트맵 + RSS 제출
 - [ ] 수동 색인 요청 5건
 - [ ] 발행대기 14건 → Pipeline B로 공개 발행 (태그 포함)
+- [x] GSC API 활성화 + 서비스 계정 권한 설정
+- [ ] `--check-index` 색인 점검 실행

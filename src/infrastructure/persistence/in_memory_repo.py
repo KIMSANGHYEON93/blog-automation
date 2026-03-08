@@ -58,6 +58,12 @@ class InMemoryPostRepository(PostRepository):
     def find_all(self) -> list[Post]:
         return list(self._posts)
 
+    def save_category(self, row_index: int, category: str) -> None:
+        for post in self._posts:
+            if post.row_index == row_index:
+                post.category = category
+                return
+
     def all(self) -> list[Post]:
         """테스트 검증용: 전체 포스트 반환."""
         return list(self._posts)

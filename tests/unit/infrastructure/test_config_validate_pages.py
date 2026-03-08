@@ -22,6 +22,7 @@ def _make_config(**overrides) -> Config:
         contact_email="test@example.com",
         owner_name="테스터",
         sitemap_output="sitemap.xml",
+        site_profile_path="site_profile.json",
     )
     defaults.update(overrides)
     return Config(**defaults)

@@ -17,6 +17,7 @@ class Config:
     contact_email: str
     owner_name: str
     sitemap_output: str
+    site_profile_path: str
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -33,6 +34,7 @@ class Config:
             contact_email=os.getenv("CONTACT_EMAIL", ""),
             owner_name=os.getenv("OWNER_NAME", ""),
             sitemap_output=os.getenv("SITEMAP_OUTPUT", "sitemap.xml"),
+            site_profile_path=os.getenv("SITE_PROFILE", "site_profile.json"),
         )
 
     def validate(self) -> None:

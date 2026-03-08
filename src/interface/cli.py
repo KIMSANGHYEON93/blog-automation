@@ -20,9 +20,11 @@ from src.application.use_cases.revise_posts import RevisePostsUseCase
 from src.application.use_cases.submit_indexing import SubmitIndexingUseCase
 from src.domain.value_objects.credentials import Credentials
 from src.infrastructure.browser.selenium_adapter import SeleniumBrowserAdapter
+from src.infrastructure.browser.tistory_editor import set_site_profile
 from src.infrastructure.config import Config
 from src.infrastructure.logging_setup import setup_logging
 from src.infrastructure.persistence.google_sheets_repo import GoogleSheetsPostRepository
+from src.infrastructure.persistence.json_site_profile import JsonSiteProfileAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,16 @@ def _parse_args() -> argparse.Namespace:
         "--discover-keywords",
         action="store_true",
         help="GSC 검색 데이터에서 키워드 자동 발굴",
+    )
+    parser.add_argument(
+        "--sync-categories",
+        action="store_true",
+        help="Tistory 카테고리와 site_profile.json 동기화 확인",
+    )
+    parser.add_argument(
+        "--auto-update",
+        action="store_true",
+        help="--sync-categories 시 site_profile.json 자동 갱신",
     )
     return parser.parse_args()
 
@@ -318,6 +330,77 @@ def _discover_keywords(config: Config) -> None:
         logger.error(f"키워드 발굴 실패: {result.error}")
 
 
+def _sync_categories(config: Config, *, auto_update: bool = False) -> None:
+    """Tistory 카테고리와 site_profile.json 동기화 확인."""
+    from src.application.use_cases.sync_categories import SyncCategoriesUseCase
+    from src.infrastructure.browser.category_sync_adapter import SeleniumCategorySyncAdapter
+
+    # 최소 검증: 로그인 정보만 필요
+    missing = []
+    if not config.kakao_id:
+        missing.append("KAKAO_ID")
+    if not config.kakao_pw:
+        missing.append("KAKAO_PW")
+    if not config.tistory_blog:
+        missing.append("TISTORY_BLOG")
+    if missing:
+        raise OSError(f"--sync-categories 필수 환경 변수 누락: {', '.join(missing)}")
+
+    profile_path = PROJECT_ROOT / config.site_profile_path
+    if not profile_path.exists():
+        logger.error(f"site_profile.json 미존재: {profile_path}")
+        return
+
+    profile_port = JsonSiteProfileAdapter(profile_path)
+
+    credentials = Credentials(
+        kakao_id=config.kakao_id,
+        kakao_pw=config.kakao_pw,
+        tistory_blog=config.tistory_blog,
+    )
+    browser = SeleniumBrowserAdapter(
+        credentials=credentials,
+        headless=config.headless,
+        user_data_dir=".browser_data",
+    )
+
+    browser.start()
+    try:
+        if not browser.login():
+            logger.error("로그인 실패 — 카테고리 동기화 중단")
+            return
+
+        sync_port = SeleniumCategorySyncAdapter(
+            sb=browser._sb,
+            blog_name=config.tistory_blog,
+        )
+        uc = SyncCategoriesUseCase(
+            profile_port=profile_port,
+            sync_port=sync_port,
+        )
+        result = uc.execute(auto_update=auto_update)
+
+        if result.synced:
+            logger.info("카테고리 동기화: 차이 없음")
+        else:
+            for diff in result.diffs:
+                if diff.diff_type == "new_remote":
+                    print(f"  [신규 원격] {diff.category_name} (ID={diff.remote_id})")
+                elif diff.diff_type == "missing_remote":
+                    print(f"  [누락 원격] {diff.category_name} (로컬 ID={diff.local_id})")
+                elif diff.diff_type == "id_mismatch":
+                    print(
+                        f"  [ID 불일치] {diff.category_name}: "
+                        f"로컬={diff.local_id} ↔ 원격={diff.remote_id}"
+                    )
+            logger.info(f"카테고리 동기화: {len(result.diffs)}건 차이 발견")
+
+        if result.updated:
+            logger.info("site_profile.json 자동 갱신 완료")
+    finally:
+        browser.stop()
+
+
 def main() -> None:
     # 환경 변수 로드
     load_dotenv()
@@ -325,6 +408,18 @@ def main() -> None:
 
     args = _parse_args()
     config = Config.from_env()
+
+    # SiteProfile 로드 + 주입
+    profile_path = PROJECT_ROOT / config.site_profile_path
+    if profile_path.exists():
+        try:
+            profile = JsonSiteProfileAdapter(profile_path).load()
+            set_site_profile(profile)
+            logger.info(f"SiteProfile 로드: {profile_path} ({len(profile.categories)}개 카테고리)")
+        except Exception as e:
+            logger.warning(f"SiteProfile 로드 실패 (기본값 사용): {e}")
+    else:
+        logger.debug(f"SiteProfile 미존재 (기본값 사용): {profile_path}")
 
     if args.publish_pages:
         _publish_pages(config)
@@ -354,6 +449,10 @@ def main() -> None:
         _discover_keywords(config)
         return
 
+    if args.sync_categories:
+        _sync_categories(config, auto_update=args.auto_update)
+        return
+
     # --- 기존 파이프라인 (변경 없음) ---
     config.validate()
     notifier = _build_notification()
@@ -381,6 +480,18 @@ def main() -> None:
     reset_count = ResetStuckPostsUseCase(repo=repo, retry_failed=retry_failed).execute()
     if reset_count > 0:
         logger.warning(f"고스트 복구 완료: {reset_count}건")
+
+    # Step 1.5: 카테고리 자동 분류 (카테고리 비어있는 PENDING 포스트 대상)
+    profile_path_cls = PROJECT_ROOT / config.site_profile_path
+    if profile_path_cls.exists():
+        from src.application.use_cases.classify_category import ClassifyCategoryUseCase
+
+        profile_port = JsonSiteProfileAdapter(profile_path_cls)
+        classify_result = ClassifyCategoryUseCase(
+            repo=repo, profile_port=profile_port,
+        ).execute()
+        if classify_result.classified > 0:
+            logger.info(f"카테고리 자동 분류: {classify_result.classified}건")
 
     # Step 2: 발행
     stats = PublishPostsUseCase(

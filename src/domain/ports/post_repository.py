@@ -59,3 +59,8 @@ class PostRepository(ABC):
     def find_all(self) -> list[Post]:
         """전체 포스트 조회 (상태 대시보드용)."""
         ...
+
+    @abstractmethod
+    def save_category(self, row_index: int, category: str) -> None:
+        """카테고리 값을 저장."""
+        ...

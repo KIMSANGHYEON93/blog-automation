@@ -199,3 +199,7 @@ class GoogleSheetsPostRepository(PostRepository):
         ]
         self._sheet.update_cells(cells)
         logger.debug(f"CWV 기록: row={row_index}, LCP={lcp:.2f}, CLS={cls_score:.3f}")
+
+    def save_category(self, row_index: int, category: str) -> None:
+        self._sheet.update_cell(row_index, COL["category"], category)
+        logger.debug(f"카테고리 저장: row={row_index}, category={category}")

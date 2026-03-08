@@ -18,6 +18,7 @@ import markdown as md_lib
 from src.domain.entities.post import Post
 from src.domain.exceptions import DailyPublishLimitError
 from src.domain.value_objects.publish_result import PublishResult
+from src.domain.value_objects.site_profile import CategoryMapping, SiteProfile
 from src.infrastructure.browser.dom_selectors import (
     CONTENT_AREA_SELECTORS,
     EDITOR_PATH,
@@ -36,30 +37,37 @@ logger = logging.getLogger(__name__)
 
 _DAILY_LIMIT_PATTERN = "최대 15개까지"
 
-# Tistory 카테고리 이름 → ID 매핑 (관리자 페이지에서 확인)
-CATEGORY_MAP: dict[str, str] = {
-    "용어": "991463",        # 배운것/용어정리
-    "비교": "966384",        # 배운것
-    "에러": "966384",        # 배운것
-    "트러블슈팅": "966384",  # 배운것
-    "가이드": "966384",      # 배운것
-    "트렌드": "966384",      # 배운것
-}
+# 모듈 수준 SiteProfile — set_site_profile()로 주입, 미설정 시 하위 호환 기본값 사용
+_site_profile: SiteProfile | None = None
+
+_DEFAULT_PROFILE = SiteProfile(
+    blog_niche="B2B IT 블로그",
+    default_category_id="0",
+    categories=(
+        CategoryMapping(name="용어", tistory_id="991463"),
+        CategoryMapping(name="비교", tistory_id="966384"),
+        CategoryMapping(name="에러", tistory_id="966384"),
+        CategoryMapping(name="트러블슈팅", tistory_id="966384"),
+        CategoryMapping(name="가이드", tistory_id="966384"),
+        CategoryMapping(name="트렌드", tistory_id="966384"),
+    ),
+)
+
+
+def set_site_profile(profile: SiteProfile) -> None:
+    """SiteProfile 주입. CLI에서 호출."""
+    global _site_profile  # noqa: PLW0603
+    _site_profile = profile
+
+
+def _get_profile() -> SiteProfile:
+    """현재 SiteProfile 반환. 미설정 시 하위 호환 기본값."""
+    return _site_profile if _site_profile is not None else _DEFAULT_PROFILE
 
 
 def _resolve_category_id(category_name: str) -> str:
-    """카테고리 이름을 Tistory 카테고리 ID로 변환. 매칭 실패 시 '0'(미분류)."""
-    if not category_name:
-        return "0"
-    name = category_name.strip()
-    if name in CATEGORY_MAP:
-        return CATEGORY_MAP[name]
-    # 부분 매칭 시도
-    name_lower = name.lower()
-    for key, cid in CATEGORY_MAP.items():
-        if key.lower() in name_lower or name_lower in key.lower():
-            return cid
-    return "0"
+    """카테고리 이름을 Tistory 카테고리 ID로 변환."""
+    return _get_profile().resolve_category_id(category_name)
 
 
 def _extract_first_image_url(html: str) -> str:

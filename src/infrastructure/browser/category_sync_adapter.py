@@ -46,23 +46,29 @@ class SeleniumCategorySyncAdapter(CategorySyncPort):
 
     @staticmethod
     def _parse_categories(data: dict) -> list[RemoteCategory]:
-        """Tistory 카테고리 JSON 응답 파싱."""
+        """Tistory 카테고리 JSON 응답 파싱 (하위 카테고리 포함)."""
         results: list[RemoteCategory] = []
-        categories = data.get("categories", [])
 
-        for cat in categories:
-            name = cat.get("label", cat.get("name", ""))
-            cat_id = str(cat.get("id", ""))
-            parent = cat.get("parent", "")
-            count = int(cat.get("entryCount", cat.get("entries", 0)))
+        def _walk(cats: list[dict]) -> None:
+            for cat in cats:
+                name = cat.get("label", cat.get("name", ""))
+                cat_id = str(cat.get("id", ""))
+                parent = cat.get("parent", "")
+                count = int(cat.get("entryCount", cat.get("entries", 0)))
 
-            if name and cat_id:
-                results.append(RemoteCategory(
-                    name=name,
-                    category_id=cat_id,
-                    parent=str(parent) if parent else "",
-                    entry_count=count,
-                ))
+                if name and cat_id:
+                    results.append(RemoteCategory(
+                        name=name,
+                        category_id=cat_id,
+                        parent=str(parent) if parent else "",
+                        entry_count=count,
+                    ))
 
+                # 하위 카테고리 재귀 파싱
+                children = cat.get("children", [])
+                if children:
+                    _walk(children)
+
+        _walk(data.get("categories", []))
         logger.info(f"원격 카테고리 {len(results)}개 발견")
         return results

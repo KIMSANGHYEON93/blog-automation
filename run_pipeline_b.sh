@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-PROJECT_DIR="/Users/kimsanghyeon/Downloads/Core Web Vitals/blog-automation"
+PROJECT_DIR="/Users/kimsanghyeon/Documents/GitHub/Core Web Vitals/blog-automation"
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/pipeline_b_$(date +%Y%m%d_%H%M%S).log"
 PYTHON="/opt/homebrew/bin/python3"

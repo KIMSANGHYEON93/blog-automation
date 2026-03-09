@@ -1441,3 +1441,16 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 2026-03-07 | GSC URL Inspection API 자동화 도입 (Phase 7) | 발행완료 포스트의 색인 상태를 자동 점검, 미색인 시 REVISION_PENDING 전환 → `--check-index` CLI 플래그 |
 | 2026-03-07 | Docker n8n 1.76.1 → 2.10.4 업데이트 (Phase 7) | 메이저 업그레이드, docker compose pull 후 워크플로우 검증 필요 |
 | 2026-03-07 | entry_id 일괄 복구 40건 (Phase 7) | 비공개 발행 문제로 entry_id 미저장된 포스트 — published_url에서 추출하여 시트 복구 |
+| 2026-03-09 | site_profile.json 동적 카테고리 관리 (Phase 8) | 하드코딩 CATEGORY_MAP 제거 → JSON 외부 설정 파일로 전환, SiteProfile/CategoryMapping frozen VO, resolve_category_id() 4단계 매칭(정확→별칭→부분→default) |
+| 2026-03-09 | 키워드→카테고리 자동 분류 기능 (Phase 8) | 발행 파이프라인 Step 1.5에 ClassifyCategoryUseCase 통합, keyword_patterns 정규식으로 빈 카테고리 자동 분류 |
+| 2026-03-09 | Tistory 카테고리 동기화 CLI (Phase 8) | `--sync-categories` + `--auto-update` 플래그, /manage/category.json에서 원격 카테고리 fetch 후 site_profile.json과 비교/갱신 |
+| 2026-03-09 | 하위 카테고리 재귀 파싱 (Phase 8) | category_sync_adapter가 children 배열 재귀 탐색하여 Tistory 하위 카테고리(용어, 비교 등)도 동기화 대상에 포함 |
+| 2026-03-09 | 통합 테스트 6건 추가 (Phase 8) | 실제 site_profile.json 로드, Tistory 카테고리 sync, Google Sheets save_category 검증 |
+| 2026-03-09 | Pipeline B 자동 발행 5건 성공 (Phase 8) | Docker vs Podman 비교(/252), SSO란(/253), RabbitMQ 오류(/254), OOM Killer(/255), 서버리스란(/256) |
+| 2026-03-09 | PAGESPEED_API_KEY 등록 (Phase 8) | API key 미설정으로 CWV 429 rate limit → 키 등록하여 25,000건/일 쿼터 확보 |
+| 2026-03-09 | cron Pipeline B 경로 재수정 (Phase 8) | crontab + run_pipeline_b.sh 모두 현재 프로젝트 위치(Documents/GitHub/Core Web Vitals)로 통일 |
+| 2026-03-09 | 애드센스 승인 완료 (Phase 8) | Google AdSense 심사 통과 — 수익화 활성화 |
+| 2026-03-09 | 네이버 서치어드바이저 등록 완료 (Phase 8) | 네이버 검색 노출 등록 — 국내 검색 유입 채널 확보 |
+| 2026-03-09 | Google Analytics 4 설치 (Phase 5) | GA4 측정 ID G-4Y6XE181NC, Tistory 스킨 HTML에 gtag.js 삽입 |
+| 2026-03-09 | 성과 대시보드 생성 (Phase 5) | DASHBOARD.md — W1 KPI: 발행 18건, 카테고리 3종(용어7/비교6/에러5), 발행대기 0건 |
+| 2026-03-09 | Phase 5 완료 (Phase 5) | 운영 안정화 9/9 항목 전부 완료 — Phase 6~7 미완료 항목으로 전환 |

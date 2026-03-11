@@ -104,7 +104,7 @@ class TestResetFailedToPending:
 
 class TestIsPublishable:
     def test_true_when_pending_with_body(self):
-        content = PostContent(title="제목", body_markdown="본문 있음")
+        content = PostContent(title="제목", body_markdown="x" * 3000)
         post = Post(row_index=1, keyword="test", content=content, quality_score=80)
         assert post.is_publishable() is True
 
@@ -128,8 +128,20 @@ class TestIsPublishable:
         assert post.is_publishable() is False
 
     def test_true_when_quality_score_at_least_70(self):
-        content = PostContent(title="제목", body_markdown="본문 있음")
+        content = PostContent(title="제목", body_markdown="x" * 3000)
         post = Post(row_index=1, keyword="test", content=content, quality_score=70)
+        assert post.is_publishable() is True
+
+    def test_false_when_content_too_short(self):
+        short_body = "x" * 2999  # Just under 3000
+        content = PostContent(title="Title", body_markdown=short_body)
+        post = Post(row_index=1, keyword="test", content=content, quality_score=80)
+        assert post.is_publishable() is False
+
+    def test_true_when_content_sufficient_length(self):
+        long_body = "x" * 3000  # Exactly 3000
+        content = PostContent(title="Title", body_markdown=long_body)
+        post = Post(row_index=1, keyword="test", content=content, quality_score=80)
         assert post.is_publishable() is True
 
 

@@ -8,7 +8,7 @@ def _make_publishable_post(idx: int) -> Post:
     return Post(
         row_index=idx,
         keyword=f"keyword_{idx}",
-        content=PostContent(title=f"Title {idx}", body_markdown="Body content"),
+        content=PostContent(title=f"Title {idx}", body_markdown="x" * 3000),
         quality_score=80,
     )
 

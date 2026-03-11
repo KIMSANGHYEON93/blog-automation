@@ -15,7 +15,7 @@ def make_publishable_post(row_index: int = 1, keyword: str = "AD란"):
         row_index=row_index,
         keyword=keyword,
         status=PostStatus.PENDING,
-        content=PostContent(title="테스트 제목", body_markdown="## 내용\n본문"),
+        content=PostContent(title="테스트 제목", body_markdown="## 내용\n" + "x" * 3000),
         quality_score=80,
     )
 
@@ -214,7 +214,7 @@ class TestRelatedLinks:
             keyword="AD란",
             category="IT",
             status=PostStatus.PENDING,
-            content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+            content=PostContent(title="AD란", body_markdown="## AD\n" + "x" * 3000),
             quality_score=80,
         )
         pub1 = self._make_published_post(1, "SSO란", "IT", "https://test.tistory.com/1")
@@ -238,7 +238,7 @@ class TestRelatedLinks:
             keyword="AD란",
             category="IT",
             status=PostStatus.PENDING,
-            content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+            content=PostContent(title="AD란", body_markdown="## AD\n" + "x" * 3000),
             quality_score=80,
         )
         repo = InMemoryPostRepository([pending])
@@ -257,7 +257,7 @@ class TestRelatedLinks:
             keyword="AD란",
             category="IT",
             status=PostStatus.PENDING,
-            content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+            content=PostContent(title="AD란", body_markdown="## AD\n" + "x" * 3000),
             quality_score=80,
         )
         # row_index=1인 발행완료 글 (자기 자신과 같은 row)
@@ -301,7 +301,7 @@ class TestHubSpokeLinks:
             keyword="제로 트러스트란",
             category="보안",
             status=PostStatus.PENDING,
-            content=PostContent(title="제로 트러스트란", body_markdown="## 내용\n본문"),
+            content=PostContent(title="제로 트러스트란", body_markdown="## 내용\n" + "x" * 3000),
             internal_link_keywords=["SSO", "LDAP"],
             quality_score=80,
         )
@@ -333,7 +333,7 @@ class TestHubSpokeLinks:
             keyword="AD란",
             category="IT",
             status=PostStatus.PENDING,
-            content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+            content=PostContent(title="AD란", body_markdown="## AD\n" + "x" * 3000),
             internal_link_keywords=[],  # no keywords
             quality_score=80,
         )
@@ -357,7 +357,7 @@ class TestHubSpokeLinks:
             keyword="SSO 구축 가이드",
             category="보안",
             status=PostStatus.PENDING,
-            content=PostContent(title="SSO 구축", body_markdown="## SSO\n본문"),
+            content=PostContent(title="SSO 구축", body_markdown="## SSO\n" + "x" * 3000),
             internal_link_keywords=["LDAP", "OAuth", "SAML"],
             quality_score=80,
         )

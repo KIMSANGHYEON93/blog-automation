@@ -8,6 +8,8 @@ from src.domain.exceptions import InvalidStatusTransitionError
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
 
+MIN_CONTENT_LENGTH = 3000
+
 
 @dataclass
 class Post:
@@ -60,11 +62,12 @@ class Post:
         self.error_message = ""
 
     def is_publishable(self) -> bool:
-        """True only when PENDING + content has body + quality_score >= 70."""
+        """True only when PENDING + quality body + sufficient length + quality_score."""
         return (
             self.status == PostStatus.PENDING
             and self.content is not None
             and self.content.has_body()
+            and len(self.content.body_markdown or "") >= MIN_CONTENT_LENGTH
             and self.quality_score >= 70
         )
 

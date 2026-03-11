@@ -22,6 +22,7 @@ class Post:
     entry_id: str = ""
     internal_link_map: dict[str, str] | None = None
     internal_link_keywords: list[str] = field(default_factory=list)
+    quality_score: int = 0
     retry_count: int = 0
     next_retry_at: datetime | None = None
 
@@ -59,11 +60,12 @@ class Post:
         self.error_message = ""
 
     def is_publishable(self) -> bool:
-        """True only when PENDING + content has body."""
+        """True only when PENDING + content has body + quality_score >= 70."""
         return (
             self.status == PostStatus.PENDING
             and self.content is not None
             and self.content.has_body()
+            and self.quality_score >= 70
         )
 
     def mark_revision_pending(self, reason: str = "") -> None:

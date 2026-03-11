@@ -99,10 +99,12 @@ const isComplete = typeof result.is_complete === "boolean" ? result.is_complete 
 const isUseful = typeof result.is_useful === "boolean" ? result.is_useful : true;
 const qualityScore = typeof result.quality_score === "number" ? result.quality_score : 0;
 
+const MIN_QUALITY_SCORE = 70;
 const passed = result.is_accurate === true
   && result.is_logical === true
   && isComplete === true
-  && isUseful === true;
+  && isUseful === true
+  && qualityScore >= MIN_QUALITY_SCORE;
 
 return {
   json: {

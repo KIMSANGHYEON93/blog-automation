@@ -16,6 +16,7 @@ def make_publishable_post(row_index: int = 1, keyword: str = "AD란"):
         keyword=keyword,
         status=PostStatus.PENDING,
         content=PostContent(title="테스트 제목", body_markdown="## 내용\n본문"),
+        quality_score=80,
     )
 
 
@@ -214,6 +215,7 @@ class TestRelatedLinks:
             category="IT",
             status=PostStatus.PENDING,
             content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+            quality_score=80,
         )
         pub1 = self._make_published_post(1, "SSO란", "IT", "https://test.tistory.com/1")
         pub2 = self._make_published_post(2, "LDAP란", "IT", "https://test.tistory.com/2")
@@ -237,6 +239,7 @@ class TestRelatedLinks:
             category="IT",
             status=PostStatus.PENDING,
             content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+            quality_score=80,
         )
         repo = InMemoryPostRepository([pending])
         browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
@@ -255,6 +258,7 @@ class TestRelatedLinks:
             category="IT",
             status=PostStatus.PENDING,
             content=PostContent(title="AD란", body_markdown="## AD\n본문"),
+            quality_score=80,
         )
         # row_index=1인 발행완료 글 (자기 자신과 같은 row)
         pub_self = self._make_published_post(1, "AD란", "IT", "https://test.tistory.com/1")
@@ -299,6 +303,7 @@ class TestHubSpokeLinks:
             status=PostStatus.PENDING,
             content=PostContent(title="제로 트러스트란", body_markdown="## 내용\n본문"),
             internal_link_keywords=["SSO", "LDAP"],
+            quality_score=80,
         )
         # SSO란 is a hub: mentioned by multiple posts
         hub_sso = self._make_published_post(
@@ -330,6 +335,7 @@ class TestHubSpokeLinks:
             status=PostStatus.PENDING,
             content=PostContent(title="AD란", body_markdown="## AD\n본문"),
             internal_link_keywords=[],  # no keywords
+            quality_score=80,
         )
         same_cat = self._make_published_post(1, "SSO란", "IT", keywords=[])
         diff_cat = self._make_published_post(2, "Docker란", "DevOps", keywords=[])
@@ -353,6 +359,7 @@ class TestHubSpokeLinks:
             status=PostStatus.PENDING,
             content=PostContent(title="SSO 구축", body_markdown="## SSO\n본문"),
             internal_link_keywords=["LDAP", "OAuth", "SAML"],
+            quality_score=80,
         )
         high_overlap = self._make_published_post(
             1, "LDAP 인증", "보안", keywords=["LDAP", "OAuth", "SAML"],

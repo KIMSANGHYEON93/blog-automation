@@ -105,7 +105,7 @@ class TestResetFailedToPending:
 class TestIsPublishable:
     def test_true_when_pending_with_body(self):
         content = PostContent(title="제목", body_markdown="본문 있음")
-        post = Post(row_index=1, keyword="test", content=content)
+        post = Post(row_index=1, keyword="test", content=content, quality_score=80)
         assert post.is_publishable() is True
 
     def test_false_when_not_pending(self):
@@ -121,6 +121,16 @@ class TestIsPublishable:
         content = PostContent(title="제목", body_markdown="")
         post = Post(row_index=1, keyword="test", content=content)
         assert post.is_publishable() is False
+
+    def test_false_when_quality_score_below_70(self):
+        content = PostContent(title="제목", body_markdown="본문 있음")
+        post = Post(row_index=1, keyword="test", content=content, quality_score=50)
+        assert post.is_publishable() is False
+
+    def test_true_when_quality_score_at_least_70(self):
+        content = PostContent(title="제목", body_markdown="본문 있음")
+        post = Post(row_index=1, keyword="test", content=content, quality_score=70)
+        assert post.is_publishable() is True
 
 
 class TestMarkRevisionPending:

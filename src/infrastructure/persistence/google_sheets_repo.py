@@ -56,6 +56,17 @@ class GoogleSheetsPostRepository(PostRepository):
                 internal_link_keywords=get("internal_links"),
             )
 
+        # verified 컬럼(R열) JSON에서 quality_score 추출
+        quality_score = 0
+        raw_verified = get("verified")
+        if raw_verified:
+            try:
+                verified_data = json.loads(raw_verified)
+                if isinstance(verified_data, dict):
+                    quality_score = int(verified_data.get("quality_score", 0))
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+
         post = Post(
             row_index=row_index,
             keyword=get("keyword"),
@@ -65,6 +76,7 @@ class GoogleSheetsPostRepository(PostRepository):
             published_url=get("published_url"),
             error_message=get("error_msg"),
             entry_id=get("entry_id"),
+            quality_score=quality_score,
         )
 
         raw_links = get("internal_links")
@@ -203,3 +215,15 @@ class GoogleSheetsPostRepository(PostRepository):
     def save_category(self, row_index: int, category: str) -> None:
         self._sheet.update_cell(row_index, COL["category"], category)
         logger.debug(f"카테고리 저장: row={row_index}, category={category}")
+
+    def count_published_today(self) -> int:
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        all_rows = self._sheet.get_all_values()
+        count = 0
+        pub_at_col = COL["published_at"] - 1
+        for row in all_rows[self._header_row:]:
+            status_val = row[COL["status"] - 1] if len(row) >= COL["status"] else ""
+            pub_at_val = row[pub_at_col] if len(row) > pub_at_col else ""
+            if status_val == STATUS_PUBLISHED and pub_at_val.startswith(today_str):
+                count += 1
+        return count

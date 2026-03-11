@@ -1,4 +1,4 @@
-"""HTML 최적화 모듈 테스트 — 6건."""
+"""HTML 최적화 모듈 테스트 — 9건."""
 from __future__ import annotations
 
 from src.infrastructure.seo.html_optimizer import optimize_html, validate_responsive
@@ -50,6 +50,45 @@ class TestOptimizeHtml:
         result = optimize_html(html)
         assert 'name="viewport"' in result
         assert "width=device-width" in result
+
+
+    def test_figure_반응형_스타일_추가(self):
+        """<figure> 태그에 max-width:100% 반응형 스타일 추가."""
+        html = (
+            '<html><body>'
+            '<figure><img src="https://images.unsplash.com/photo-123"></figure>'
+            '</body></html>'
+        )
+        result = optimize_html(html)
+        assert "max-width:100%" in result
+        assert "margin-left:auto" in result
+        assert "margin-right:auto" in result
+
+    def test_figure_내부_img_fetchpriority(self):
+        """<figure> 안 첫 img는 LCP candidate로 fetchpriority='high'."""
+        html = (
+            '<html><body>'
+            '<figure><img src="https://images.unsplash.com/photo-123"></figure>'
+            '</body></html>'
+        )
+        result = optimize_html(html)
+        assert 'fetchpriority="high"' in result
+
+    def test_여러_unsplash_이미지_lazy_loading(self):
+        """첫 img 외 나머지는 loading='lazy'."""
+        html = (
+            '<html><body>'
+            '<figure><img src="https://images.unsplash.com/hero"'
+            ' fetchpriority="high" decoding="async"></figure>'
+            '<figure><img src="https://images.unsplash.com/section1"'
+            ' loading="lazy" decoding="async"></figure>'
+            '<figure><img src="https://images.unsplash.com/section2"'
+            ' loading="lazy" decoding="async"></figure>'
+            '</body></html>'
+        )
+        result = optimize_html(html)
+        assert 'fetchpriority="high"' in result
+        assert result.count('loading="lazy"') == 2
 
 
 class TestValidateResponsive:

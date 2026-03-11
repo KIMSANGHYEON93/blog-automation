@@ -70,8 +70,14 @@ if (imageMarkers.length > 0) {
   issues.push(`미처리 IMAGE 마커 ${imageMarkers.length}개 잔류`);
 }
 
-// 8. 이미지 개수 (정보 제공, 실패 아님)
+// 8. 이미지 개수 (마크다운 + HTML img 포함)
 const imageCount = (content.match(/!\[.*?\]\(.*?\)/g) || []).length;
+const htmlImageCount = (content.match(/<img\s/g) || []).length;
+
+// 8-1. image_injection 메타데이터에서 섹션/히어로 정보 추출
+const imageInjection = $input.item.json.image_injection || {};
+const sectionImages = imageInjection.section_images_injected || 0;
+const hasHeroImage = imageInjection.has_hero_image || false;
 
 // 9. Mermaid 마커 잔류 감지 (WARNING only — hard fail 아님)
 // [MERMAID] 잔류 > 0이면 inject_images.js가 렌더링 실패한 것
@@ -95,6 +101,9 @@ return {
       has_faq_section: hasFAQ,
       faq_count: faqSchema.length,
       image_count: imageCount,
+      html_image_count: htmlImageCount,
+      section_images: sectionImages,
+      has_hero_image: hasHeroImage,
       mermaid_residue: mermaidResidues.length,
       mermaid_warning: mermaidWarning,
       issues,

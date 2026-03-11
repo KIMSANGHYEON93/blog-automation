@@ -54,6 +54,15 @@ def optimize_html(html: str) -> str:
     # 4. viewport 메타 태그 주입
     _ensure_viewport(soup)
 
+    # 5. <figure> 반응형
+    for figure in soup.find_all("figure"):
+        existing_style = str(figure.get("style", ""))
+        if "max-width" not in existing_style:
+            new_style = "max-width:100%;margin-left:auto;margin-right:auto"
+            if existing_style:
+                new_style = existing_style.rstrip(";") + ";" + new_style
+            figure["style"] = new_style
+
     return str(soup)
 
 

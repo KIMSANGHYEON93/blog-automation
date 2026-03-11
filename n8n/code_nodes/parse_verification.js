@@ -2,7 +2,7 @@
  * Node 8: LLM 교차 검증 결과 파싱
  * Mode: runOnceForEachItem
  * 입력: 정규화된 LLM 응답 (text)
- * 출력: 검증 통과/실패 판정 (4항목 + quality_score)
+ * 출력: 검증 통과/실패 판정 (5항목 + quality_score)
  */
 
 const raw = $input.item.json.text;
@@ -97,6 +97,7 @@ if (typeof result.is_accurate !== "boolean" || typeof result.is_logical !== "boo
 // 신규 항목 기본값 (LLM이 누락하면 true로 간주 — 하위 호환)
 const isComplete = typeof result.is_complete === "boolean" ? result.is_complete : true;
 const isUseful = typeof result.is_useful === "boolean" ? result.is_useful : true;
+const isInDepth = typeof result.is_in_depth === "boolean" ? result.is_in_depth : true;
 const qualityScore = typeof result.quality_score === "number" ? result.quality_score : 0;
 
 const MIN_QUALITY_SCORE = 70;
@@ -104,6 +105,7 @@ const passed = result.is_accurate === true
   && result.is_logical === true
   && isComplete === true
   && isUseful === true
+  && isInDepth === true
   && qualityScore >= MIN_QUALITY_SCORE;
 
 return {
@@ -115,6 +117,7 @@ return {
       is_logical: result.is_logical,
       is_complete: isComplete,
       is_useful: isUseful,
+      is_in_depth: isInDepth,
       quality_score: qualityScore,
       reason: result.reason || "",
     }

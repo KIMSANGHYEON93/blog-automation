@@ -11,6 +11,12 @@ const promptType = $('Route Prompt (A/B/C)').item.json.prompt_type || 'A';
 
 const issues = [];
 
+// 0. Content length check
+const MIN_CONTENT_LENGTH = 3000;
+if (content.length < MIN_CONTENT_LENGTH) {
+  issues.push(`본문 길이 부족: ${content.length}자 (최소 ${MIN_CONTENT_LENGTH}자)`);
+}
+
 // 1. H2 헤딩 카운트
 const h2Matches = content.match(/^## /gm) || [];
 const h2Count = h2Matches.length;

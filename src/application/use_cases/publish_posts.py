@@ -1,12 +1,14 @@
 """PublishPostsUseCase — Orchestrates the blog post publishing workflow."""
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
+from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.domain.entities.post import Post
 from src.domain.exceptions import DailyPublishLimitError
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.post_repository import PostRepository
-from src.domain.services.internal_link_service import InternalLinkService
+from src.domain.services.publish_policy import PublishPolicy
+from src.domain.services.quota_manager import QuotaManager
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +21,21 @@ class PublishStats:
 
 
 class PublishPostsUseCase:
-    def __init__(self, repo: PostRepository, browser: BrowserPort,
-                 max_posts: int = 5):
+    def __init__(
+        self,
+        repo: PostRepository,
+        browser: BrowserPort,
+        enricher: InternalLinkEnricher,
+        policy: PublishPolicy,
+        quota: QuotaManager,
+        max_posts: int = 5,
+    ):
         self._repo = repo
         self._browser = browser
+        self._enricher = enricher
+        self._policy = policy
+        self._quota = quota
         self._max_posts = max_posts
-        self._link_service = InternalLinkService()
 
     def execute(self) -> PublishStats:
         stats = PublishStats()
@@ -34,8 +45,22 @@ class PublishPostsUseCase:
             logger.info("발행 대기 포스트 없음")
             return stats
 
+        # PublishPolicy로 발행 가능한 포스트만 필터링
+        publishable = self._policy.filter_publishable(posts)
+        stats.skipped = len(posts) - len(publishable)
+
+        if not publishable:
+            logger.info("발행 가능한 포스트 없음 (필터링 후)")
+            return stats
+
+        # 쿼터 사전 체크
+        published_today = self._repo.count_published_today()
+        if not self._quota.can_publish(published_today):
+            logger.warning("일일 발행 쿼터 소진 — 발행 건너뜀")
+            return stats
+
         published_posts = self._repo.find_published(limit=50)
-        hubs = self._link_service.identify_hubs(published_posts)
+        hubs = self._enricher.identify_hubs(published_posts)
 
         self._browser.start()
         try:
@@ -43,11 +68,27 @@ class PublishPostsUseCase:
                 logger.error("로그인 실패 — 발행 중단")
                 return stats
 
-            for post in posts:
-                self._enrich_with_related_links(post, published_posts, hubs)
-                self._attach_internal_link_map(post, published_posts)
+            consecutive_failures = 0
+            for post in publishable:
+                if not self._policy.should_continue_after_failure(
+                    consecutive_failures,
+                ):
+                    logger.warning(
+                        f"연속 실패 {consecutive_failures}회 — 발행 중단"
+                    )
+                    break
+
+                self._enricher.enrich_with_related_links(
+                    post, published_posts, hubs,
+                )
+                self._enricher.attach_internal_link_map(post, published_posts)
+                prev_failed = stats.failed
                 try:
                     self._publish_single(post, stats)
+                    if stats.failed > prev_failed:
+                        consecutive_failures += 1
+                    else:
+                        consecutive_failures = 0
                 except DailyPublishLimitError:
                     logger.warning(
                         "일일 발행 제한 도달 — 나머지 포스트 건너뜀 "
@@ -60,54 +101,9 @@ class PublishPostsUseCase:
 
         return stats
 
-    def _enrich_with_related_links(
-        self, post: Post, published: list[Post], hubs: list[Post],
-    ) -> None:
-        if not post.content or not post.content.has_body():
-            return
-
-        related = self._link_service.select_links(post, published, hubs)
-        if not related:
-            return
-
-        items = "".join(
-            f'<li style="margin:8px 0;">'
-            f'<a href="{p.published_url}">{p.keyword}</a></li>'
-            for p in related[:5]
-        )
-        html = (
-            "\n\n<hr>\n"
-            '<div style="margin-top:30px;padding:20px;'
-            'background:#f8f9fa;border-radius:8px;">'
-            "<h3>관련 글</h3>"
-            f'<ul style="list-style:none;padding:0;">{items}</ul>'
-            "</div>"
-        )
-        post.content = replace(
-            post.content, body_markdown=(post.content.body_markdown or "") + html,
-        )
-
-    def _attach_internal_link_map(
-        self, post: Post, published: list[Post],
-    ) -> None:
-        """발행 완료 포스트의 keyword→URL 매핑을 post에 첨부.
-
-        tistory_editor가 HTML 변환 후 inject_internal_links()에 전달한다.
-        """
-        if not post.content or not post.content.has_body():
-            return
-        link_map = {
-            p.keyword: p.published_url
-            for p in published
-            if p.keyword and p.published_url
-            and p.row_index != post.row_index
-        }
-        if link_map:
-            post.internal_link_map = link_map
-
     def _publish_single(self, post: Post, stats: PublishStats) -> None:
         if not post.is_publishable():
-            logger.warning(f"발행 불가 포스트 건너뜀: row={post.row_index}")
+            logger.warning(f"발행 불가 포스트 건너뛰기: row={post.row_index}")
             stats.skipped += 1
             return
 

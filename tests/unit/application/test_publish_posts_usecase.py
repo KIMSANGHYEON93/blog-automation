@@ -1,9 +1,13 @@
 """Unit tests for PublishPostsUseCase — TDD RED phase."""
 from __future__ import annotations
 
+from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.domain.entities.post import Post
 from src.domain.exceptions import DailyPublishLimitError
+from src.domain.services.internal_link_service import InternalLinkService
+from src.domain.services.publish_policy import PublishPolicy
+from src.domain.services.quota_manager import QuotaManager
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
 from src.infrastructure.browser.mock_browser import MockBrowserAdapter
@@ -20,6 +24,19 @@ def make_publishable_post(row_index: int = 1, keyword: str = "AD란"):
     )
 
 
+def make_use_case(repo, browser, max_posts=5):
+    """Factory for PublishPostsUseCase with fully-injected dependencies."""
+    link_service = InternalLinkService()
+    enricher = InternalLinkEnricher(link_service)
+    policy = PublishPolicy(max_posts=max_posts)
+    quota = QuotaManager()
+    return PublishPostsUseCase(
+        repo=repo, browser=browser,
+        enricher=enricher, policy=policy, quota=quota,
+        max_posts=max_posts,
+    )
+
+
 class TestPublishPostsNormalFlow:
     """정상 발행 흐름 테스트."""
 
@@ -29,7 +46,7 @@ class TestPublishPostsNormalFlow:
         browser = MockBrowserAdapter(
             login_success=True, publish_url="https://test.tistory.com/1"
         )
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -41,7 +58,7 @@ class TestPublishPostsNormalFlow:
         post = make_publishable_post(1)
         repo = InMemoryPostRepository([post])
         browser = MockBrowserAdapter(publish_url="https://test.tistory.com/99")
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         use_case.execute()
 
@@ -62,7 +79,7 @@ class TestPublishPostsSkip:
         )
         repo = InMemoryPostRepository([post])
         browser = MockBrowserAdapter()
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -73,7 +90,7 @@ class TestPublishPostsSkip:
         post = Post(row_index=1, keyword="AD란", status=PostStatus.PENDING)
         repo = InMemoryPostRepository([post])
         browser = MockBrowserAdapter()
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -87,7 +104,7 @@ class TestPublishPostsFailure:
         post = make_publishable_post()
         repo = InMemoryPostRepository([post])
         browser = MockBrowserAdapter(publish_error="에디터 로딩 실패")
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -100,7 +117,7 @@ class TestPublishPostsFailure:
         posts = [make_publishable_post(1), make_publishable_post(2)]
         repo = InMemoryPostRepository(posts)
         browser = MockBrowserAdapter(login_success=False)
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -120,7 +137,7 @@ class TestPublishPostsBrowserLifecycle:
         post = make_publishable_post()
         repo = InMemoryPostRepository([post])
         browser = BuggyBrowser()
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         use_case.execute()
 
@@ -129,7 +146,7 @@ class TestPublishPostsBrowserLifecycle:
     def test_빈_목록일_때_브라우저_미시작(self):
         repo = InMemoryPostRepository([])
         browser = MockBrowserAdapter()
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -156,7 +173,7 @@ class TestPublishPostsDailyLimit:
         posts = [make_publishable_post(i, f"kw{i}") for i in range(1, 4)]
         repo = InMemoryPostRepository(posts)
         browser = DailyLimitBrowser(publish_url="https://test.tistory.com/1")
-        use_case = PublishPostsUseCase(repo=repo, browser=browser, max_posts=5)
+        use_case = make_use_case(repo, browser, max_posts=5)
 
         stats = use_case.execute()
 
@@ -178,7 +195,7 @@ class TestPublishPostsDailyLimit:
         post = make_publishable_post()
         repo = InMemoryPostRepository([post])
         browser = ImmediateLimitBrowser()
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -222,7 +239,7 @@ class TestRelatedLinks:
 
         repo = InMemoryPostRepository([pending, pub1, pub2])
         browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         use_case.execute()
 
@@ -243,7 +260,7 @@ class TestRelatedLinks:
         )
         repo = InMemoryPostRepository([pending])
         browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         use_case.execute()
 
@@ -266,7 +283,7 @@ class TestRelatedLinks:
 
         repo = InMemoryPostRepository([pending, pub_self, pub_other])
         browser = MockBrowserAdapter(publish_url="https://test.tistory.com/99")
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         use_case.execute()
 
@@ -318,7 +335,7 @@ class TestHubSpokeLinks:
 
         repo = InMemoryPostRepository([pending, hub_sso, normal1, normal2])
         browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         use_case.execute()
 
@@ -342,7 +359,7 @@ class TestHubSpokeLinks:
 
         repo = InMemoryPostRepository([pending, same_cat, diff_cat])
         browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         use_case.execute()
 
@@ -370,7 +387,7 @@ class TestHubSpokeLinks:
 
         repo = InMemoryPostRepository([pending, high_overlap, low_overlap])
         browser = MockBrowserAdapter(publish_url="https://test.tistory.com/10")
-        use_case = PublishPostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         use_case.execute()
 

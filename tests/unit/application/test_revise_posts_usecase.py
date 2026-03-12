@@ -1,8 +1,10 @@
 """Unit tests for RevisePostsUseCase — TDD RED phase."""
 
+from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.application.use_cases.revise_posts import RevisePostsUseCase
 from src.domain.entities.post import Post
 from src.domain.exceptions import DailyPublishLimitError
+from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
 from src.infrastructure.browser.mock_browser import MockBrowserAdapter
@@ -20,6 +22,16 @@ def make_revisable_post(row_index: int = 1, keyword: str = "AD란",
     )
 
 
+def make_use_case(repo, browser, max_posts=5):
+    """Factory for RevisePostsUseCase with fully-injected dependencies."""
+    enricher = InternalLinkEnricher(InternalLinkService())
+    return RevisePostsUseCase(
+        repo=repo, browser=browser,
+        enricher=enricher,
+        max_posts=max_posts,
+    )
+
+
 class TestRevisePostsNormalFlow:
     """정상 수정 흐름 테스트."""
 
@@ -32,7 +44,7 @@ class TestRevisePostsNormalFlow:
         browser = MockBrowserAdapter(
             login_success=True, update_url="https://test.tistory.com/100"
         )
-        use_case = RevisePostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -44,7 +56,7 @@ class TestRevisePostsNormalFlow:
         post = make_revisable_post(1, entry_id="100")
         repo = InMemoryPostRepository([post])
         browser = MockBrowserAdapter(update_url="https://test.tistory.com/100")
-        use_case = RevisePostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         use_case.execute()
 
@@ -66,7 +78,7 @@ class TestRevisePostsSkip:
         )
         repo = InMemoryPostRepository([post])
         browser = MockBrowserAdapter()
-        use_case = RevisePostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -83,7 +95,7 @@ class TestRevisePostsSkip:
         )
         repo = InMemoryPostRepository([post])
         browser = MockBrowserAdapter()
-        use_case = RevisePostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -94,7 +106,7 @@ class TestRevisePostsSkip:
                     status=PostStatus.REVISION_PENDING, entry_id="100")
         repo = InMemoryPostRepository([post])
         browser = MockBrowserAdapter()
-        use_case = RevisePostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -108,7 +120,7 @@ class TestRevisePostsFailure:
         post = make_revisable_post()
         repo = InMemoryPostRepository([post])
         browser = MockBrowserAdapter(update_error="에디터 로딩 실패")
-        use_case = RevisePostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -122,7 +134,7 @@ class TestRevisePostsFailure:
                  make_revisable_post(2, entry_id="101")]
         repo = InMemoryPostRepository(posts)
         browser = MockBrowserAdapter(login_success=False)
-        use_case = RevisePostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -142,7 +154,7 @@ class TestRevisePostsBrowserLifecycle:
         post = make_revisable_post()
         repo = InMemoryPostRepository([post])
         browser = BuggyBrowser()
-        use_case = RevisePostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         use_case.execute()
 
@@ -151,7 +163,7 @@ class TestRevisePostsBrowserLifecycle:
     def test_빈_목록일_때_브라우저_미시작(self):
         repo = InMemoryPostRepository([])
         browser = MockBrowserAdapter()
-        use_case = RevisePostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 
@@ -176,7 +188,7 @@ class TestRevisePostsDailyLimit:
         posts = [make_revisable_post(i, f"kw{i}", str(100 + i)) for i in range(1, 4)]
         repo = InMemoryPostRepository(posts)
         browser = DailyLimitBrowser(update_url="https://test.tistory.com/100")
-        use_case = RevisePostsUseCase(repo=repo, browser=browser, max_posts=5)
+        use_case = make_use_case(repo, browser, max_posts=5)
 
         stats = use_case.execute()
 
@@ -196,7 +208,7 @@ class TestRevisePostsDailyLimit:
         post = make_revisable_post()
         repo = InMemoryPostRepository([post])
         browser = ImmediateLimitBrowser()
-        use_case = RevisePostsUseCase(repo=repo, browser=browser)
+        use_case = make_use_case(repo, browser)
 
         stats = use_case.execute()
 

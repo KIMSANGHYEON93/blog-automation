@@ -1,8 +1,8 @@
 """RevisePostsUseCase — Orchestrates the blog post revision workflow."""
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
-from src.domain.entities.post import Post
+from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.domain.exceptions import DailyPublishLimitError
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.post_repository import PostRepository
@@ -18,10 +18,16 @@ class ReviseStats:
 
 
 class RevisePostsUseCase:
-    def __init__(self, repo: PostRepository, browser: BrowserPort,
-                 max_posts: int = 5):
+    def __init__(
+        self,
+        repo: PostRepository,
+        browser: BrowserPort,
+        enricher: InternalLinkEnricher,
+        max_posts: int = 5,
+    ):
         self._repo = repo
         self._browser = browser
+        self._enricher = enricher
         self._max_posts = max_posts
 
     def execute(self) -> ReviseStats:
@@ -33,6 +39,7 @@ class RevisePostsUseCase:
             return stats
 
         published_posts = self._repo.find_published(limit=50)
+        hubs = self._enricher.identify_hubs(published_posts)
 
         self._browser.start()
         try:
@@ -41,8 +48,10 @@ class RevisePostsUseCase:
                 return stats
 
             for post in posts:
-                self._enrich_with_related_links(post, published_posts)
-                self._attach_internal_link_map(post, published_posts)
+                self._enricher.enrich_with_related_links(
+                    post, published_posts, hubs,
+                )
+                self._enricher.attach_internal_link_map(post, published_posts)
                 try:
                     self._revise_single(post, stats)
                 except DailyPublishLimitError:
@@ -57,60 +66,7 @@ class RevisePostsUseCase:
 
         return stats
 
-    def _enrich_with_related_links(
-        self, post: Post, published: list[Post],
-    ) -> None:
-        if not post.content or not post.content.has_body():
-            return
-
-        same_cat = [
-            p for p in published
-            if p.category == post.category
-            and p.row_index != post.row_index
-            and p.published_url
-        ]
-        diff_cat = [
-            p for p in published
-            if p.category != post.category
-            and p.row_index != post.row_index
-            and p.published_url
-        ]
-        related = same_cat[:3] + diff_cat[: max(0, 5 - len(same_cat[:3]))]
-        if not related:
-            return
-
-        items = "".join(
-            f'<li style="margin:8px 0;">'
-            f'<a href="{p.published_url}">{p.keyword}</a></li>'
-            for p in related[:5]
-        )
-        html = (
-            "\n\n<hr>\n"
-            '<div style="margin-top:30px;padding:20px;'
-            'background:#f8f9fa;border-radius:8px;">'
-            "<h3>관련 글</h3>"
-            f'<ul style="list-style:none;padding:0;">{items}</ul>'
-            "</div>"
-        )
-        post.content = replace(
-            post.content, body_markdown=(post.content.body_markdown or "") + html,
-        )
-
-    def _attach_internal_link_map(
-        self, post: Post, published: list[Post],
-    ) -> None:
-        if not post.content or not post.content.has_body():
-            return
-        link_map = {
-            p.keyword: p.published_url
-            for p in published
-            if p.keyword and p.published_url
-            and p.row_index != post.row_index
-        }
-        if link_map:
-            post.internal_link_map = link_map
-
-    def _revise_single(self, post: Post, stats: ReviseStats) -> None:
+    def _revise_single(self, post, stats: ReviseStats) -> None:
         if not post.is_revisable():
             logger.warning(f"수정 불가 포스트 건너뜀: row={post.row_index}")
             stats.skipped += 1

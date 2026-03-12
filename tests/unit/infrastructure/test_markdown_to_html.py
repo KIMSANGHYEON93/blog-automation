@@ -1,12 +1,12 @@
 """Unit tests for markdown → HTML conversion and validation."""
-from src.infrastructure.browser.markdown_converter import (
-    convert_markdown_to_html,
-    style_mermaid_fallback,
-)
 from src.infrastructure.browser.html_transformer import (
     add_lazy_loading,
     add_nofollow_to_external_links,
     validate_html,
+)
+from src.infrastructure.browser.markdown_converter import (
+    convert_markdown_to_html,
+    style_mermaid_fallback,
 )
 from src.infrastructure.browser.publish_verifier import (
     extract_post_id,

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def check_publish_layer_opened(sb) -> str | None:
     """발행 설정 레이어가 열렸는지 확인. 열렸으면 감지된 셀렉터/텍스트, 아니면 None."""
     try:
-        return sb.execute_script("""
+        result: str | None = sb.execute_script("""
             // 발행 설정 레이어 DOM 존재 확인
             var indicators = [
                 '#publish-btn', '.btn_publish', '#open-type-0',
@@ -42,6 +42,7 @@ def check_publish_layer_opened(sb) -> str | None:
             }
             return null;
         """)
+        return result
     except Exception:
         return None
 
@@ -52,7 +53,7 @@ def click_publish_confirm_in_modal(sb, blog_name: str) -> str | None:
     def _after_publish(sb, blog_name: str) -> str | None:
         """발행 후 실제 글 URL 추출."""
         time.sleep(5)
-        current_url = sb.get_current_url()
+        current_url: str = sb.get_current_url()
         if "/manage/newpost" in current_url:
             return None  # 아직 에디터 → 실패
         # /manage/posts/ 리다이렉트 → 가장 최근 글 URL 추출
@@ -62,7 +63,7 @@ def click_publish_confirm_in_modal(sb, blog_name: str) -> str | None:
                 return extracted
             # fallback: /manage/posts 페이지에서 최신 글 링크 추출
             try:
-                url = sb.execute_script("""
+                url: str | None = sb.execute_script("""
                     var links = document.querySelectorAll(
                         'a[href*="tistory.com/"]'
                     );
@@ -135,7 +136,7 @@ def extract_published_url(sb, blog_name: str) -> str | None:
     try:
         time.sleep(2)
         # 관리 페이지에서 해당 블로그의 첫 번째 글 링크 추출
-        url = sb.execute_script("""
+        url: str | None = sb.execute_script("""
             var blogName = arguments[0];
             var pattern = new RegExp(
                 'https://' + blogName + '\\\\.tistory\\\\.com/\\\\d+$'
@@ -175,7 +176,7 @@ def verify_published_url(url: str, timeout: int = 10) -> int:
             "Chrome/131.0.0.0 Safari/537.36",
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status
+            return int(resp.status)
     except urllib.error.HTTPError as e:
         return e.code
     except Exception as exc:

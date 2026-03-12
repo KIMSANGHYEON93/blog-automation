@@ -24,7 +24,7 @@ def _render_mermaid_via_kroki(code: str) -> str | None:
             headers={"Content-Type": "text/plain"},
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
-            svg = resp.read().decode("utf-8")
+            svg: str = resp.read().decode("utf-8")
         if "<svg" in svg:
             return svg
         return None

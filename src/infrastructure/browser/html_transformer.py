@@ -22,10 +22,11 @@ def add_lazy_loading(html_text: str) -> str:
     def _replace_img(match: re.Match) -> str:
         nonlocal count
         count += 1
+        tag: str = match.group(0)
         if count == 1:
             # 첫 번째 이미지: LCP candidate이므로 lazy loading 미적용
-            return match.group(0)
-        return '<img loading="lazy" ' + match.group(0)[5:]
+            return tag
+        return '<img loading="lazy" ' + tag[5:]
 
     return re.sub(r"<img\s(?!.*loading=)", _replace_img, html_text)
 
@@ -44,7 +45,7 @@ def add_nofollow_to_external_links(html_text: str, blog_name: str) -> str:
     )
 
     def _process_anchor(match: re.Match) -> str:
-        tag = match.group(0)
+        tag: str = match.group(0)
         href_match = re.search(r'href="([^"]*)"', tag)
         if not href_match:
             return tag

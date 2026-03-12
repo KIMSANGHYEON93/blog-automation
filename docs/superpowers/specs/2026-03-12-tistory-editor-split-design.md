@@ -89,14 +89,15 @@ Split `tistory_editor.py` into 6 new focused modules + 1 shrunk orchestrator, fo
 
 **Dependencies**: SeleniumBase (`sb` parameter), `dom_selectors`
 
-### 5. `api_publisher.py` (~300 LOC)
+### 5. `api_publisher.py` (~200 LOC)
 
-**Responsibility**: Publishing posts via Tistory API (XHR) and React Redux state fallback.
+**Responsibility**: Tistory API (XHR) call and React Redux state fallback publishing.
 
 **Functions**:
-- `_publish_via_api(sb, blog_name, title, ...) -> str | None` (line 464) — renamed to `publish_via_api`
 - `_call_tistory_post_api(sb, blog_name, ...) -> str | None` (line 500) — renamed to `call_tistory_post_api`
 - `_try_publish_via_react_state(sb, blog_name, ...) -> str | None` (line 641) — renamed to `try_publish_via_react_state`
+
+**Note**: `_publish_via_api` (line 464) stays in the orchestrator (`tistory_editor.py`) because it calls `_extract_first_image_url` (→ `html_transformer`) and `_resolve_category_id` (orchestrator). Moving it would create unnecessary coupling.
 
 **Dependencies**: SeleniumBase, `json`, `re`, `time`, `form_filler` (for `safe_click`, `select_public_mode`, `select_category_in_layer`), `publish_verifier` (for `check_publish_layer_opened`, `click_publish_confirm_in_modal`), `src.domain.exceptions.DailyPublishLimitError`
 
@@ -117,13 +118,14 @@ Split `tistory_editor.py` into 6 new focused modules + 1 shrunk orchestrator, fo
 
 **Dependencies**: SeleniumBase (some functions), `urllib.request` (HTTP verification), `re`, `form_filler` (for `safe_click` used by `click_publish_confirm_in_modal`)
 
-### 7. `tistory_editor.py` (shrunk, ~290 LOC orchestrator)
+### 7. `tistory_editor.py` (shrunk, ~390 LOC orchestrator)
 
 **Responsibility**: Orchestration only. Coordinates the 6 modules to implement `publish_post()` and `update_post()`.
 
 **Retained functions**:
 - `publish_post(sb, post, blog_name, profile=None) -> PublishResult` — orchestrator
 - `update_post(sb, post, blog_name, profile=None) -> PublishResult` — orchestrator
+- `_publish_via_api(sb, blog_name, title, ...) -> str | None` — kept here (calls `html_transformer.extract_first_image_url` + `_resolve_category_id`)
 - `set_site_profile(profile)` — global profile setter (deprecated, kept for backward compat)
 - `_get_profile(profile=None)` — profile resolution
 - `_resolve_category_id(category_name, profile=None)` — category lookup
@@ -208,9 +210,9 @@ from src.infrastructure.browser.publish_verifier import (
 | `src/infrastructure/browser/html_transformer.py` | Create | 100 |
 | `src/infrastructure/browser/form_filler.py` | Create | 270 |
 | `src/infrastructure/browser/content_injector.py` | Create | 215 |
-| `src/infrastructure/browser/api_publisher.py` | Create | 300 |
+| `src/infrastructure/browser/api_publisher.py` | Create | 200 |
 | `src/infrastructure/browser/publish_verifier.py` | Create | 270 |
-| `src/infrastructure/browser/tistory_editor.py` | Modify (shrink) | 290 |
+| `src/infrastructure/browser/tistory_editor.py` | Modify (shrink) | 390 |
 | `src/infrastructure/browser/adsense_pages.py` | Modify (import fix) | — |
 | `tests/unit/infrastructure/test_markdown_to_html.py` | Modify (import fix) | — |
 

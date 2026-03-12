@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from string import Template
 
 from src.domain.value_objects.publish_result import PublishResult
-from src.infrastructure.browser.tistory_editor import _call_tistory_post_api
+from src.infrastructure.browser.api_publisher import call_tistory_post_api
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,7 @@ def publish_pages(
             page, blog_name, blog_url, contact_email, owner_name,
         )
 
-        api_result = _call_tistory_post_api(
+        api_result = call_tistory_post_api(
             sb,
             blog_name=blog_name,
             title=page.title,

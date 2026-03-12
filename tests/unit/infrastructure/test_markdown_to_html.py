@@ -1,13 +1,17 @@
 """Unit tests for markdown → HTML conversion and validation."""
-from src.infrastructure.browser.tistory_editor import (
-    _add_lazy_loading,
-    _add_nofollow_to_external_links,
-    _extract_post_id,
-    _style_mermaid_fallback,
-    _verify_faq_schema,
-    _verify_published_url,
+from src.infrastructure.browser.markdown_converter import (
     convert_markdown_to_html,
+    style_mermaid_fallback,
+)
+from src.infrastructure.browser.html_transformer import (
+    add_lazy_loading,
+    add_nofollow_to_external_links,
     validate_html,
+)
+from src.infrastructure.browser.publish_verifier import (
+    extract_post_id,
+    verify_faq_schema,
+    verify_published_url,
 )
 
 
@@ -156,9 +160,9 @@ class TestConvertMarkdownToHtmlEnhanced:
         assert toc_pos < first_content_h2, "TOC가 첫 번째 H2 앞에 있어야 함"
 
     def test_이미지_lazy_loading_첫번째_제외(self):
-        """_add_lazy_loading() → 첫 번째 이미지는 LCP candidate로 제외, 두 번째부터 lazy."""
+        """add_lazy_loading() → 첫 번째 이미지는 LCP candidate로 제외, 두 번째부터 lazy."""
         html = '<img src="first.jpg" alt="first"><p>중간</p><img src="second.jpg" alt="second">'
-        result = _add_lazy_loading(html)
+        result = add_lazy_loading(html)
         # 첫 번째 이미지: lazy loading 없음 (LCP candidate)
         assert '<img src="first.jpg"' in result
         # 두 번째 이미지: lazy loading 적용
@@ -167,19 +171,19 @@ class TestConvertMarkdownToHtmlEnhanced:
     def test_이미지_lazy_loading_단일_이미지(self):
         """단일 이미지는 LCP candidate로 lazy loading 미적용."""
         html = '<p>텍스트</p><img src="test.jpg" alt="test"><p>끝</p>'
-        result = _add_lazy_loading(html)
+        result = add_lazy_loading(html)
         assert 'loading="lazy"' not in result
 
     def test_lazy_loading_이미_있으면_중복_추가_안함(self):
         """이미 loading= 속성이 있는 img에는 추가하지 않음."""
         html = '<img loading="eager" src="test.jpg">'
-        result = _add_lazy_loading(html)
+        result = add_lazy_loading(html)
         assert result.count("loading=") == 1
 
     def test_lazy_loading_빈_문자열(self):
         """빈 문자열 입력 처리."""
-        assert _add_lazy_loading("") == ""
-        assert _add_lazy_loading(None) is None  # type: ignore[arg-type]
+        assert add_lazy_loading("") == ""
+        assert add_lazy_loading(None) is None  # type: ignore[arg-type]
 
 
 class TestValidateHtml:
@@ -263,32 +267,32 @@ class TestValidateHtmlEnhanced:
 
 
 class TestAddNofollowToExternalLinks:
-    """_add_nofollow_to_external_links() 함수 검증."""
+    """add_nofollow_to_external_links() 함수 검증."""
 
     def test_외부_링크에_nofollow_추가(self):
         html = '<a href="https://example.com">외부</a>'
-        result = _add_nofollow_to_external_links(html, "myblog")
+        result = add_nofollow_to_external_links(html, "myblog")
         assert 'rel="nofollow noopener"' in result
         assert 'target="_blank"' in result
 
     def test_내부_링크는_건드리지_않음(self):
         html = '<a href="https://myblog.tistory.com/123">내부</a>'
-        result = _add_nofollow_to_external_links(html, "myblog")
+        result = add_nofollow_to_external_links(html, "myblog")
         assert "nofollow" not in result
 
     def test_앵커_링크는_건드리지_않음(self):
         html = '<a href="#section1">앵커</a>'
-        result = _add_nofollow_to_external_links(html, "myblog")
+        result = add_nofollow_to_external_links(html, "myblog")
         assert "nofollow" not in result
 
     def test_이미_rel_있으면_건드리지_않음(self):
         html = '<a href="https://example.com" rel="sponsored">외부</a>'
-        result = _add_nofollow_to_external_links(html, "myblog")
+        result = add_nofollow_to_external_links(html, "myblog")
         assert 'rel="sponsored"' in result
         assert "nofollow" not in result
 
     def test_빈_문자열_처리(self):
-        assert _add_nofollow_to_external_links("", "myblog") == ""
+        assert add_nofollow_to_external_links("", "myblog") == ""
 
 
 class TestMermaidFallback:
@@ -302,9 +306,9 @@ class TestMermaidFallback:
         assert "mermaid-fallback" in html
 
     def test_style_mermaid_fallback_wraps_div(self):
-        """_style_mermaid_fallback()이 wrapper div를 추가하는지 확인."""
+        """style_mermaid_fallback()이 wrapper div를 추가하는지 확인."""
         html = '<pre><code class="language-mermaid">graph TD\n    A-->B</code></pre>'
-        result = _style_mermaid_fallback(html)
+        result = style_mermaid_fallback(html)
         assert 'class="mermaid-fallback"' in result
         assert "background:#f0f4f8" in result
         assert "</code></pre></div>" in result
@@ -312,7 +316,7 @@ class TestMermaidFallback:
     def test_style_mermaid_fallback_no_mermaid_passthrough(self):
         """Mermaid 없으면 원본 그대로 반환."""
         html = "<pre><code>print('hello')</code></pre>"
-        result = _style_mermaid_fallback(html)
+        result = style_mermaid_fallback(html)
         assert result == html
 
 
@@ -336,23 +340,23 @@ class TestValidateHtmlMermaid:
 
 
 class TestExtractPostId:
-    """_extract_post_id() 함수 검증."""
+    """extract_post_id() 함수 검증."""
 
     def test_정상_URL(self):
-        assert _extract_post_id("https://blog.tistory.com/211") == "211"
+        assert extract_post_id("https://blog.tistory.com/211") == "211"
 
     def test_경로_없음(self):
-        assert _extract_post_id("https://blog.tistory.com") is None
+        assert extract_post_id("https://blog.tistory.com") is None
 
     def test_숫자_아닌_경로(self):
-        assert _extract_post_id("https://blog.tistory.com/manage") is None
+        assert extract_post_id("https://blog.tistory.com/manage") is None
 
     def test_빈_문자열(self):
-        assert _extract_post_id("") is None
+        assert extract_post_id("") is None
 
 
 class TestVerifyPublishedUrl:
-    """_verify_published_url() 함수 검증."""
+    """verify_published_url() 함수 검증."""
 
     def test_200_응답(self):
         """HTTP 200 → 200 반환."""
@@ -372,19 +376,19 @@ class TestVerifyPublishedUrl:
         t = threading.Thread(target=server.handle_request, daemon=True)
         t.start()
         try:
-            code = _verify_published_url(f"http://127.0.0.1:{port}/test")
+            code = verify_published_url(f"http://127.0.0.1:{port}/test")
             assert code == 200
         finally:
             server.server_close()
 
     def test_네트워크_오류(self):
         """접속 불가 → 0 반환."""
-        code = _verify_published_url("http://127.0.0.1:1/unreachable", timeout=1)
+        code = verify_published_url("http://127.0.0.1:1/unreachable", timeout=1)
         assert code == 0
 
 
 class TestVerifyFaqSchema:
-    """_verify_faq_schema() 함수 검증."""
+    """verify_faq_schema() 함수 검증."""
 
     def _serve_html(self, html_content: str) -> tuple:
         """로컬 HTTP 서버에서 HTML 응답을 제공. (server, port) 반환."""
@@ -416,7 +420,7 @@ class TestVerifyFaqSchema:
         </head><body><p>Hello</p></body></html>"""
         server, port = self._serve_html(html)
         try:
-            assert _verify_faq_schema(f"http://127.0.0.1:{port}/test") is True
+            assert verify_faq_schema(f"http://127.0.0.1:{port}/test") is True
         finally:
             server.server_close()
 
@@ -425,13 +429,13 @@ class TestVerifyFaqSchema:
         html = "<html><body><p>No FAQ here</p></body></html>"
         server, port = self._serve_html(html)
         try:
-            assert _verify_faq_schema(f"http://127.0.0.1:{port}/test") is False
+            assert verify_faq_schema(f"http://127.0.0.1:{port}/test") is False
         finally:
             server.server_close()
 
     def test_FAQ_검증_네트워크_오류(self):
         """접근 불가 URL → False (예외 없음)."""
-        assert _verify_faq_schema("http://127.0.0.1:1/unreachable", timeout=1) is False
+        assert verify_faq_schema("http://127.0.0.1:1/unreachable", timeout=1) is False
 
     def test_FAQ_스키마_부분_일치_방지(self):
         """application/ld+json만 있고 FAQPage 없음 → False."""
@@ -442,6 +446,6 @@ class TestVerifyFaqSchema:
         </head><body><p>Hello</p></body></html>"""
         server, port = self._serve_html(html)
         try:
-            assert _verify_faq_schema(f"http://127.0.0.1:{port}/test") is False
+            assert verify_faq_schema(f"http://127.0.0.1:{port}/test") is False
         finally:
             server.server_close()

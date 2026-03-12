@@ -3,6 +3,7 @@ import logging
 from dataclasses import dataclass
 
 from src.application.services.internal_link_enricher import InternalLinkEnricher
+from src.domain.entities.post import Post
 from src.domain.exceptions import DailyPublishLimitError
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.post_repository import PostRepository
@@ -66,7 +67,7 @@ class RevisePostsUseCase:
 
         return stats
 
-    def _revise_single(self, post, stats: ReviseStats) -> None:
+    def _revise_single(self, post: Post, stats: ReviseStats) -> None:
         if not post.is_revisable():
             logger.warning(f"수정 불가 포스트 건너뜀: row={post.row_index}")
             stats.skipped += 1

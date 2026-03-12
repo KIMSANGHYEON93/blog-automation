@@ -103,7 +103,7 @@ class PublishPostsUseCase:
 
     def _publish_single(self, post: Post, stats: PublishStats) -> None:
         if not post.is_publishable():
-            logger.warning(f"발행 불가 포스트 건너뛰기: row={post.row_index}")
+            logger.warning(f"발행 불가 포스트 건너뜀: row={post.row_index}")
             stats.skipped += 1
             return
 

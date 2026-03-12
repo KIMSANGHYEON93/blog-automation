@@ -9,6 +9,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.application.use_cases.check_cwv import CheckCwvUseCase
 from src.application.use_cases.check_indexing import CheckIndexingUseCase
 from src.application.use_cases.discover_keywords import DiscoverKeywordsUseCase
@@ -18,6 +19,9 @@ from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
 from src.application.use_cases.revise_posts import RevisePostsUseCase
 from src.application.use_cases.submit_indexing import SubmitIndexingUseCase
+from src.domain.services.internal_link_service import InternalLinkService
+from src.domain.services.publish_policy import PublishPolicy
+from src.domain.services.quota_manager import QuotaManager
 from src.domain.value_objects.credentials import Credentials
 from src.infrastructure.browser.selenium_adapter import SeleniumBrowserAdapter
 from src.infrastructure.browser.tistory_editor import set_site_profile
@@ -80,6 +84,11 @@ def _parse_args() -> argparse.Namespace:
         "--auto-update",
         action="store_true",
         help="--sync-categories 시 site_profile.json 자동 갱신",
+    )
+    parser.add_argument(
+        "--recover-failed",
+        action="store_true",
+        help="발행실패 포스트를 에러 유형별로 분류 후 자동 복구 가능한 건 일괄 전환",
     )
     return parser.parse_args()
 
@@ -146,7 +155,7 @@ def _publish_pages(config: Config) -> None:
         browser.stop()
 
 
-def _revise(config: Config) -> None:
+def _revise(config: Config, site_profile=None) -> None:
     """수정대기 포스트를 기존 Tistory 글에 업데이트하는 워크플로우."""
     config.validate()
 
@@ -165,6 +174,7 @@ def _revise(config: Config) -> None:
         min_delay=config.min_delay,
         max_delay=config.max_delay,
         user_data_dir=".browser_data",
+        site_profile=site_profile,
     )
 
     # Step 1: 고스트 복구 (PUBLISHING + REVISING 모두 복구)
@@ -173,9 +183,13 @@ def _revise(config: Config) -> None:
         logger.warning(f"고스트 복구 완료: {reset_count}건")
 
     # Step 2: 수정
+    link_service = InternalLinkService()
+    enricher = InternalLinkEnricher(link_service)
+
     stats = RevisePostsUseCase(
         repo=repo,
         browser=browser,
+        enricher=enricher,
         max_posts=config.max_posts,
     ).execute()
 
@@ -330,6 +344,29 @@ def _discover_keywords(config: Config) -> None:
         logger.error(f"키워드 발굴 실패: {result.error}")
 
 
+def _recover_failed(config: Config) -> None:
+    """발행실패 포스트 일괄 복구 워크플로우."""
+    config.validate()
+
+    from src.application.use_cases.batch_recover import BatchRecoverUseCase
+
+    repo = GoogleSheetsPostRepository(
+        creds_path=config.google_creds,
+        sheet_name=config.sheet_name,
+    )
+    uc = BatchRecoverUseCase(repo=repo)
+    result = uc.execute()
+
+    print(
+        f"일괄 복구 결과: "
+        f"전체={result.total_failed}, 복구={result.recovered}, "
+        f"수동={result.skipped_manual}, 수정필요={result.skipped_revision}"
+    )
+    for row_idx, keyword, classified in result.details:
+        status = "✓ 복구" if classified.should_auto_recover else "✗ 건너뜀"
+        print(f"  [{status}] row={row_idx} {keyword} — {classified.error_type.value}")
+
+
 def _sync_categories(config: Config, *, auto_update: bool = False) -> None:
     """Tistory 카테고리와 site_profile.json 동기화 확인."""
     from src.application.use_cases.sync_categories import SyncCategoriesUseCase
@@ -410,12 +447,14 @@ def main() -> None:
     config = Config.from_env()
 
     # SiteProfile 로드 + 주입
+    site_profile = None
     profile_path = PROJECT_ROOT / config.site_profile_path
     if profile_path.exists():
         try:
-            profile = JsonSiteProfileAdapter(profile_path).load()
-            set_site_profile(profile)
-            logger.info(f"SiteProfile 로드: {profile_path} ({len(profile.categories)}개 카테고리)")
+            site_profile = JsonSiteProfileAdapter(profile_path).load()
+            set_site_profile(site_profile)  # deprecated 글로벌 호환 유지
+            n_cats = len(site_profile.categories)
+            logger.info(f"SiteProfile 로드: {profile_path} ({n_cats}개 카테고리)")
         except Exception as e:
             logger.warning(f"SiteProfile 로드 실패 (기본값 사용): {e}")
     else:
@@ -426,7 +465,7 @@ def main() -> None:
         return
 
     if args.revise:
-        _revise(config)
+        _revise(config, site_profile=site_profile)
         return
 
     if args.check_index:
@@ -453,6 +492,10 @@ def main() -> None:
         _sync_categories(config, auto_update=args.auto_update)
         return
 
+    if args.recover_failed:
+        _recover_failed(config)
+        return
+
     # --- 기존 파이프라인 (변경 없음) ---
     config.validate()
     notifier = _build_notification()
@@ -473,6 +516,7 @@ def main() -> None:
         min_delay=config.min_delay,
         max_delay=config.max_delay,
         user_data_dir=".browser_data",
+        site_profile=site_profile,
     )
 
     # Step 1: 고스트 복구 (+ 옵트인 실패 재시도)
@@ -494,9 +538,17 @@ def main() -> None:
             logger.info(f"카테고리 자동 분류: {classify_result.classified}건")
 
     # Step 2: 발행
+    link_service = InternalLinkService()
+    enricher = InternalLinkEnricher(link_service)
+    policy = PublishPolicy(max_posts=config.max_posts)
+    quota = QuotaManager()
+
     stats = PublishPostsUseCase(
         repo=repo,
         browser=browser,
+        enricher=enricher,
+        policy=policy,
+        quota=quota,
         max_posts=config.max_posts,
     ).execute()
 

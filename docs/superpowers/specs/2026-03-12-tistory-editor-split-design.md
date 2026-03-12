@@ -1,7 +1,5 @@
 # tistory_editor.py Module Split Design
 
-> **Status**: Pre-implementation design spec. Describes the target state after refactoring. All "Before/After" import examples show the changes that the implementation plan must execute.
-
 ## Problem
 
 `src/infrastructure/browser/tistory_editor.py` is a 1,892-line monolithic module containing 36 functions spanning 7 distinct responsibilities: Markdown-to-HTML conversion, HTML optimization, form filling, content injection, API publishing, post-publication verification, and orchestration. This violates Single Responsibility Principle, makes the module difficult to navigate, test in isolation, and maintain.
@@ -15,18 +13,14 @@ Split `tistory_editor.py` into 6 new focused modules + 1 shrunk orchestrator, fo
 - **Infrastructure layer only** — all new modules stay in `src/infrastructure/browser/`
 - **No class conversion** — keep functions as module-level functions (procedural style)
 - **No behavioral changes** — pure structural refactoring, zero logic changes
-- **External caller contracts preserved** — see "Affected Callers" section for all callers and required updates
+- **External caller contract unchanged** — `selenium_adapter.py` continues to import only `publish_post`, `update_post` from `tistory_editor.py`
 - **Remove deprecated code** — `_switch_to_markdown_mode()` (105 LOC) and `_inject_markdown_content()` (138 LOC) are unused and must be deleted
 
 ## Current Structure
 
 **File**: `src/infrastructure/browser/tistory_editor.py` (1,892 LOC, 36 functions)
 
-**External callers** (4 files):
-- `selenium_adapter.py` — imports `publish_post`, `update_post`
-- `cli.py` — imports `set_site_profile`
-- `adsense_pages.py` — imports `_call_tistory_post_api`
-- `tests/unit/infrastructure/test_markdown_to_html.py` — imports `convert_markdown_to_html`, `validate_html`, `_add_lazy_loading`, `_add_nofollow_to_external_links`, `_extract_post_id`, `_style_mermaid_fallback`, `_verify_faq_schema`, `_verify_published_url`
+**Single external caller**: `selenium_adapter.py` imports `publish_post`, `update_post`
 
 **Dependency graph of entry points**:
 - `publish_post()` calls: `_get_profile`, `_resolve_category_id`, `convert_markdown_to_html`, `_add_lazy_loading`, `_add_nofollow_to_external_links`, `_append_faq_schema`, `optimize_html`, `_wait_for_wysiwyg_editor`, `_inject_html_content`, `_install_ajax_content_interceptor`, `_ensure_content_in_form`, `_safe_click`, `_safe_type`, `_input_tags`, `_inject_meta_description`, `_select_category_in_layer`, `_select_public_mode`, `_check_publish_layer_opened`, `_publish_via_api`, `_extract_published_url`, `_verify_published_url`, `_verify_faq_schema`, `_fix_post_visibility`, `_extract_post_id`
@@ -42,24 +36,23 @@ Split `tistory_editor.py` into 6 new focused modules + 1 shrunk orchestrator, fo
 - `convert_markdown_to_html(md_text: str) -> str` (line 1203) — public entry point
 - `_preserve_mermaid_blocks(md_text: str) -> str` (line 1159) — internal
 - `_render_mermaid_via_kroki(code: str) -> str | None` (line 1136) — internal
-- `_style_mermaid_fallback(html_text: str) -> str` (line 1239) — renamed to `style_mermaid_fallback` (public, directly tested)
+- `_style_mermaid_fallback(html_text: str) -> str` (line 1239) — internal
 
-**Dependencies**: `markdown` (md_lib), `re`, `urllib.request` (stdlib, for Kroki API)
+**Dependencies**: `markdown` (md_lib), `re`, `requests` (for Kroki API)
 
 **No Selenium dependency** — pure transformation logic.
 
-### 2. `html_transformer.py` (~100 LOC)
+### 2. `html_transformer.py` (~80 LOC)
 
-**Responsibility**: Post-conversion HTML transformations and validation (lazy loading, nofollow, FAQ schema, content validation).
+**Responsibility**: Post-conversion HTML transformations (lazy loading, nofollow, FAQ schema).
 
 **Functions**:
 - `_add_lazy_loading(html_text: str) -> str` (line 1256) — renamed to `add_lazy_loading`
 - `_add_nofollow_to_external_links(html_text: str, blog_name: str) -> str` (line 1273) — renamed to `add_nofollow_to_external_links`
 - `_append_faq_schema(body_markdown: str, faq_ld_json: str) -> str` (line 1832) — renamed to `append_faq_schema`
 - `_extract_first_image_url(html: str) -> str` (line 80) — renamed to `extract_first_image_url`
-- `validate_html(html_text: str) -> bool` (line 1308) — stays public (pre-publish content validation)
 
-**Dependencies**: `re`, `src.domain.services.thumbnail_service.ThumbnailService` (for `extract_first_image_url`), `src.domain.services.html_validation.HtmlValidationService` (for `validate_html`)
+**Dependencies**: `re` only.
 
 **No Selenium dependency** — pure transformation logic.
 
@@ -89,21 +82,18 @@ Split `tistory_editor.py` into 6 new focused modules + 1 shrunk orchestrator, fo
 
 **Dependencies**: SeleniumBase (`sb` parameter), `dom_selectors`
 
-### 5. `api_publisher.py` (~200 LOC)
+### 5. `api_publisher.py` (~300 LOC)
 
-**Responsibility**: Tistory API (XHR) call and React Redux state fallback publishing.
+**Responsibility**: Publishing posts via Tistory API (XHR) and React Redux state fallback.
 
 **Functions**:
+- `_publish_via_api(sb, blog_name, title, ...) -> str | None` (line 464) — renamed to `publish_via_api`
 - `_call_tistory_post_api(sb, blog_name, ...) -> str | None` (line 500) — renamed to `call_tistory_post_api`
 - `_try_publish_via_react_state(sb, blog_name, ...) -> str | None` (line 641) — renamed to `try_publish_via_react_state`
 
-**Note**: `_publish_via_api` (line 464) stays in the orchestrator (`tistory_editor.py`) because it calls `_extract_first_image_url` (→ `html_transformer`) and `_resolve_category_id` (orchestrator). Moving it would create unnecessary coupling.
+**Dependencies**: SeleniumBase, `json`, `re`, `time`
 
-**Dependencies**: SeleniumBase, `json`, `re`, `time`, `form_filler` (for `safe_click`, `select_public_mode`, `select_category_in_layer`), `publish_verifier` (for `check_publish_layer_opened`, `click_publish_confirm_in_modal`), `src.domain.exceptions.DailyPublishLimitError`
-
-**Note**: `_try_publish_via_react_state` has cross-module calls to `form_filler` and `publish_verifier` because the React fallback path requires UI interaction (selecting visibility, category, clicking confirm) after triggering the React publish action.
-
-### 6. `publish_verifier.py` (~270 LOC)
+### 6. `publish_verifier.py` (~290 LOC)
 
 **Responsibility**: Post-publication verification, URL extraction, visibility fixing.
 
@@ -115,17 +105,17 @@ Split `tistory_editor.py` into 6 new focused modules + 1 shrunk orchestrator, fo
 - `_check_publish_layer_opened(sb) -> str | None` (line 164) — renamed to `check_publish_layer_opened`
 - `_click_publish_confirm_in_modal(sb, blog_name: str) -> str | None` (line 805) — renamed to `click_publish_confirm_in_modal`
 - `_verify_faq_schema(url: str, timeout: int = 10) -> bool` (line 1812) — renamed to `verify_faq_schema`
+- `validate_html(html_text: str) -> bool` (line 1308) — stays public
 
-**Dependencies**: SeleniumBase (some functions), `urllib.request` (HTTP verification), `re`, `form_filler` (for `safe_click` used by `click_publish_confirm_in_modal`)
+**Dependencies**: SeleniumBase (some functions), `requests` (HTTP verification), `re`
 
-### 7. `tistory_editor.py` (shrunk, ~390 LOC orchestrator)
+### 7. `tistory_editor.py` (shrunk, ~290 LOC orchestrator)
 
 **Responsibility**: Orchestration only. Coordinates the 6 modules to implement `publish_post()` and `update_post()`.
 
 **Retained functions**:
 - `publish_post(sb, post, blog_name, profile=None) -> PublishResult` — orchestrator
 - `update_post(sb, post, blog_name, profile=None) -> PublishResult` — orchestrator
-- `_publish_via_api(sb, blog_name, title, ...) -> str | None` — kept here (calls `html_transformer.extract_first_image_url` + `_resolve_category_id`)
 - `set_site_profile(profile)` — global profile setter (deprecated, kept for backward compat)
 - `_get_profile(profile=None)` — profile resolution
 - `_resolve_category_id(category_name, profile=None)` — category lookup
@@ -161,60 +151,24 @@ html = html_transformer.add_lazy_loading(html)
 content_injector.inject_html_content(sb, html)
 ```
 
-## Affected Callers
+## External Contract
 
-### 1. `selenium_adapter.py` — No changes needed
+**No changes to `selenium_adapter.py`**. It continues to import:
 ```python
-from src.infrastructure.browser.tistory_editor import publish_post, update_post  # unchanged
-```
-
-### 2. `cli.py` — No changes needed
-```python
-from src.infrastructure.browser.tistory_editor import set_site_profile  # retained in orchestrator
-```
-
-### 3. `adsense_pages.py` — Must update import
-```python
-# Before:
-from src.infrastructure.browser.tistory_editor import _call_tistory_post_api
-# After:
-from src.infrastructure.browser.api_publisher import call_tistory_post_api
-```
-
-### 4. `tests/unit/infrastructure/test_markdown_to_html.py` — Must update imports
-```python
-# Before:
-from src.infrastructure.browser.tistory_editor import (
-    _add_lazy_loading, _add_nofollow_to_external_links,
-    _extract_post_id, _style_mermaid_fallback,
-    _verify_faq_schema, _verify_published_url,
-    convert_markdown_to_html, validate_html,
-)
-# After:
-from src.infrastructure.browser.markdown_converter import (
-    convert_markdown_to_html, style_mermaid_fallback,
-)
-from src.infrastructure.browser.html_transformer import (
-    add_lazy_loading, add_nofollow_to_external_links, validate_html,
-)
-from src.infrastructure.browser.publish_verifier import (
-    extract_post_id, verify_faq_schema, verify_published_url,
-)
+from src.infrastructure.browser.tistory_editor import publish_post, update_post
 ```
 
 ## File Map
 
-| File | Status | ~LOC |
-|------|--------|------|
-| `src/infrastructure/browser/markdown_converter.py` | Create | 120 |
-| `src/infrastructure/browser/html_transformer.py` | Create | 100 |
-| `src/infrastructure/browser/form_filler.py` | Create | 270 |
-| `src/infrastructure/browser/content_injector.py` | Create | 215 |
-| `src/infrastructure/browser/api_publisher.py` | Create | 200 |
-| `src/infrastructure/browser/publish_verifier.py` | Create | 270 |
-| `src/infrastructure/browser/tistory_editor.py` | Modify (shrink) | 390 |
-| `src/infrastructure/browser/adsense_pages.py` | Modify (import fix) | — |
-| `tests/unit/infrastructure/test_markdown_to_html.py` | Modify (import fix) | — |
+| File | Status | LOC |
+|------|--------|-----|
+| `src/infrastructure/browser/markdown_converter.py` | Create | ~120 |
+| `src/infrastructure/browser/html_transformer.py` | Create | ~80 |
+| `src/infrastructure/browser/form_filler.py` | Create | ~270 |
+| `src/infrastructure/browser/content_injector.py` | Create | ~215 |
+| `src/infrastructure/browser/api_publisher.py` | Create | ~300 |
+| `src/infrastructure/browser/publish_verifier.py` | Create | ~290 |
+| `src/infrastructure/browser/tistory_editor.py` | Modify (shrink) | ~290 |
 
 ## Verification
 

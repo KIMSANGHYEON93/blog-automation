@@ -1,5 +1,7 @@
 # tistory_editor.py Module Split Design
 
+> **Status**: Pre-implementation design spec. Describes the target state after refactoring. All "Before/After" import examples show the changes that the implementation plan must execute.
+
 ## Problem
 
 `src/infrastructure/browser/tistory_editor.py` is a 1,892-line monolithic module containing 36 functions spanning 7 distinct responsibilities: Markdown-to-HTML conversion, HTML optimization, form filling, content injection, API publishing, post-publication verification, and orchestration. This violates Single Responsibility Principle, makes the module difficult to navigate, test in isolation, and maintain.
@@ -40,7 +42,7 @@ Split `tistory_editor.py` into 6 new focused modules + 1 shrunk orchestrator, fo
 - `convert_markdown_to_html(md_text: str) -> str` (line 1203) — public entry point
 - `_preserve_mermaid_blocks(md_text: str) -> str` (line 1159) — internal
 - `_render_mermaid_via_kroki(code: str) -> str | None` (line 1136) — internal
-- `_style_mermaid_fallback(html_text: str) -> str` (line 1239) — internal
+- `_style_mermaid_fallback(html_text: str) -> str` (line 1239) — renamed to `style_mermaid_fallback` (public, directly tested)
 
 **Dependencies**: `markdown` (md_lib), `re`, `urllib.request` (stdlib, for Kroki API)
 
@@ -187,16 +189,15 @@ from src.infrastructure.browser.tistory_editor import (
     convert_markdown_to_html, validate_html,
 )
 # After:
-from src.infrastructure.browser.markdown_converter import convert_markdown_to_html
+from src.infrastructure.browser.markdown_converter import (
+    convert_markdown_to_html, style_mermaid_fallback,
+)
 from src.infrastructure.browser.html_transformer import (
     add_lazy_loading, add_nofollow_to_external_links, validate_html,
 )
 from src.infrastructure.browser.publish_verifier import (
     extract_post_id, verify_faq_schema, verify_published_url,
 )
-# Note: _style_mermaid_fallback stays internal to markdown_converter,
-# test may need to import it as markdown_converter._style_mermaid_fallback
-# or the test can be rewritten to test convert_markdown_to_html output.
 ```
 
 ## File Map

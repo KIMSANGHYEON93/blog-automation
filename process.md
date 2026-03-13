@@ -1,7 +1,7 @@
 # B2B IT 블로그 자동화 — 개발 프로세스 추적
 
 > **문서 용도**: 실행 진행 추적 (마스터 플랜 `masterplan_v2.3.md`의 실행 로그)
-> **최종 갱신**: 2026-03-06
+> **최종 갱신**: 2026-03-13
 
 ---
 
@@ -10,7 +10,7 @@
 | 항목 | 값 |
 |------|---|
 | **현재 Phase** | **Phase 7 진행 중** |
-| **단위 테스트** | 246건 통과 |
+| **단위 테스트** | 431건 통과 |
 | **Tistory 실발행** | 51건 성공 + 수정 재발행 진행 중 (39건 미색인 → 수정대기 → 재발행) |
 | **ruff** | 0 errors |
 | **콘텐츠 생성 모델** | Gemini 2.0 Flash (Phase 5.6에서 LLM_PROVIDER 추상화, `.env`로 전환 가능) |
@@ -1305,7 +1305,7 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | # | 항목 | 상태 | Go/No-Go |
 |---|------|------|----------|
 | 7.1 | 노출 500+ / 색인 10+ | 🔲 | **미달 → 피벗 레벨 1** |
-| 7.2 | 애드센스 승인 신청 | 🔲 | 필수 페이지 + 20건+ 글 |
+| 7.2 | 애드센스 승인 신청 | ✅ 완료 | 2026-03-09 승인 |
 | 7.3 | 광고 배치 최적화 (수동 3~4개) | 🔲 | H2 위/중간/결론 앞/사이드바 |
 | 7.4 | 고CPC 키워드 집중 (에러 해결 글 확대) | 🔲 | CPC > 1,000원 |
 | 7.5 | 일 유입 20명 | 🔲 | **미달 → 피벗 레벨 2~3** |
@@ -1319,6 +1319,55 @@ headed 모드로 Pipeline B 실행, 3건 발행 후 Tistory 일일 제한 도달
 | 1 | W8 색인 10건 미달 | 키워드 하향, 롱테일 집중, 제목/메타 교체 |
 | 2 | W10 CTR 1% 미달 | Matplotlib 차트 삽입, 원본 데이터 공개 |
 | 3 | W12 일 유입 10명 미달 | 워드프레스 전환 (REST API, 301 리다이렉트) |
+
+### 2026-03-11~13: tistory_editor 모듈 분할 + Application 리팩토링 + 실발행
+
+| # | 항목 | 상태 | 비고 |
+|---|------|------|------|
+| 7.2a | tistory_editor.py 7-모듈 분할 리팩토링 | ✅ 완료 | SRP 원칙 적용, 1,892 LOC → 7개 모듈 |
+| 7.2b | Application Layer DI 리팩토링 | ✅ 완료 | PublishPosts/RevisePosts UseCase DI 기반 전환 |
+| 7.2c | InternalLinkEnricher 서비스 추출 | ✅ 완료 | Application 서비스로 분리 |
+| 7.2d | CLI Composition Root 업데이트 | ✅ 완료 | DI 어셈블리 반영 |
+| 7.2e | mypy no-any-return 에러 13건 수정 | ✅ 완료 | 분할 모듈 전체 0 errors |
+| 7.2f | SEO Growth Strategy Phase A 구현 | ✅ 완료 | 콘텐츠 최소 3,000자 + quality_score≥70 + 키워드 중복 감지 |
+| 7.2g | 실발행 5건 성공 | ✅ 완료 | /265~/269 (Kafka vs RabbitMQ, CI/CD, Terraform, Ansible vs Terraform, SSL/TLS) |
+| 7.2h | 품질 게이트 전체 통과 | ✅ 완료 | 431 tests, 0 ruff, 0 mypy (91 files), 0 DDD violations |
+
+#### tistory_editor.py 분할 상세
+
+| 모듈 | 책임 | 커밋 |
+|------|------|------|
+| `markdown_converter.py` | 마크다운 → HTML 변환 | `da43ea6` |
+| `html_transformer.py` | lazy loading, nofollow, FAQ 스키마 | `62533b2` |
+| `form_filler.py` | 에디터 폼 필드 조작 | `5c84278` |
+| `content_injector.py` | 본문/태그/카테고리 주입 | `d947df4` |
+| `api_publisher.py` | 발행 API 호출 | `68b4b19` |
+| `publish_verifier.py` | 발행 검증, URL 추출, 공개 수정 | `7706d56` |
+| `tistory_editor.py` | 오케스트레이터 (서브모듈 조율) | `468bd89` |
+
+#### 커밋 내역 (da43ea6~ca9507a)
+
+| 커밋 | 메시지 |
+|------|--------|
+| `da43ea6` | `refactor(infra): extract markdown_converter module from tistory_editor` |
+| `62533b2` | `refactor(infra): extract html_transformer module from tistory_editor` |
+| `5c84278` | `refactor(infra): extract form_filler module from tistory_editor` |
+| `d947df4` | `refactor(infra): extract content_injector module from tistory_editor` |
+| `68b4b19` | `refactor(infra): extract api_publisher module from tistory_editor` |
+| `7706d56` | `refactor(infra): extract publish_verifier module from tistory_editor` |
+| `468bd89` | `refactor(infra): shrink tistory_editor to orchestrator — delegate to submodules` |
+| `8ccd99d` | `refactor(infra): update external callers for tistory_editor split` |
+| `ca9507a` | `fix(infra): resolve mypy no-any-return errors in split modules` |
+
+#### 검증 결과
+
+| 항목 | 결과 |
+|------|------|
+| 단위 테스트 | **431 passed** |
+| ruff | 0 errors |
+| mypy | 0 errors (91 files) |
+| DDD 계층 위반 | 0건 |
+| 실발행 | 5건 성공 (/265~/269 — 모두 HTTP 200 공개) |
 
 ---
 

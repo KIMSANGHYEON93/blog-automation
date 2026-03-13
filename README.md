@@ -35,7 +35,7 @@ Pipeline A (n8n)                    Pipeline B (Python/SeleniumBase)
 ## 주요 특징
 
 - **DDD 4-Layer 아키텍처**: Domain, Application, Infrastructure, Interface 계층 분리로 유지보수성 확보
-- **TDD 기반 개발**: 75건 테스트 통과, 커버리지 92%+
+- **TDD 기반 개발**: 431건 테스트 통과, 커버리지 92%+
 - **LLM Provider 추상화**: `.env`의 `LLM_PROVIDER` 값 하나로 Gemini/Claude 전환 (워크플로우 수정 불필요)
 - **3종 프롬프트 자동 라우팅**: 키워드 유형(용어/비교/에러해결)에 따라 최적화된 프롬프트 자동 선택
 - **Lenient JSON 파서**: LLM이 생성하는 비정형 JSON을 자동 복구하는 재귀 하강 파서 내장
@@ -56,7 +56,7 @@ Pipeline A (n8n)                    Pipeline B (Python/SeleniumBase)
 | LLM (교차 검증) | Claude Haiku |
 | 검색 데이터 | SerpAPI |
 | 린트/타입 체크 | ruff, mypy |
-| 테스트 | pytest (75건, 커버리지 92%) |
+| 테스트 | pytest (431건, 커버리지 92%) |
 
 ## 디렉토리 구조
 
@@ -76,7 +76,13 @@ blog-automation/
 │   │   └── dto.py                  # PublishBatchResult DTO
 │   ├── infrastructure/             # 외부 시스템 어댑터 (Port 구현)
 │   │   ├── browser/
-│   │   │   ├── tistory_editor.py   # 티스토리 에디터 조작
+│   │   │   ├── tistory_editor.py   # 발행 오케스트레이터 (서브모듈 조율)
+│   │   │   ├── markdown_converter.py  # 마크다운 → HTML 변환
+│   │   │   ├── html_transformer.py    # lazy loading, nofollow, FAQ 스키마
+│   │   │   ├── form_filler.py         # 에디터 폼 필드 조작
+│   │   │   ├── content_injector.py    # 본문/태그/카테고리 주입
+│   │   │   ├── api_publisher.py       # 발행 API 호출
+│   │   │   ├── publish_verifier.py    # 발행 검증, URL 추출, 공개 수정
 │   │   │   ├── kakao_auth.py       # 카카오 로그인
 │   │   │   ├── selenium_adapter.py # BrowserPort 구현체
 │   │   │   ├── dom_selectors.py    # DOM 셀렉터 (Fallback Chain)
@@ -106,9 +112,10 @@ blog-automation/
 │       ├── inject_images.js        # 이미지 자동 삽입
 │       └── lint_code_blocks.js     # 코드블록 린트
 ├── tests/
-│   ├── unit/                       # 단위 테스트 (66건)
+│   ├── unit/                       # 단위 테스트 (431건)
 │   │   ├── domain/                 # 엔티티, VO, 정책 테스트
-│   │   └── application/            # 유스케이스 테스트
+│   │   ├── application/            # 유스케이스 테스트
+│   │   └── infrastructure/         # 어댑터 테스트
 │   ├── integration/                # 통합 테스트 (9건)
 │   └── e2e/                        # E2E 테스트
 ├── docker-compose.yml              # n8n Docker 설정
@@ -276,15 +283,21 @@ make quality
 └────────────┬───────────────┬────────────┘
              │               │
              ▼               ▼
-┌────────────────┐  ┌────────────────────┐
-│ Application    │  │ Infrastructure     │
-│ (Use Cases)    │  │ (Adapters)         │
-│                │  │                    │
-│ PublishPosts   │  │ GoogleSheetsRepo   │
-│ ResetStuck     │  │ SeleniumAdapter    │
-│                │  │ TistoryEditor      │
-│                │  │ KakaoAuth          │
-└───────┬────────┘  └────────┬───────────┘
+┌────────────────┐  ┌─────────────────────────┐
+│ Application    │  │ Infrastructure          │
+│ (Use Cases)    │  │ (Adapters)              │
+│                │  │                         │
+│ PublishPosts   │  │ GoogleSheetsRepo        │
+│ ResetStuck     │  │ SeleniumAdapter         │
+│ CheckIndexing  │  │ KakaoAuth              │
+│ RevisePost     │  │ TistoryEditor (7모듈)   │
+│ ClassifyCategory│ │  ├─ MarkdownConverter   │
+│                │  │  ├─ HtmlTransformer     │
+│                │  │  ├─ FormFiller          │
+│                │  │  ├─ ContentInjector     │
+│                │  │  ├─ ApiPublisher        │
+│                │  │  └─ PublishVerifier     │
+└───────┬────────┘  └────────┬────────────────┘
         │                    │
         ▼                    ▼
 ┌──────────────────────────────────────────┐
@@ -408,7 +421,9 @@ Google Sheets에 행을 추가하고 A열(키워드)과 B열(상태=대기)을 �
 | 문서 | 설명 |
 |------|------|
 | `masterplan_v2.3.md` | 전체 프로젝트 마스터 플랜 (Phase 1~7) |
-| `prosess.md` | 개발 프로세스 추적 로그 |
+| `process.md` | 개발 프로세스 추적 로그 |
+| `DASHBOARD.md` | 성과 대시보드 (발행 현황, KPI) |
+| `PROJECT_REVIEW.md` | 프로젝트 리뷰 요약 문서 |
 | `SEO_SETUP_GUIDE.md` | Google Search Console, 네이버 서치어드바이저 등록 가이드 |
 | `CLAUDE.md` | Claude Code 에이전트 설정 |
 

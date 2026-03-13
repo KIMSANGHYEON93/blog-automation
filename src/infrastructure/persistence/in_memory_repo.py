@@ -1,6 +1,8 @@
 """InMemoryPostRepository — Test double for unit tests. No external dependencies."""
 from __future__ import annotations
 
+from datetime import date
+
 from src.domain.entities.post import Post
 from src.domain.ports.post_repository import PostRepository
 from src.domain.value_objects.post_status import PostStatus
@@ -63,6 +65,15 @@ class InMemoryPostRepository(PostRepository):
             if post.row_index == row_index:
                 post.category = category
                 return
+
+    def count_published_today(self) -> int:
+        today = date.today()
+        return sum(
+            1 for p in self._posts
+            if p.status == PostStatus.PUBLISHED
+            and p.published_at is not None
+            and p.published_at.date() == today
+        )
 
     def all(self) -> list[Post]:
         """테스트 검증용: 전체 포스트 반환."""

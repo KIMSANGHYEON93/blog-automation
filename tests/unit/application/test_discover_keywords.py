@@ -39,9 +39,9 @@ class TestDiscoverKeywordsUseCase:
         """조건에 맞는 키워드만 제안."""
         queries = [
             _suggestion("좋은 키워드", impressions=200, ctr=0.01, position=5.0),
-            _suggestion("낮은 노출", impressions=10, ctr=0.01, position=5.0),
-            _suggestion("높은 CTR", impressions=200, ctr=0.10, position=5.0),
-            _suggestion("높은 순위", impressions=200, ctr=0.01, position=25.0),
+            _suggestion("낮은 노출", impressions=2, ctr=0.01, position=5.0),
+            _suggestion("높은 CTR", impressions=200, ctr=0.15, position=5.0),
+            _suggestion("높은 순위", impressions=200, ctr=0.01, position=35.0),
         ]
         kr = _StubKeywordResearch(queries)
         repo = InMemoryPostRepository([])

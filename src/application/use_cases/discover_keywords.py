@@ -26,9 +26,9 @@ class DiscoverKeywordsUseCase:
     """GSC 검색 데이터에서 키워드를 발굴하여 제안.
 
     필터링 전략:
-    - impressions >= min_impressions (기본 50)
-    - position < max_position (기본 20)
-    - ctr < max_ctr (기본 0.03 = 3%)
+    - impressions >= min_impressions (기본 5)
+    - position < max_position (기본 30)
+    - ctr < max_ctr (기본 0.10 = 10%)
     - 기존 키워드 중복 제외
     - opportunity_score = impressions × (1 - ctr) 내림차순 Top N
     """
@@ -37,9 +37,9 @@ class DiscoverKeywordsUseCase:
         self,
         repo: PostRepository,
         keyword_research: KeywordResearchPort,
-        min_impressions: int = 50,
-        max_position: float = 20.0,
-        max_ctr: float = 0.03,
+        min_impressions: int = 5,
+        max_position: float = 30.0,
+        max_ctr: float = 0.10,
         top_n: int = 10,
     ):
         self._repo = repo
@@ -65,18 +65,30 @@ class DiscoverKeywordsUseCase:
         all_posts = self._repo.find_all()
         existing_keywords = {p.keyword.lower().strip() for p in all_posts if p.keyword}
 
-        # 필터링
+        # 필터링 (게이트별 탈락 카운트)
         filtered = []
+        gate_impressions = gate_position = gate_ctr = gate_existing = 0
         for q in queries:
             if q.impressions < self._min_impressions:
+                gate_impressions += 1
                 continue
             if q.position >= self._max_position:
+                gate_position += 1
                 continue
             if q.ctr >= self._max_ctr:
+                gate_ctr += 1
                 continue
             if q.keyword.lower().strip() in existing_keywords:
+                gate_existing += 1
                 continue
             filtered.append(q)
+
+        logger.info(
+            f"필터 상세: 노출<{self._min_impressions}={gate_impressions}, "
+            f"순위>={self._max_position}={gate_position}, "
+            f"CTR>={self._max_ctr}={gate_ctr}, "
+            f"기존키워드={gate_existing}"
+        )
 
         # opportunity_score 내림차순 정렬 → Top N
         filtered.sort(key=lambda x: x.opportunity_score, reverse=True)

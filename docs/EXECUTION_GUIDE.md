@@ -310,6 +310,19 @@ python scripts/add_keywords.py
 
 ## 7. 자동화 (Cron)
 
+### 전체 일일 스케줄
+
+| 시간 | 작업 | 명령 |
+|------|------|------|
+| 01:00 | Pipeline A — 콘텐츠 생성 | n8n Docker (자체 스케줄러) |
+| 08:30 | 발행실패 자동 복구 | `run_pipeline_b.sh --recover-failed` |
+| 09:00 | 티스토리 자동 발행 (메인) | `run_pipeline_b.sh` |
+| 10:00 | 수정대기 글 업데이트 | `run_pipeline_b.sh --revise` |
+| 14:00 | 색인 상태 점검 | `run_pipeline_b.sh --check-index` |
+| 14:30 | 미색인 글 색인 제출 | `run_pipeline_b.sh --submit-index` |
+| 15:00 | 대시보드 업데이트 | `run_dashboard.sh` |
+| 월 02:00 | GSC 키워드 발굴 (주 1회) | `run_pipeline_b.sh --discover-keywords` |
+
 ### crontab 설정
 
 ```bash
@@ -317,19 +330,43 @@ crontab -e
 ```
 
 ```cron
-# Pipeline A: n8n 자체 스케줄러 (01:00 AM, Docker 내장)
-# Pipeline B: cron으로 매일 09:00 AM 실행
-0 9 * * * /path/to/blog-automation/run_pipeline_b.sh >> /path/to/logs/cron.log 2>&1
+# ============================================================
+# Blog Automation — Pipeline B 전체 스케줄 (Asia/Seoul)
+# ============================================================
+
+# 08:30 발행실패 자동 복구
+30 8 * * * "/path/to/blog-automation/run_pipeline_b.sh" --recover-failed
+
+# 09:00 티스토리 자동 발행 (메인)
+0 9 * * * "/path/to/blog-automation/run_pipeline_b.sh"
+
+# 10:00 수정대기 글 업데이트
+0 10 * * * "/path/to/blog-automation/run_pipeline_b.sh" --revise
+
+# 14:00 색인 상태 점검
+0 14 * * * "/path/to/blog-automation/run_pipeline_b.sh" --check-index
+
+# 14:30 미색인 글 색인 제출
+30 14 * * * "/path/to/blog-automation/run_pipeline_b.sh" --submit-index
+
+# 15:00 성과 대시보드 업데이트
+0 15 * * * "/path/to/blog-automation/run_dashboard.sh"
+
+# 02:00 (월) GSC 키워드 발굴 — 주 1회
+0 2 * * 1 "/path/to/blog-automation/run_pipeline_b.sh" --discover-keywords
 ```
 
-### 실행 스크립트 (run_pipeline_b.sh)
+### 실행 스크립트
+
+`run_pipeline_b.sh` — 인자 없으면 기본 발행, 인자 있으면 해당 서브커맨드 실행:
 
 ```bash
-#!/bin/bash
-cd /path/to/blog-automation
-source .env
-python -m src.interface.cli
+./run_pipeline_b.sh                  # 기본 발행
+./run_pipeline_b.sh --revise         # 수정대기 업데이트
+./run_pipeline_b.sh --check-index    # 색인 점검
 ```
+
+로그는 `logs/` 폴더에 작업별로 분리 저장 (예: `publish_20260320_090000.log`, `revise_20260320_100000.log`). 30일 후 자동 삭제.
 
 ---
 

@@ -16,11 +16,39 @@ def call_tistory_post_api(
     sb, blog_name: str, title: str, html_body: str, tags: str,
     thumbnail_url: str = "", category_id: str = "0",
     content_type: str = "", entry_id: str = "0",
+    *, max_retries: int = 2,
 ) -> tuple[str, str] | None:
     """POST /manage/post.json API 호출. 성공 시 (entryUrl, entryId) 반환.
 
     entry_id='0'이면 신규 생성, entry_id=<postId>이면 기존 글 수정.
+    script timeout 시 max_retries까지 재시도.
     """
+    import contextlib
+
+    for attempt in range(max_retries):
+        if attempt > 0:
+            logger.info(f"API 발행 재시도 ({attempt + 1}/{max_retries})...")
+            # 재시도 전 script timeout 연장
+            with contextlib.suppress(Exception):
+                sb.driver.set_script_timeout(180)
+            time.sleep(3)
+
+        result = _call_tistory_post_api_once(
+            sb, blog_name, title, html_body, tags,
+            thumbnail_url, category_id, content_type, entry_id,
+        )
+        if result is not None:
+            return result
+
+    return None
+
+
+def _call_tistory_post_api_once(
+    sb, blog_name: str, title: str, html_body: str, tags: str,
+    thumbnail_url: str = "", category_id: str = "0",
+    content_type: str = "", entry_id: str = "0",
+) -> tuple[str, str] | None:
+    """단일 API 호출 시도."""
     import json as json_mod
 
     try:

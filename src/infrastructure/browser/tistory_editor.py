@@ -374,6 +374,20 @@ def _publish_via_api(
         sb, title, html_body, tags, blog_name, category_id,
     )
     if react_url:
-        return (react_url, "")
+        # URL이 올바른 블로그인지 검증
+        if blog_name in react_url:
+            return (react_url, "")
+        logger.warning(
+            f"React fallback URL이 다른 블로그: {react_url} "
+            f"(expected: {blog_name}.tistory.com)"
+        )
+        # 관리 페이지에서 올바른 URL 재탐색
+        correct_url = publish_verifier.extract_published_url(sb, blog_name)
+        if correct_url and blog_name in correct_url:
+            logger.info(f"관리 페이지에서 올바른 URL 발견: {correct_url}")
+            return (correct_url, "")
+        # 최후 수단: blog_name 기반 URL 구성 (발행은 됐으므로)
+        logger.warning("올바른 URL 추출 불가 — 관리 페이지에서 수동 확인 필요")
+        return (f"https://{blog_name}.tistory.com", "")
 
     return None

@@ -64,24 +64,33 @@ def click_publish_confirm_in_modal(sb, blog_name: str) -> str | None:
             # fallback: /manage/posts 페이지에서 최신 글 링크 추출
             try:
                 url: str | None = sb.execute_script("""
+                    var blogName = arguments[0];
                     var links = document.querySelectorAll(
                         'a[href*="tistory.com/"]'
                     );
-                    var pattern = /tistory\\.com\\/\\d+$/;
+                    var pattern = new RegExp(
+                        blogName + '\\\\.tistory\\\\.com/\\\\d+$'
+                    );
                     for (var i = 0; i < links.length; i++) {
                         if (pattern.test(links[i].href)) {
                             return links[i].href;
                         }
                     }
                     return null;
-                """)
+                """, blog_name)
                 if url:
                     return url
             except Exception:
                 pass
             logger.warning(f"발행 URL 추출 실패, 관리 페이지: {current_url}")
+            # blog_name이 포함된 URL만 반환 (다른 블로그 URL 방지)
+            if blog_name in current_url:
+                return current_url
+            return None
+        # 리다이렉트된 URL이 올바른 블로그인지 검증
+        if blog_name in current_url:
             return current_url
-        return current_url
+        return None
 
     # CSS 셀렉터로 발행 확인 버튼 찾기
     confirm_sel = find_element(sb, PUBLISH_CONFIRM_SELECTORS, timeout=5)

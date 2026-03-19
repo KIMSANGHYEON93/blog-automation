@@ -1,36 +1,47 @@
 """
-Google Sheets 컬럼 매핑 (A~Y열 = 1~25)
-masterplan_v2.2 스키마 섹션 7 기준
+Google Sheets 컬럼 매핑 (A~AH열)
+시트 구조 v2 — 기획 메타 + 생성 데이터 + 운영 데이터 통합
 """
 COL = {
-    "keyword": 1,        # A: 키워드
-    "category": 2,       # B: 콘텐츠 유형
-    "status": 3,         # C: 상태
-    "title": 4,          # D: 제목
-    "meta_desc": 5,      # E: 메타 설명
-    "url_slug": 6,       # F: URL 슬러그
-    "tags": 7,           # G: 태그
-    "faq": 8,            # H: FAQ 스키마 JSON
-    "references": 9,     # I: 참고 자료
-    "created_at": 10,    # J: 생성 일시
-    "published_at": 11,  # K: 발행 일시
-    "published_url": 12, # L: 발행 URL
-    "error_msg": 13,     # M: 에러 메시지
-    "search_vol": 14,    # N: 검색량 (SerpAPI)
-    "content": 15,       # O: 본문 마크다운 (핵심)
-    "serp_data": 16,     # P: SERP 스니펫 JSON
-    "prompt_type": 17,   # Q: 프롬프트 유형 (A/B/C)
-    "verified": 18,      # R: Haiku 검증 결과
-    "internal_links": 19,  # S: 내부 링크 키워드
-    "thumbnail_url": 20,   # T: 썸네일 URL (OG 이미지)
-    "entry_id": 21,        # U: Tistory 포스트 ID (수정 API용)
-    "revision_count": 22,  # V: 수정 횟수
-    # W~Y: Core Web Vitals 추적
-    "cwv_lcp": 23,         # W: LCP (초)
-    "cwv_cls": 24,         # X: CLS
-    "cwv_checked_at": 25,  # Y: CWV 점검 일시
-    "revised_at": 26,      # Z: 최종 수정 일시
-    "revision_reason": 27, # AA: 수정 사유
+    # === 기획 메타데이터 (A-I) ===
+    "no": 1,              # A: No.
+    "keyword": 2,         # B: 키워드
+    "category": 3,        # C: 카테고리
+    "content_type": 4,    # D: 콘텐츠유형
+    "search_vol": 5,      # E: 검색볼륨
+    "cpc": 6,             # F: 예상CPC
+    "difficulty": 7,      # G: 난이도
+    "priority": 8,        # H: 우선순위
+    "scheduled_date": 9,  # I: 예정일
+    # === 상태 (J) ===
+    "status": 10,         # J: 상태
+    # === 생성 데이터 (K-P) ===
+    "title": 11,          # K: 제목
+    "meta_desc": 12,      # L: 메타설명
+    "tags": 13,           # M: 태그
+    "faq": 14,            # N: FAQ스키마
+    "references": 15,     # O: 참고자료
+    "content": 16,        # P: 본문마크다운
+    # === 발행/운영 데이터 (Q-Y) ===
+    "published_url": 17,  # Q: 발행URL
+    "published_at": 18,   # R: 발행일시
+    "indexed": 19,        # S: 색인여부
+    "error_msg": 20,      # T: 에러메시지
+    "serp_data": 21,      # U: SERP데이터
+    "prompt_type": 22,    # V: 프롬프트유형
+    "verified": 23,       # W: Haiku검증
+    "internal_links": 24, # X: 내부링크키워드
+    "note": 25,           # Y: 비고
+    # === 확장 운영 컬럼 (Z-AH) ===
+    "created_at": 26,     # Z: 생성일시
+    "thumbnail_url": 27,  # AA: 썸네일URL
+    "entry_id": 28,       # AB: 엔트리ID
+    "revision_count": 29, # AC: 수정횟수
+    "cwv_lcp": 30,        # AD: CWV_LCP
+    "cwv_cls": 31,        # AE: CWV_CLS
+    "cwv_checked_at": 32, # AF: CWV점검일시
+    "revised_at": 33,     # AG: 최종수정일시
+    "revision_reason": 34,  # AH: 수정사유
 }
 
 STATUS_WAITING = "대기"

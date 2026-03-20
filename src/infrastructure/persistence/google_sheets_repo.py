@@ -21,6 +21,7 @@ from src.infrastructure.persistence.column_map import (
     STATUS_PUBLISHING,
     STATUS_REVISING,
     STATUS_REVISION_PENDING,
+    STATUS_WAITING,
 )
 
 logger = logging.getLogger(__name__)
@@ -227,3 +228,18 @@ class GoogleSheetsPostRepository(PostRepository):
             if status_val == STATUS_PUBLISHED and pub_at_val.startswith(today_str):
                 count += 1
         return count
+
+    def add_keyword_row(self, keyword: str) -> int:
+        all_rows = self._sheet.get_all_values()
+        next_no = len(all_rows)  # 헤더 제외한 데이터 수 + 1
+        new_row_index = len(all_rows) + 1
+
+        row_data = [""] * max(COL.values())
+        row_data[COL["no"] - 1] = str(next_no)
+        row_data[COL["keyword"] - 1] = keyword
+        row_data[COL["status"] - 1] = STATUS_WAITING
+        row_data[COL["created_at"] - 1] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        self._sheet.append_row(row_data, value_input_option="RAW")
+        logger.info(f"키워드 등록: row={new_row_index}, keyword={keyword}")
+        return new_row_index

@@ -90,6 +90,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="발행실패 포스트를 에러 유형별로 분류 후 자동 복구 가능한 건 일괄 전환",
     )
+    parser.add_argument(
+        "--auto-register",
+        action="store_true",
+        help="--discover-keywords 시 발굴된 키워드를 시트에 대기 상태로 자동 등록",
+    )
     return parser.parse_args()
 
 
@@ -312,7 +317,7 @@ def _status(config: Config) -> None:
     print(uc.format_report(report))
 
 
-def _discover_keywords(config: Config) -> None:
+def _discover_keywords(config: Config, auto_register: bool = False) -> None:
     """GSC 검색 데이터에서 키워드 발굴."""
     config.validate()
 
@@ -327,7 +332,7 @@ def _discover_keywords(config: Config) -> None:
     uc = DiscoverKeywordsUseCase(repo=repo, keyword_research=kr)
 
     site_url = f"https://{config.tistory_blog}.tistory.com/"
-    result = uc.execute(site_url)
+    result = uc.execute(site_url, auto_register=auto_register)
 
     if result.success:
         logger.info(
@@ -340,6 +345,8 @@ def _discover_keywords(config: Config) -> None:
                 f"(노출={s.impressions}, CTR={s.ctr:.1%}, "
                 f"순위={s.position:.1f}, 기회={s.opportunity_score:.0f})"
             )
+        if result.registered:
+            logger.info(f"시트 자동 등록 완료: {result.registered}건 (대기 상태)")
     else:
         logger.error(f"키워드 발굴 실패: {result.error}")
 
@@ -485,7 +492,7 @@ def main() -> None:
         return
 
     if args.discover_keywords:
-        _discover_keywords(config)
+        _discover_keywords(config, auto_register=args.auto_register)
         return
 
     if args.sync_categories:

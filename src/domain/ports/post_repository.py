@@ -69,3 +69,8 @@ class PostRepository(ABC):
     def count_published_today(self) -> int:
         """오늘 발행된 포스트 수 반환 (쿼터 사전 체크용)."""
         ...
+
+    @abstractmethod
+    def add_keyword_row(self, keyword: str) -> int:
+        """키워드를 대기 상태로 시트에 추가. 추가된 행 번호 반환."""
+        ...

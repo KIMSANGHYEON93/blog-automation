@@ -60,6 +60,23 @@ class PublishPostsUseCase:
             return stats
 
         published_posts = self._repo.find_published(limit=50)
+
+        # 중복 키워드 체크: 이미 발행된 키워드와 동일한 건 스킵
+        published_keywords = {
+            p.keyword.lower().strip() for p in published_posts if p.keyword
+        }
+        deduped = []
+        for p in publishable:
+            if p.keyword.lower().strip() in published_keywords:
+                logger.warning(f"중복 키워드 스킵: {p.keyword} (이미 발행됨)")
+                stats.skipped += 1
+            else:
+                deduped.append(p)
+        publishable = deduped
+
+        if not publishable:
+            logger.info("중복 제거 후 발행 가능한 포스트 없음")
+            return stats
         hubs = self._enricher.identify_hubs(published_posts)
 
         self._browser.start()

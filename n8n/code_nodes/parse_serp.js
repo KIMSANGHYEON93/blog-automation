@@ -9,11 +9,15 @@ const serpResults = $input.item.json;
 
 // 1. Organic Results (상위 7개) — 제목, 스니펫, URL
 let organicText = '';
+const serpUrls = [];
 if (serpResults.organic_results && serpResults.organic_results.length > 0) {
   const top7 = serpResults.organic_results.slice(0, 7);
   organicText = top7.map((r, i) =>
     `${i + 1}. ${r.title}\n   ${r.snippet || '(스니펫 없음)'}\n   URL: ${r.link || ''}`
   ).join('\n');
+  for (const r of top7) {
+    if (r.link) serpUrls.push(r.link);
+  }
 }
 
 // 2. People Also Ask (관련 질문, 5개) — FAQ 재료
@@ -39,6 +43,10 @@ if (serpResults.knowledge_graph) {
   kgText = `${kg.title || ''}: ${kg.description || kg.snippet || ''}`;
   if (kg.source) {
     kgText += ` (출처: ${kg.source.name || ''})`;
+  }
+  // Extract knowledge graph URL
+  if (kg.source && kg.source.link) {
+    serpUrls.push(kg.source.link);
   }
 }
 
@@ -69,6 +77,7 @@ return {
   json: {
     ...sheetData,
     serp_text: serpText,
+    serp_urls: serpUrls,
     serp_organic_count: serpResults.organic_results ? serpResults.organic_results.length : 0,
     serp_paa_count: serpResults.related_questions ? serpResults.related_questions.length : 0,
     serp_related_count: serpResults.related_searches ? serpResults.related_searches.length : 0,

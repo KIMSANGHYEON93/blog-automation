@@ -29,6 +29,12 @@ if (category.includes('비교') || category.includes('트렌드') || keyword.inc
   promptType = 'A';
 }
 
+// SERP URL 풀 구성
+const serpUrls = $input.item.json.serp_urls || [];
+const urlPoolText = serpUrls.length > 0
+  ? serpUrls.map((url, i) => `${i + 1}. ${url}`).join('\n')
+  : '(SERP URL 없음)';
+
 return {
   json: {
     keyword,
@@ -36,6 +42,6 @@ return {
     row_index: rowIndex,
     prompt_type: promptType,
     system_prompt: systemPrompt,
-    user_message: `키워드: ${keyword}\n\n## SERP 인텔리전스\n${serpText}`,
+    user_message: `키워드: ${keyword}\n\n## SERP 인텔리전스\n${serpText}\n\n## 참조 가능 URL 풀\n아래 URL만 references와 인라인 출처에 사용하세요:\n${urlPoolText}`,
   }
 };

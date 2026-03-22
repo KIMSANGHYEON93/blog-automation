@@ -8,6 +8,7 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials as GoogleCredentials
 from gspread import Cell
+from gspread.http_client import BackOffHTTPClient
 
 from src.domain.entities.post import Post
 from src.domain.ports.post_repository import PostRepository
@@ -35,7 +36,7 @@ SCOPES = [
 class GoogleSheetsPostRepository(PostRepository):
     def __init__(self, creds_path: str, sheet_name: str):
         creds = GoogleCredentials.from_service_account_file(creds_path, scopes=SCOPES)
-        client = gspread.authorize(creds)
+        client = gspread.authorize(creds, http_client=BackOffHTTPClient)
         self._sheet = client.open(sheet_name).sheet1
         self._header_row = 1  # 1행은 헤더
 

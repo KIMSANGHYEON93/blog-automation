@@ -207,28 +207,28 @@ def _enter_credentials_and_wait(sb, kakao_id: str, kakao_pw: str) -> bool:
                 sb.click(submit_sel)
         except Exception as type_err:
             logger.warning(f"네이티브 타이핑 실패, JS fallback: {type_err}")
-            # JS로 직접 입력 + React nativeInputValueSetter + 클릭
-            safe_id = kakao_id.replace("\\", "\\\\").replace("'", "\\'")
-            safe_pw = kakao_pw.replace("\\", "\\\\").replace("'", "\\'")
-            # 동적 셀렉터를 안전하게 이스케이프
-            safe_id_sel = id_sel.replace("'", "\\'")
-            safe_pw_sel = pw_sel.replace("'", "\\'")
-            safe_submit_sel = (submit_sel or "button.submit").replace("'", "\\'")
-            sb.execute_script(f"""
-                function setNativeValue(el, value) {{
+            # JS로 직접 입력 — arguments[]로 안전하게 인자 전달 (문자열 보간 없음)
+            sb.execute_script("""
+                var idSel = arguments[0];
+                var pwSel = arguments[1];
+                var submitSel = arguments[2];
+                var idVal = arguments[3];
+                var pwVal = arguments[4];
+                function setNativeValue(el, value) {
                     var setter = Object.getOwnPropertyDescriptor(
                         window.HTMLInputElement.prototype, 'value').set;
                     setter.call(el, value);
-                    el.dispatchEvent(new Event('input', {{bubbles: true}}));
-                    el.dispatchEvent(new Event('change', {{bubbles: true}}));
-                }}
-                var loginId = document.querySelector('{safe_id_sel}');
-                var pw = document.querySelector('{safe_pw_sel}');
-                if (loginId) setNativeValue(loginId, '{safe_id}');
-                if (pw) setNativeValue(pw, '{safe_pw}');
-                var btn = document.querySelector('{safe_submit_sel}');
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                }
+                var loginId = document.querySelector(idSel);
+                var pw = document.querySelector(pwSel);
+                if (loginId) setNativeValue(loginId, idVal);
+                if (pw) setNativeValue(pw, pwVal);
+                var btn = document.querySelector(submitSel);
                 if (btn) btn.click();
-            """)
+            """, id_sel, pw_sel, submit_sel or "button.submit",
+                kakao_id, kakao_pw)
 
         time.sleep(5)
 

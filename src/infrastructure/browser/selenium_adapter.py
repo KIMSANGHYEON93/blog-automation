@@ -35,18 +35,25 @@ class SeleniumBrowserAdapter(BrowserPort):
 
         from seleniumbase import SB
         # 쿠키 영속화: user_data_dir 설정 시 브라우저 세션 유지 (2FA 1회만)
-        if self._user_data_dir:
-            abs_path = os.path.abspath(self._user_data_dir)
-            os.makedirs(abs_path, exist_ok=True)
-            self._sb_context = SB(
-                headless=self._headless,
-                chromium_arg=f"--user-data-dir={abs_path}",
-            )
-        else:
-            self._sb_context = SB(headless=self._headless)
-        assert self._sb_context is not None
-        self._sb = self._sb_context.__enter__()
-        logger.info("브라우저 시작")
+        try:
+            if self._user_data_dir:
+                abs_path = os.path.abspath(self._user_data_dir)
+                os.makedirs(abs_path, exist_ok=True)
+                self._sb_context = SB(
+                    headless=self._headless,
+                    chromium_arg=f"--user-data-dir={abs_path}",
+                )
+            else:
+                self._sb_context = SB(headless=self._headless)
+            assert self._sb_context is not None
+            self._sb = self._sb_context.__enter__()
+            logger.info("브라우저 시작")
+        except Exception as e:
+            logger.error(f"브라우저 시작 실패: {e}")
+            self._cleanup_zombie_drivers()
+            self._sb = None
+            self._sb_context = None
+            raise
 
     def stop(self) -> None:
         if self._sb_context:

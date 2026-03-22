@@ -109,6 +109,9 @@ def convert_markdown_to_html(md_text: str) -> str:
     # Mermaid fallback 스타일링 (렌더링 실패한 잔류 코드블록에 시각적 힌트)
     html_body = style_mermaid_fallback(html_body)
 
+    # HTML Sanitization: 악의적 script/event handler 제거
+    html_body = sanitize_html(html_body)
+
     return html_body
 
 
@@ -127,3 +130,54 @@ def style_mermaid_fallback(html_text: str) -> str:
         r'border-radius:6px;padding:8px;margin:16px 0;overflow-x:auto;">\1',
         html_text,
     ).replace('</code></pre>', '</code></pre></div>')
+
+
+# bleach 허용 태그/속성 (블로그 콘텐츠용)
+_ALLOWED_TAGS = [
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "p", "br", "hr",
+    "strong", "em", "b", "i", "u", "s", "del", "ins", "mark", "sub", "sup",
+    "a", "img", "figure", "figcaption",
+    "ul", "ol", "li", "dl", "dt", "dd",
+    "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "colgroup", "col",
+    "pre", "code", "blockquote", "abbr", "cite", "q",
+    "div", "span", "section", "nav",
+    "details", "summary",
+    "svg", "path", "g", "rect", "circle", "line", "polyline", "polygon",
+    "text", "tspan", "defs", "use", "clipPath", "mask",
+]
+_ALLOWED_ATTRS = {
+    "*": ["class", "id", "style", "role", "aria-label"],
+    "a": ["href", "target", "rel", "title"],
+    "img": ["src", "alt", "width", "height", "loading", "decoding", "fetchpriority"],
+    "td": ["colspan", "rowspan"],
+    "th": ["colspan", "rowspan", "scope"],
+    "col": ["span"],
+    "svg": ["width", "height", "viewBox", "xmlns", "fill", "stroke"],
+    "path": ["d", "fill", "stroke", "stroke-width"],
+    "rect": ["x", "y", "width", "height", "fill", "rx", "ry"],
+    "circle": ["cx", "cy", "r", "fill"],
+    "line": ["x1", "y1", "x2", "y2", "stroke"],
+    "g": ["transform", "fill", "stroke"],
+    "text": ["x", "y", "font-size", "text-anchor", "fill"],
+}
+
+
+def sanitize_html(html_text: str) -> str:
+    """bleach로 HTML sanitize — script/event handler/위험 태그 제거."""
+    if not html_text:
+        return html_text
+    try:
+        import bleach
+        from bleach.css_sanitizer import CSSSanitizer
+
+        return bleach.clean(
+            html_text,
+            tags=_ALLOWED_TAGS,
+            attributes=_ALLOWED_ATTRS,
+            css_sanitizer=CSSSanitizer(),
+            strip=True,
+        )
+    except ImportError:
+        logger.warning("bleach 미설치 — HTML sanitization 건너뜀")
+        return html_text

@@ -147,5 +147,10 @@ class PublishPostsUseCase:
             post.mark_failed(str(e))
             stats.failed += 1
             logger.exception(f"발행 중 예외: {post.keyword}")
+        except BaseException as e:
+            # KeyboardInterrupt 등 — PUBLISHING 고착 방지
+            post.mark_failed(f"중단: {type(e).__name__}")
+            self._repo.save(post)
+            raise
         finally:
             self._repo.save(post)

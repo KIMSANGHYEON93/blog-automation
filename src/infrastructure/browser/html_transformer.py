@@ -87,10 +87,22 @@ def validate_html(html_text: str) -> bool:
 
 
 def append_faq_schema(body_markdown: str, faq_ld_json: str) -> str:
-    """본문 하단에 FAQ LD+JSON 스키마를 추가."""
+    """본문 하단에 FAQ LD+JSON 스키마를 추가.
+
+    JSON 유효성 검증 후 재직렬화하여 </script> 탈출 공격을 방지한다.
+    """
+    import json
+
+    try:
+        parsed = json.loads(faq_ld_json)
+        safe_json = json.dumps(parsed, ensure_ascii=False)
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.error(f"FAQ 스키마 JSON 파싱 실패 — 스키마 삽입 건너뜀: {e}")
+        return body_markdown
+
     schema_block = (
         '\n\n<script type="application/ld+json">\n'
-        f'{faq_ld_json}\n'
+        f'{safe_json}\n'
         '</script>'
     )
     return body_markdown + schema_block

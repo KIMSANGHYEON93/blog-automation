@@ -16,26 +16,33 @@ def call_tistory_post_api(
     sb, blog_name: str, title: str, html_body: str, tags: str,
     thumbnail_url: str = "", category_id: str = "0",
     content_type: str = "", entry_id: str = "0",
-    *, max_retries: int = 2,
+    view_channel: str = "",
+    *, max_retries: int = 3,
 ) -> tuple[str, str] | None:
     """POST /manage/post.json API 호출. 성공 시 (entryUrl, entryId) 반환.
 
     entry_id='0'이면 신규 생성, entry_id=<postId>이면 기존 글 수정.
-    script timeout 시 max_retries까지 재시도.
+    script timeout 시 max_retries까지 재시도 (지수 백오프).
     """
     import contextlib
 
     for attempt in range(max_retries):
         if attempt > 0:
-            logger.info(f"API 발행 재시도 ({attempt + 1}/{max_retries})...")
+            backoff = 3 * (2 ** (attempt - 1))  # 3s, 6s, 12s
+            timeout = 120 + 60 * attempt  # 180s, 240s
+            logger.info(
+                f"API 발행 재시도 ({attempt + 1}/{max_retries}), "
+                f"backoff={backoff}s, timeout={timeout}s"
+            )
             # 재시도 전 script timeout 연장
             with contextlib.suppress(Exception):
-                sb.driver.set_script_timeout(180)
-            time.sleep(3)
+                sb.driver.set_script_timeout(timeout)
+            time.sleep(backoff)
 
         result = _call_tistory_post_api_once(
             sb, blog_name, title, html_body, tags,
             thumbnail_url, category_id, content_type, entry_id,
+            view_channel,
         )
         if result is not None:
             return result
@@ -47,6 +54,7 @@ def _call_tistory_post_api_once(
     sb, blog_name: str, title: str, html_body: str, tags: str,
     thumbnail_url: str = "", category_id: str = "0",
     content_type: str = "", entry_id: str = "0",
+    view_channel: str = "",
 ) -> tuple[str, str] | None:
     """단일 API 호출 시도."""
     import json as json_mod
@@ -62,6 +70,7 @@ def _call_tistory_post_api_once(
             var categoryId = arguments[5] || '0';
             var contentType = arguments[6] || '';
             var entryId = arguments[7] || '0';
+            var viewChannel = arguments[8] || '';
 
             var manageUrl = '';
             if (window.appInfo && window.appInfo.manageUrl) {
@@ -89,7 +98,7 @@ def _call_tistory_post_api_once(
                 published: '1',
                 password: Math.random().toString(36).substring(2, 10),
                 uselessMarginForEntry: blogSettings.uselessMargin || '0',
-                daumLike: '',
+                daumLike: viewChannel,
                 cclCommercial: blogCfg.cclCommercial || '1',
                 cclDerive: blogCfg.cclDerive || '1',
                 thumbnail: thumbnailUrl,
@@ -144,7 +153,7 @@ def _call_tistory_post_api_once(
                 }));
             });
         """, title, html_body, tags, blog_name, thumbnail_url, category_id,
-            content_type, entry_id)
+            content_type, entry_id, view_channel)
 
         logger.info(f"API 발행 결과: {result_json}")
 

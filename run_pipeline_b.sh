@@ -24,11 +24,28 @@ mkdir -p "$LOG_DIR"
 # 프로젝트 디렉토리로 이동 (credentials.json, .browser_data 상대경로 해결)
 cd "$PROJECT_DIR"
 
+# --- Fix 1: 파이프라인 동시 실행 방지 (mkdir atomic lock) ---
+LOCK_DIR="${PROJECT_DIR}/.pipeline_b.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    # 스테일 락 체크 (5시간 이상 → 강제 해제)
+    if find "$LOCK_DIR" -maxdepth 0 -mmin +300 2>/dev/null | grep -q .; then
+        rmdir "$LOCK_DIR" 2>/dev/null || true
+        mkdir "$LOCK_DIR" 2>/dev/null || { echo "[SKIP] 다른 파이프라인 실행 중 — ${TASK_NAME} 스킵" | tee -a "$LOG_FILE"; exit 0; }
+    else
+        echo "[SKIP] 다른 파이프라인 실행 중 — ${TASK_NAME} 스킵" | tee -a "$LOG_FILE"
+        exit 0
+    fi
+fi
+trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+
 echo "=== Pipeline B [${TASK_NAME}] 시작: $(date '+%Y-%m-%d %H:%M:%S') ===" | tee "$LOG_FILE"
 
 # CLI 실행 (인자 그대로 전달)
 $PYTHON -m src.interface.cli "$@" >> "$LOG_FILE" 2>&1
 EXIT_CODE=$?
+
+# --- Fix 4: 좀비 ChromeDriver/Chrome 정리 (안전망) ---
+pkill -f "user-data-dir=.*blog-automation.*browser_data" 2>/dev/null || true
 
 echo "=== Pipeline B [${TASK_NAME}] 종료: $(date '+%Y-%m-%d %H:%M:%S') (exit=$EXIT_CODE) ===" | tee -a "$LOG_FILE"
 

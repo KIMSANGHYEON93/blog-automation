@@ -41,14 +41,34 @@ _site_profile: SiteProfile | None = None
 
 _DEFAULT_PROFILE = SiteProfile(
     blog_niche="B2B IT 블로그",
-    default_category_id="0",
+    default_category_id="966384",
+    default_view_channel="401",
     categories=(
-        CategoryMapping(name="용어", tistory_id="991463"),
-        CategoryMapping(name="비교", tistory_id="966384"),
-        CategoryMapping(name="에러", tistory_id="966384"),
-        CategoryMapping(name="트러블슈팅", tistory_id="966384"),
-        CategoryMapping(name="가이드", tistory_id="966384"),
-        CategoryMapping(name="트렌드", tistory_id="966384"),
+        CategoryMapping(name="용어", tistory_id="991463", view_channel="401",
+                        aliases=("용어정리", "개념"),
+                        keyword_patterns=("란$", "이란$", "뜻$", "의미$")),
+        CategoryMapping(name="비교", tistory_id="984395", view_channel="401",
+                        keyword_patterns=("vs ", "비교$", "차이$")),
+        CategoryMapping(name="트러블슈팅", tistory_id="966385", view_channel="401",
+                        aliases=("에러", "오류", "에러 해결"),
+                        keyword_patterns=("에러$", "오류$", "해결$", "안될때$")),
+        CategoryMapping(name="AI", tistory_id="993759", view_channel="401",
+                        aliases=("인공지능",),
+                        keyword_patterns=("AI ", "인공지능", "LLM", "GPT",
+                                          "머신러닝", "딥러닝", "ChatGPT")),
+        CategoryMapping(name="Windows", tistory_id="983175", view_channel="401",
+                        aliases=("윈도우",),
+                        keyword_patterns=("윈도우", "Windows ", "윈도우즈")),
+        CategoryMapping(name="Linux", tistory_id="998284", view_channel="401",
+                        aliases=("리눅스",),
+                        keyword_patterns=("리눅스", "Linux ", "우분투",
+                                          "CentOS", "Ubuntu")),
+        CategoryMapping(name="가이드", tistory_id="966384", view_channel="401",
+                        aliases=("튜토리얼",),
+                        keyword_patterns=("방법$", "설정$", "설치$", "가이드$")),
+        CategoryMapping(name="트렌드", tistory_id="966384", view_channel="401",
+                        aliases=("동향",),
+                        keyword_patterns=("트렌드$", "전망$")),
     ),
 )
 
@@ -309,10 +329,14 @@ def update_post(
         if not thumbnail_url:
             thumbnail_url = html_transformer.extract_first_image_url(html_body)
         category_id = _resolve_category_id(post.category, profile)
+        view_channel = ""
+        if profile:
+            view_channel = profile.resolve_view_channel(post.category)
 
         api_result = api_publisher.call_tistory_post_api(
             sb, blog_name, title, html_body, tags, thumbnail_url,
             category_id, entry_id=post.entry_id,
+            view_channel=view_channel,
         )
         if not api_result:
             return PublishResult.fail("API 수정 실패")
@@ -360,11 +384,17 @@ def _publish_via_api(
         if thumbnail_url:
             logger.info(f"대표이미지 자동 선택: {thumbnail_url[:80]}")
     category_id = _resolve_category_id(post.category, profile)
-    logger.info(f"카테고리 해석: '{post.category}' → ID {category_id}")
+    view_channel = ""
+    if profile:
+        view_channel = profile.resolve_view_channel(post.category)
+    logger.info(
+        f"카테고리 해석: '{post.category}' → ID {category_id}, 홈주제={view_channel}"
+    )
 
     # 방법 1: 직접 XHR API 호출 (visibility=20 명시적 전송, 가장 신뢰도 높음)
     api_result = api_publisher.call_tistory_post_api(
         sb, blog_name, title, html_body, tags, thumbnail_url, category_id,
+        view_channel=view_channel,
     )
     if api_result:
         return api_result

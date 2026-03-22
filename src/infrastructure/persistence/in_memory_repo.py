@@ -75,6 +75,12 @@ class InMemoryPostRepository(PostRepository):
             and p.published_at.date() == today
         )
 
+    def add_keyword_row(self, keyword: str) -> int:
+        row_index = len(self._posts) + 2  # 시트 헤더(1행) + 기존 데이터 다음
+        post = Post(row_index=row_index, keyword=keyword)
+        self._posts.append(post)
+        return row_index
+
     def all(self) -> list[Post]:
         """테스트 검증용: 전체 포스트 반환."""
         return list(self._posts)

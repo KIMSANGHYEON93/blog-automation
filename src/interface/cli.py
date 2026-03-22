@@ -3,6 +3,7 @@ Composition Root — 유일하게 모든 구체 클래스를 아는 진입점.
 의존성 역전(DIP): Application/Domain은 Port만 알고, 여기서 구체 구현을 조립.
 """
 import argparse
+import contextlib
 import logging
 import os
 from pathlib import Path
@@ -446,10 +447,22 @@ def _sync_categories(config: Config, *, auto_update: bool = False) -> None:
 
 
 def main() -> None:
-    # 환경 변수 로드
     load_dotenv()
     setup_logging(LOG_FILE)
+    try:
+        _main_inner()
+    except KeyboardInterrupt:
+        logger.info("사용자 중단")
+    except Exception as e:
+        logger.exception(f"Pipeline B 크래시: {e}")
+        with contextlib.suppress(Exception):
+            _build_notification().send(
+                f"Pipeline B 크래시: {type(e).__name__}: {e}", level="ERROR",
+            )
+        raise
 
+
+def _main_inner() -> None:
     args = _parse_args()
     config = Config.from_env()
 

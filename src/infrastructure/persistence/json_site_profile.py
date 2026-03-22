@@ -28,6 +28,7 @@ class JsonSiteProfileAdapter(SiteProfilePort):
                 tistory_id=c["tistory_id"],
                 aliases=tuple(c.get("aliases", [])),
                 keyword_patterns=tuple(c.get("keyword_patterns", [])),
+                view_channel=c.get("view_channel", ""),
             )
             for c in data.get("categories", [])
         )
@@ -36,6 +37,7 @@ class JsonSiteProfileAdapter(SiteProfilePort):
             blog_niche=data.get("blog_niche", ""),
             default_category_id=data.get("default_category_id", "0"),
             categories=categories,
+            default_view_channel=data.get("default_view_channel", ""),
         )
 
     def save(self, profile: SiteProfile) -> None:
@@ -43,10 +45,12 @@ class JsonSiteProfileAdapter(SiteProfilePort):
         data = {
             "blog_niche": profile.blog_niche,
             "default_category_id": profile.default_category_id,
+            "default_view_channel": profile.default_view_channel,
             "categories": [
                 {
                     "name": c.name,
                     "tistory_id": c.tistory_id,
+                    "view_channel": c.view_channel,
                     "aliases": list(c.aliases),
                     "keyword_patterns": list(c.keyword_patterns),
                 }

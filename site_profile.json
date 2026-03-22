@@ -1,34 +1,61 @@
 {
   "blog_niche": "B2B IT 블로그",
   "default_category_id": "966384",
+  "default_view_channel": "401",
   "categories": [
     {
       "name": "용어",
       "tistory_id": "991463",
+      "view_channel": "401",
       "aliases": ["용어정리", "개념"],
       "keyword_patterns": ["란$", "이란$", "뜻$", "의미$"]
     },
     {
       "name": "비교",
-      "tistory_id": "966384",
+      "tistory_id": "984395",
+      "view_channel": "401",
       "aliases": [],
       "keyword_patterns": ["vs ", "비교$", "차이$"]
     },
     {
       "name": "트러블슈팅",
-      "tistory_id": "966384",
-      "aliases": ["에러", "오류"],
+      "tistory_id": "966385",
+      "view_channel": "401",
+      "aliases": ["에러", "오류", "에러 해결"],
       "keyword_patterns": ["에러$", "오류$", "해결$", "안될때$"]
+    },
+    {
+      "name": "AI",
+      "tistory_id": "993759",
+      "view_channel": "401",
+      "aliases": ["인공지능"],
+      "keyword_patterns": ["AI ", "인공지능", "LLM", "GPT", "머신러닝", "딥러닝", "ChatGPT"]
+    },
+    {
+      "name": "Windows",
+      "tistory_id": "983175",
+      "view_channel": "401",
+      "aliases": ["윈도우"],
+      "keyword_patterns": ["윈도우", "Windows ", "윈도우즈"]
+    },
+    {
+      "name": "Linux",
+      "tistory_id": "998284",
+      "view_channel": "401",
+      "aliases": ["리눅스"],
+      "keyword_patterns": ["리눅스", "Linux ", "우분투", "CentOS", "Ubuntu"]
     },
     {
       "name": "가이드",
       "tistory_id": "966384",
+      "view_channel": "401",
       "aliases": ["튜토리얼"],
       "keyword_patterns": ["방법$", "설정$", "설치$", "가이드$"]
     },
     {
       "name": "트렌드",
       "tistory_id": "966384",
+      "view_channel": "401",
       "aliases": ["동향"],
       "keyword_patterns": ["트렌드$", "전망$"]
     }

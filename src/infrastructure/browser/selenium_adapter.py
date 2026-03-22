@@ -56,8 +56,29 @@ class SeleniumBrowserAdapter(BrowserPort):
             except Exception as e:
                 logger.warning(f"브라우저 종료 중 오류 (무시): {e}")
             finally:
+                self._cleanup_zombie_drivers()
                 self._sb = None
                 self._sb_context = None
+
+    def _cleanup_zombie_drivers(self) -> None:
+        """user-data-dir 기반으로 잔존 Chrome/ChromeDriver 프로세스 정리."""
+        import os
+        import subprocess
+
+        if not self._user_data_dir:
+            return
+        abs_path = os.path.abspath(self._user_data_dir)
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", f"user-data-dir={abs_path}"],
+                capture_output=True, text=True, timeout=5,
+            )
+            pids = [p.strip() for p in result.stdout.strip().split("\n") if p.strip()]
+            if pids:
+                subprocess.run(["kill"] + pids, capture_output=True, timeout=5)
+                logger.info(f"잔존 브라우저 프로세스 정리: {len(pids)}건")
+        except Exception:
+            pass
 
     def login(self) -> bool:
         return kakao_login(

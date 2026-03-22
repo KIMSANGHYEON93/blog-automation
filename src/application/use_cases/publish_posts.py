@@ -62,12 +62,17 @@ class PublishPostsUseCase:
         published_posts = self._repo.find_published(limit=50)
 
         # 중복 키워드 체크: 이미 발행된 키워드와 동일한 건 스킵
-        published_keywords = {
-            p.keyword.lower().strip() for p in published_posts if p.keyword
-        }
+        # (같은 row_index는 자기 자신이므로 중복으로 취급하지 않음)
         deduped = []
         for p in publishable:
-            if p.keyword.lower().strip() in published_keywords:
+            kw = p.keyword.lower().strip()
+            is_dup = any(
+                pub.keyword.lower().strip() == kw
+                and pub.row_index != p.row_index
+                for pub in published_posts
+                if pub.keyword
+            )
+            if is_dup:
                 logger.warning(f"중복 키워드 스킵: {p.keyword} (이미 발행됨)")
                 stats.skipped += 1
             else:

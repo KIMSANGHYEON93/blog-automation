@@ -112,15 +112,16 @@ def publish_post(
         with contextlib.suppress(Exception):
             sb.set_window_size(1920, 1080)
 
-        # async script timeout 확장 (Fetch API 호출 대기용, 기본 30초 → 120초)
-        with contextlib.suppress(Exception):
-            sb.driver.set_script_timeout(120)
-
         # 에디터 페이지 열기 (같은 URL 재방문 시 강제 리로드)
         write_url = f"https://{blog_name}.tistory.com{EDITOR_PATH}"
         fresh_url = f"{write_url}?_t={int(time.time())}{_rnd.randint(0, 999)}"
         sb.open(fresh_url)
         time.sleep(5)
+
+        # async script timeout 확장 (Fetch API 호출 대기용)
+        # sb.open() 이후에 설정해야 SeleniumBase가 리셋하지 않음
+        with contextlib.suppress(Exception):
+            sb.driver.set_script_timeout(120)
 
         # 에디터 로드 대기 (제목 입력창 DOM 존재 확인)
         title_sel = find_element(sb, TITLE_SELECTORS, timeout=15)
@@ -282,14 +283,15 @@ def update_post(
         with contextlib.suppress(Exception):
             sb.set_window_size(1920, 1080)
 
-        # async script timeout 확장 (Fetch API 호출 대기용, 기본 30초 → 120초)
-        with contextlib.suppress(Exception):
-            sb.driver.set_script_timeout(120)
-
         write_url = f"https://{blog_name}.tistory.com{EDITOR_PATH}"
         fresh_url = f"{write_url}?_t={int(time.time())}{_rnd.randint(0, 999)}"
         sb.open(fresh_url)
         time.sleep(5)
+
+        # async script timeout 확장 (Fetch API 호출 대기용)
+        # sb.open() 이후에 설정해야 SeleniumBase가 리셋하지 않음
+        with contextlib.suppress(Exception):
+            sb.driver.set_script_timeout(120)
 
         # MD→HTML 변환 (publish_post와 동일 파이프라인)
         html_body = markdown_converter.convert_markdown_to_html(body_markdown)

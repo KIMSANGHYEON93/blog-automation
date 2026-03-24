@@ -230,6 +230,10 @@ class GoogleSheetsPostRepository(PostRepository):
                 count += 1
         return count
 
+    def save_thumbnail_url(self, row_index: int, thumbnail_url: str) -> None:
+        self._sheet.update_cell(row_index, COL["thumbnail_url"], thumbnail_url)
+        logger.debug(f"썸네일 URL 저장: row={row_index}, url={thumbnail_url[:80]}")
+
     def add_keyword_row(self, keyword: str) -> int:
         all_rows = self._sheet.get_all_values()
         next_no = len(all_rows)  # 헤더 제외한 데이터 수 + 1

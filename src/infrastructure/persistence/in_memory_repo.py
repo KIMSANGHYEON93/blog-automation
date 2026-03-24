@@ -75,6 +75,23 @@ class InMemoryPostRepository(PostRepository):
             and p.published_at.date() == today
         )
 
+    def save_thumbnail_url(self, row_index: int, thumbnail_url: str) -> None:
+        for post in self._posts:
+            if post.row_index == row_index:
+                if post.content:
+                    # PostContent is frozen, need to create new one
+                    from src.domain.value_objects.post_content import PostContent
+                    post.content = PostContent(
+                        title=post.content.title,
+                        body_markdown=post.content.body_markdown,
+                        meta_description=post.content.meta_description,
+                        faq_schema=post.content.faq_schema,
+                        tags=post.content.tags,
+                        thumbnail_url=thumbnail_url,
+                        internal_link_keywords=post.content.internal_link_keywords,
+                    )
+                return
+
     def add_keyword_row(self, keyword: str) -> int:
         row_index = len(self._posts) + 2  # 시트 헤더(1행) + 기존 데이터 다음
         post = Post(row_index=row_index, keyword=keyword)

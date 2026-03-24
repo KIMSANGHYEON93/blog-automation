@@ -71,6 +71,11 @@ class PostRepository(ABC):
         ...
 
     @abstractmethod
+    def save_thumbnail_url(self, row_index: int, thumbnail_url: str) -> None:
+        """썸네일 URL을 저장."""
+        ...
+
+    @abstractmethod
     def add_keyword_row(self, keyword: str) -> int:
         """키워드를 대기 상태로 시트에 추가. 추가된 행 번호 반환."""
         ...

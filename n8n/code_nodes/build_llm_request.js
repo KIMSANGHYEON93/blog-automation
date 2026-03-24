@@ -18,11 +18,18 @@ const PROVIDERS = {
   gemini: {
     url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${$env.GOOGLE_API_KEY}`,
     headers: { 'content-type': 'application/json' },
-    body: (sys, user, opts) => ({
-      contents: [{ role: 'user', parts: [{ text: user }] }],
-      systemInstruction: { parts: [{ text: sys }] },
-      generationConfig: { maxOutputTokens: opts.maxTokens, temperature: opts.temperature }
-    }),
+    body: (sys, user, opts) => {
+      const payload = {
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        systemInstruction: { parts: [{ text: sys }] },
+        generationConfig: { maxOutputTokens: opts.maxTokens, temperature: opts.temperature },
+      };
+      // Search Grounding: 콘텐츠 생성 시 Google 검색으로 실시간 팩트 기반 응답
+      if (opts.useSearchGrounding) {
+        payload.tools = [{ google_search: {} }];
+      }
+      return payload;
+    },
   },
   claude: {
     url: 'https://api.anthropic.com/v1/messages',
@@ -46,7 +53,7 @@ if (!config) throw new Error(`지원하지 않는 LLM provider: ${provider}`);
 
 const opts = purpose === 'verification'
   ? { maxTokens: 800, temperature: 0, model: 'claude-haiku-4-5-20251001' }
-  : { maxTokens: 32768, temperature: 0.7 };
+  : { maxTokens: 32768, temperature: 0.7, useSearchGrounding: true };
 
 return {
   json: {

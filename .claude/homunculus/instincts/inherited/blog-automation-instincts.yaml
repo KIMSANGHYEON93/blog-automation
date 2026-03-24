@@ -1,0 +1,153 @@
+# Instincts generated from https://github.com/KIMSANGHYEON93/blog-automation
+# Generated: 2026-03-24T08:22:47.555Z
+# Version: 2.0
+
+---
+id: blog-automation-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, fix, docs, refactor, chore
+
+## Evidence
+
+- 118 commits analyzed
+- Detected conventional commit pattern
+- Examples: fix(ops): 쉘 스크립트 파일 모드 정리, feat(infra): Pipeline C 지원 — 썸네일 URL 저장 + add_keyword_row 포트 추가
+
+---
+id: blog-automation-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Commit Length
+
+## Action
+
+Write moderate-length commit messages (~50 characters)
+
+## Evidence
+
+- Average commit message length: 57 chars
+- Based on 118 commits
+
+---
+id: blog-automation-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: blog-automation-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Export Style
+
+## Action
+
+Prefer mixed exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: mixed
+
+---
+id: blog-automation-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: blog-automation-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~16x per month
+- Files: **/*.test.*, **/api/**
+
+---
+id: blog-automation-workflow-refactoring
+trigger: "when refactoring code"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Workflow Refactoring
+
+## Action
+
+Follow the refactoring workflow:
+1. Ensure tests pass before refactor
+2. Refactor code structure
+3. Verify tests still pass
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~8x per month
+- Files: src/**/*
+

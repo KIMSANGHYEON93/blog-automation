@@ -16,7 +16,10 @@ const OVERLAP_THRESHOLD = 0.7;
 function keywordOverlap(kwA, kwB) {
   const tokensA = new Set(kwA.toLowerCase().split(/\s+/).filter(t => t.length > 0));
   const tokensB = new Set(kwB.toLowerCase().split(/\s+/).filter(t => t.length > 0));
-  if (tokensA.size < 2 || tokensB.size < 2) return 0;
+  // 단일 토큰 키워드: 정확 일치만 판정
+  if (tokensA.size < 2 || tokensB.size < 2) {
+    return kwA.toLowerCase().trim() === kwB.toLowerCase().trim() ? 1.0 : 0;
+  }
   const intersection = [...tokensA].filter(t => tokensB.has(t));
   const smaller = Math.min(tokensA.size, tokensB.size);
   return smaller > 0 ? intersection.length / smaller : 0;

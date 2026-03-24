@@ -96,6 +96,17 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="--discover-keywords 시 발굴된 키워드를 시트에 대기 상태로 자동 등록",
     )
+    parser.add_argument(
+        "--set-thumbnails",
+        action="store_true",
+        help="발행완료 포스트에 AI 생성 대표이미지(썸네일) 설정",
+    )
+    parser.add_argument(
+        "--thumbnail-max",
+        type=int,
+        default=5,
+        help="--set-thumbnails 시 최대 처리 건수 (기본: 5)",
+    )
     return parser.parse_args()
 
 
@@ -446,6 +457,82 @@ def _sync_categories(config: Config, *, auto_update: bool = False) -> None:
         browser.stop()
 
 
+def _set_thumbnails(
+    config: Config, site_profile=None, max_posts: int = 5,
+) -> None:
+    """발행완료 포스트에 AI 생성 대표이미지 설정 워크플로우.
+
+    BrowserPort.update()를 사용하여 기존 update_post() 인프라로 썸네일 반영.
+    update_post()가 카테고리, 내부 링크, HTML 최적화 등 모든 필드를 올바르게 처리.
+    """
+    config.validate()
+
+    from src.application.use_cases.set_thumbnails import SetThumbnailsUseCase
+
+    repo = GoogleSheetsPostRepository(
+        creds_path=config.google_creds,
+        sheet_name=config.sheet_name,
+    )
+
+    # 이미지 생성 어댑터 선택: OPENAI_API_KEY 있으면 DALL-E, 없으면 Pollinations(무료)
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    if openai_key:
+        from src.infrastructure.image.openai_dalle_adapter import OpenAiDalleAdapter
+        image_gen = OpenAiDalleAdapter(api_key=openai_key)
+        logger.info("이미지 생성: DALL-E 3 사용")
+    else:
+        from src.infrastructure.image.pollinations_adapter import PollinationsAdapter
+        pollinations_key = os.getenv("POLLINATIONS_API_KEY", "")
+        image_gen = PollinationsAdapter(api_key=pollinations_key)
+        logger.info("이미지 생성: Pollinations (무료) 사용")
+
+    credentials = Credentials(
+        kakao_id=config.kakao_id,
+        kakao_pw=config.kakao_pw,
+        tistory_blog=config.tistory_blog,
+    )
+    # 썸네일 업데이트용 짧은 딜레이 (발행과 달리 메타데이터 변경만)
+    browser = SeleniumBrowserAdapter(
+        credentials=credentials,
+        headless=config.headless,
+        user_data_dir=".browser_data",
+        site_profile=site_profile,
+        min_delay=30,
+        max_delay=60,
+    )
+
+    browser.start()
+    try:
+        if not browser.login():
+            logger.error("로그인 실패 — 썸네일 설정 중단")
+            return
+
+        uc = SetThumbnailsUseCase(
+            repo=repo,
+            image_gen=image_gen,
+            browser=browser,
+            max_posts=max_posts,
+        )
+        stats = uc.execute()
+
+        notifier = _build_notification()
+        msg = (
+            f"썸네일 설정 완료: 생성={stats.generated}, "
+            f"업로드={stats.uploaded}, 실패={stats.failed}"
+        )
+        logger.info(msg)
+        if stats.uploaded > 0 or stats.failed > 0:
+            notifier.send(msg)
+
+        for r in stats.results:
+            status = "OK" if r.success else "FAIL"
+            print(f"  [{status}] row={r.row_index} {r.keyword}")
+            if r.error:
+                print(f"         {r.error}")
+    finally:
+        browser.stop()
+
+
 def main() -> None:
     load_dotenv()
     setup_logging(LOG_FILE)
@@ -514,6 +601,10 @@ def _main_inner() -> None:
 
     if args.recover_failed:
         _recover_failed(config)
+        return
+
+    if args.set_thumbnails:
+        _set_thumbnails(config, site_profile=site_profile, max_posts=args.thumbnail_max)
         return
 
     # --- 기존 파이프라인 (변경 없음) ---

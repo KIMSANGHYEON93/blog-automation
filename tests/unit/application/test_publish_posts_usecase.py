@@ -205,6 +205,94 @@ class TestPublishPostsDailyLimit:
         assert saved.status == PostStatus.PENDING
 
 
+class TestPublishPostsDuplicate:
+    """중복 키워드 발행 방지 테스트."""
+
+    def test_정확_일치_중복_스킵(self):
+        """이미 발행된 키워드와 동일한 PENDING 포스트는 스킵."""
+        pending = make_publishable_post(10, "SSO란")
+        published = Post(
+            row_index=1, keyword="SSO란",
+            status=PostStatus.PUBLISHED,
+            published_url="https://test.tistory.com/1",
+            content=PostContent(title="SSO란", body_markdown="## SSO\n" + "x" * 3000),
+        )
+        repo = InMemoryPostRepository([pending, published])
+        browser = MockBrowserAdapter(publish_url="https://test.tistory.com/99")
+        use_case = make_use_case(repo, browser)
+
+        stats = use_case.execute()
+
+        assert stats.skipped == 1
+        assert stats.published == 0
+
+    def test_유사_키워드_중복_스킵(self):
+        """토큰 유사도 70% 이상인 키워드도 중복으로 스킵."""
+        # "AWS SSO 설정 방법" vs "AWS SSO 설정 가이드" → 3/4 = 75%
+        pending = make_publishable_post(10, "AWS SSO 설정 방법")
+        published = Post(
+            row_index=1, keyword="AWS SSO 설정 가이드",
+            status=PostStatus.PUBLISHED,
+            published_url="https://test.tistory.com/1",
+            content=PostContent(
+                title="AWS SSO 설정 가이드",
+                body_markdown="## AWS SSO\n" + "x" * 3000,
+            ),
+        )
+        repo = InMemoryPostRepository([pending, published])
+        browser = MockBrowserAdapter(publish_url="https://test.tistory.com/99")
+        use_case = make_use_case(repo, browser)
+
+        stats = use_case.execute()
+
+        assert stats.skipped == 1
+        assert stats.published == 0
+
+    def test_유사도_미달_정상_발행(self):
+        """토큰 유사도 70% 미만이면 정상 발행."""
+        # "AWS SSO" vs "AWS IAM" → 1/2 = 50%
+        pending = make_publishable_post(10, "AWS SSO")
+        published = Post(
+            row_index=1, keyword="AWS IAM",
+            status=PostStatus.PUBLISHED,
+            published_url="https://test.tistory.com/1",
+            content=PostContent(title="AWS IAM", body_markdown="## IAM\n" + "x" * 3000),
+        )
+        repo = InMemoryPostRepository([pending, published])
+        browser = MockBrowserAdapter(publish_url="https://test.tistory.com/99")
+        use_case = make_use_case(repo, browser)
+
+        stats = use_case.execute()
+
+        assert stats.published == 1
+        assert stats.skipped == 0
+
+    def test_발행완료_50건_초과_시에도_중복_감지(self):
+        """발행완료 포스트가 50건 초과해도 모든 키워드를 중복 체크."""
+        published_posts = []
+        for i in range(1, 61):
+            p = Post(
+                row_index=i, keyword=f"키워드{i}",
+                status=PostStatus.PUBLISHED,
+                published_url=f"https://test.tistory.com/{i}",
+                content=PostContent(
+                    title=f"키워드{i}", body_markdown="## 내용\n" + "x" * 3000,
+                ),
+            )
+            published_posts.append(p)
+
+        # 55번째 키워드와 동일한 PENDING 포스트
+        pending = make_publishable_post(100, "키워드55")
+        repo = InMemoryPostRepository([pending] + published_posts)
+        browser = MockBrowserAdapter(publish_url="https://test.tistory.com/99")
+        use_case = make_use_case(repo, browser)
+
+        stats = use_case.execute()
+
+        assert stats.skipped == 1
+        assert stats.published == 0
+
+
 class TestRelatedLinks:
     """관련 글 자동 삽입 테스트."""
 

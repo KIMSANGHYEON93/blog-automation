@@ -7,6 +7,7 @@ from src.domain.entities.post import Post
 from src.domain.exceptions import DailyPublishLimitError
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.post_repository import PostRepository
+from src.domain.services.keyword_matcher import find_duplicate
 from src.domain.services.publish_policy import PublishPolicy
 from src.domain.services.quota_manager import QuotaManager
 
@@ -59,21 +60,26 @@ class PublishPostsUseCase:
             logger.warning("일일 발행 쿼터 소진 — 발행 건너뜀")
             return stats
 
-        published_posts = self._repo.find_published(limit=50)
+        # 전체 발행완료 포스트 로드 (중복 체크 + 내부 링크 공용)
+        published_posts = self._repo.find_published(limit=9999)
 
-        # 중복 키워드 체크: 이미 발행된 키워드와 동일한 건 스킵
-        # (같은 row_index는 자기 자신이므로 중복으로 취급하지 않음)
+        # 중복 키워드 체크: 정확 일치 + 토큰 유사도 70% 이상 스킵
+        existing_keywords = [
+            pub.keyword for pub in published_posts
+            if pub.keyword
+        ]
         deduped = []
         for p in publishable:
-            kw = p.keyword.lower().strip()
-            is_dup = any(
-                pub.keyword.lower().strip() == kw
-                and pub.row_index != p.row_index
-                for pub in published_posts
-                if pub.keyword
+            is_dup, matched, score = find_duplicate(
+                p.keyword, existing_keywords, threshold=0.7,
             )
-            if is_dup:
-                logger.warning(f"중복 키워드 스킵: {p.keyword} (이미 발행됨)")
+            if is_dup and not any(
+                pub.row_index == p.row_index for pub in published_posts
+            ):
+                logger.warning(
+                    f"중복 키워드 스킵: {p.keyword} "
+                    f"(유사: {matched}, 유사도: {score:.0%})"
+                )
                 stats.skipped += 1
             else:
                 deduped.append(p)

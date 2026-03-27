@@ -1,15 +1,17 @@
 /**
  * Check Duplicate — 기존 발행글과 키워드 유사도 비교
- * Mode: runOnceForEachItem
- * 콘텐츠 생성 후, Haiku 검증 전에 배치
- * 입력: 생성된 콘텐츠 + 기존 키워드 목록 (Sheets에서 조회)
- * 출력: 중복 여부 판정
+ * Mode: runOnceForAllItems
+ * 위치: Sheets Read (Status=대기) → [Check Duplicate] → IF Not Duplicate?
+ * 입력: Sheets Read (대기) 결과 (각 아이템에 키워드 포함)
+ * 참조: Sheets Read (Published Keywords) 노드에서 기존 키워드 가져옴
+ * 출력: duplicate_check 필드 추가된 아이템
  */
 
-const newKeyword = $input.item.json.keyword || '';
-
-// Google Sheets에서 가져온 기존 키워드 목록 (이전 노드에서 조회)
-const existingKeywords = $input.item.json.existing_keywords || [];
+// 이전에 실행된 "Sheets Read (Published Keywords)" 노드에서 발행 완료/대기 키워드 조회
+const publishedItems = $('Sheets Read (Published Keywords)').all();
+const existingKeywords = publishedItems
+  .map(item => item.json['키워드'] || '')
+  .filter(kw => kw.length > 0);
 
 const OVERLAP_THRESHOLD = 0.7;
 
@@ -25,30 +27,36 @@ function keywordOverlap(kwA, kwB) {
   return smaller > 0 ? intersection.length / smaller : 0;
 }
 
-let isDuplicate = false;
-let duplicateOf = '';
-let maxOverlap = 0;
+const results = [];
+for (const item of $input.all()) {
+  const keyword = item.json['키워드'] || '';
+  let isDuplicate = false;
+  let duplicateOf = '';
+  let maxOverlap = 0;
 
-for (const existing of existingKeywords) {
-  const overlap = keywordOverlap(newKeyword, existing);
-  if (overlap > maxOverlap) {
-    maxOverlap = overlap;
-    duplicateOf = existing;
-  }
-  if (overlap >= OVERLAP_THRESHOLD) {
-    isDuplicate = true;
-    break;
-  }
-}
-
-return {
-  json: {
-    ...$input.item.json,
-    duplicate_check: {
-      is_duplicate: isDuplicate,
-      duplicate_of: isDuplicate ? duplicateOf : '',
-      max_overlap: Math.round(maxOverlap * 100) / 100,
-      threshold: OVERLAP_THRESHOLD,
+  for (const existing of existingKeywords) {
+    const overlap = keywordOverlap(keyword, existing);
+    if (overlap > maxOverlap) {
+      maxOverlap = overlap;
+      duplicateOf = existing;
+    }
+    if (overlap >= OVERLAP_THRESHOLD) {
+      isDuplicate = true;
+      break;
     }
   }
-};
+
+  results.push({
+    json: {
+      ...item.json,
+      duplicate_check: {
+        is_duplicate: isDuplicate,
+        duplicate_of: isDuplicate ? duplicateOf : '',
+        max_overlap: Math.round(maxOverlap * 100) / 100,
+        threshold: OVERLAP_THRESHOLD,
+      }
+    }
+  });
+}
+
+return results;

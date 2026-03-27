@@ -19,8 +19,39 @@
         "sheetId": { "value": "={{ $env.SHEET_ID }}" },
         "range": "A:S",
         "options": {
+          "filters": [
+            { "column": "상태", "value": "발행완료" },
+            { "column": "상태", "value": "발행대기" }
+          ],
+          "combineFilters": "OR"
+        }
+      },
+      "id": "node-dup-1-sheets-published",
+      "name": "Sheets Read (Published Keywords)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [460, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Reduce to Trigger — Published Keywords 다수 행을 1개 트리거로 축소\n// 다음 노드에서 불필요한 N회 API 호출 방지\nreturn [{ json: { _trigger: true } }];"
+      },
+      "id": "node-dup-reduce",
+      "name": "Reduce to Trigger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [570, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": { "value": "={{ $env.SHEET_ID }}" },
+        "range": "A:S",
+        "options": {
           "filters": {
-            "column": "C",
+            "column": "상태",
             "value": "대기"
           }
         }
@@ -29,7 +60,52 @@
       "name": "Sheets Read (Status=대기)",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [460, 300],
+      "position": [680, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// check_duplicate.js — 기존 발행글과 키워드 유사도 비교\n// n8n/code_nodes/check_duplicate.js 내용을 여기에 복사"
+      },
+      "id": "node-dup-2-check",
+      "name": "Check Duplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            { "value1": "={{ $json.duplicate_check.is_duplicate }}", "value2": false }
+          ]
+        }
+      },
+      "id": "node-dup-3-if",
+      "name": "IF Not Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": { "value": "={{ $env.SHEET_ID }}" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "상태": "중복스킵",
+            "에러메시지": "={{ '중복 키워드: ' + $json.duplicate_check.duplicate_of + ' (유사도: ' + ($json.duplicate_check.max_overlap * 100) + '%)' }}"
+          },
+          "matchingColumns": ["키워드"]
+        }
+      },
+      "id": "node-dup-4-sheets-skip",
+      "name": "Sheets Update (중복스킵)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1120, 500],
       "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
     },
     {
@@ -49,7 +125,7 @@
       "name": "SerpAPI Search",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300]
+      "position": [1340, 300]
     },
     {
       "parameters": {
@@ -59,35 +135,20 @@
       "name": "Route Prompt (A/B/C)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [1560, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
         "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "x-api-key", "value": "={{ $env.CLAUDE_API_KEY }}" },
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "content-type", "value": "application/json" }
-          ]
-        },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            { "name": "model", "value": "claude-sonnet-4-5-20250514" },
-            { "name": "max_tokens", "value": "4000" },
-            { "name": "system", "value": "={{ $json.system_prompt }}" },
-            { "name": "messages", "value": "=[{\"role\":\"user\",\"content\":\"{{ $json.user_message }}\"}]" }
-          ]
-        }
+        "sendBody": true
       },
       "id": "node-5-gemini-flash",
       "name": "Gemini Flash (Content Gen)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, 300]
+      "position": [1780, 300]
     },
     {
       "parameters": {
@@ -97,7 +158,7 @@
       "name": "Parse JSON Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 300]
+      "position": [2000, 300]
     },
     {
       "parameters": {
@@ -107,7 +168,7 @@
       "name": "URL Validation",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 200]
+      "position": [2220, 200]
     },
     {
       "parameters": {
@@ -117,36 +178,20 @@
       "name": "Code Block Lint",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 400]
+      "position": [2220, 400]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
         "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "x-api-key", "value": "={{ $env.CLAUDE_API_KEY }}" },
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "content-type", "value": "application/json" }
-          ]
-        },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            { "name": "model", "value": "claude-haiku-4-5-20251001" },
-            { "name": "max_tokens", "value": "500" },
-            { "name": "temperature", "value": "0" },
-            { "name": "system", "value": "당신은 B2B IT 기술 콘텐츠 품질 검증 AI입니다. 아래 블로그 글을 검토하고, 정확히 두 항목만 평가하세요. 반드시 JSON 형식으로만 응답: {\"is_accurate\": true/false, \"is_logical\": true/false, \"reason\": \"사유\"}" },
-            { "name": "messages", "value": "=[{\"role\":\"user\",\"content\":\"제목: {{ $json.title }}\\n본문:\\n{{ $json.content }}\"}]" }
-          ]
-        }
+        "sendBody": true
       },
       "id": "node-7c-gemini-verify",
       "name": "Gemini Verification (temp=0)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1780, 300]
+      "position": [2440, 300]
     },
     {
       "parameters": {
@@ -156,7 +201,7 @@
       "name": "Parse Verification Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2000, 300]
+      "position": [2660, 300]
     },
     {
       "parameters": {
@@ -170,25 +215,19 @@
       "name": "Verification Passed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2220, 300]
+      "position": [2880, 300]
     },
     {
       "parameters": {
         "operation": "update",
         "sheetId": { "value": "={{ $env.SHEET_ID }}" },
-        "range": "={{ 'A' + $json.row_index }}",
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "C": "발행대기",
-            "D": "={{ $json.title }}",
-            "E": "={{ $json.meta_description }}",
-            "H": "={{ JSON.stringify($json.faq_schema) }}",
-            "I": "={{ JSON.stringify($json.references) }}",
-            "O": "={{ $json.content }}",
-            "Q": "={{ $json.prompt_type }}",
-            "R": "={{ JSON.stringify($json.verification) }}",
-            "S": "={{ JSON.stringify($json.internal_link_keywords) }}"
+            "상태": "발행대기",
+            "제목": "={{ $json.title }}",
+            "메타설명": "={{ $json.meta_description }}",
+            "본문마크다운": "={{ $json.content }}"
           }
         }
       },
@@ -196,20 +235,18 @@
       "name": "Sheets Update (발행대기)",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [2440, 200],
+      "position": [3100, 200],
       "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
     },
     {
       "parameters": {
         "operation": "update",
         "sheetId": { "value": "={{ $env.SHEET_ID }}" },
-        "range": "={{ 'A' + $json.row_index }}",
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "C": "검수필요",
-            "M": "={{ $json.verification.reason || '검증 실패' }}",
-            "R": "={{ JSON.stringify($json.verification) }}"
+            "상태": "검수필요",
+            "에러메시지": "={{ $json.verification.reason || '검증 실패' }}"
           }
         }
       },
@@ -217,13 +254,22 @@
       "name": "Sheets Update (검수필요)",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [2440, 400],
+      "position": [3100, 400],
       "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
     }
   ],
   "connections": {
-    "Schedule Trigger (01:00 AM)": { "main": [[{ "node": "Sheets Read (Status=대기)", "type": "main", "index": 0 }]] },
-    "Sheets Read (Status=대기)": { "main": [[{ "node": "SerpAPI Search", "type": "main", "index": 0 }]] },
+    "Schedule Trigger (01:00 AM)": { "main": [[{ "node": "Sheets Read (Published Keywords)", "type": "main", "index": 0 }]] },
+    "Sheets Read (Published Keywords)": { "main": [[{ "node": "Reduce to Trigger", "type": "main", "index": 0 }]] },
+    "Reduce to Trigger": { "main": [[{ "node": "Sheets Read (Status=대기)", "type": "main", "index": 0 }]] },
+    "Sheets Read (Status=대기)": { "main": [[{ "node": "Check Duplicate", "type": "main", "index": 0 }]] },
+    "Check Duplicate": { "main": [[{ "node": "IF Not Duplicate?", "type": "main", "index": 0 }]] },
+    "IF Not Duplicate?": {
+      "main": [
+        [{ "node": "SerpAPI Search", "type": "main", "index": 0 }],
+        [{ "node": "Sheets Update (중복스킵)", "type": "main", "index": 0 }]
+      ]
+    },
     "SerpAPI Search": { "main": [[{ "node": "Route Prompt (A/B/C)", "type": "main", "index": 0 }]] },
     "Route Prompt (A/B/C)": { "main": [[{ "node": "Gemini Flash (Content Gen)", "type": "main", "index": 0 }]] },
     "Gemini Flash (Content Gen)": { "main": [[{ "node": "Parse JSON Response", "type": "main", "index": 0 }]] },

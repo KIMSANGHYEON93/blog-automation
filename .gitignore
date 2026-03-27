@@ -16,3 +16,6 @@ logs/
 credentials.json
 .browser_data/
 .browser_data 2/
+.DS_Store
+.claude/worktrees/
+.python-version

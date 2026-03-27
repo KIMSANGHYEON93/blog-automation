@@ -61,7 +61,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        460,
+        680,
         300
       ],
       "credentials": {
@@ -111,7 +111,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        680,
+        1340,
         300
       ]
     },
@@ -125,7 +125,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        790,
+        1450,
         300
       ]
     },
@@ -139,7 +139,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1000,
+        1660,
         300
       ]
     },
@@ -153,7 +153,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1120,
+        1780,
         300
       ]
     },
@@ -176,7 +176,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1300,
+        1960,
         300
       ],
       "retryOnFail": true,
@@ -193,7 +193,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1480,
+        2140,
         300
       ]
     },
@@ -207,7 +207,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1660,
+        2320,
         300
       ]
     },
@@ -221,7 +221,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1840,
+        2500,
         300
       ]
     },
@@ -235,7 +235,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2060,
+        2720,
         300
       ]
     },
@@ -249,7 +249,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2240,
+        2900,
         200
       ]
     },
@@ -263,7 +263,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2240,
+        2900,
         400
       ]
     },
@@ -277,7 +277,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2420,
+        3080,
         300
       ]
     },
@@ -291,7 +291,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2600,
+        3260,
         300
       ]
     },
@@ -314,7 +314,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2780,
+        3440,
         300
       ],
       "retryOnFail": true,
@@ -331,7 +331,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2960,
+        3620,
         300
       ]
     },
@@ -345,7 +345,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3140,
+        3800,
         300
       ]
     },
@@ -365,7 +365,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3320,
+        3980,
         300
       ]
     },
@@ -412,7 +412,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        3540,
+        4200,
         200
       ],
       "credentials": {
@@ -456,7 +456,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        3540,
+        4200,
         400
       ],
       "credentials": {
@@ -476,6 +476,158 @@
         60,
         300
       ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1VbyEQNuIAKpmTfk_5pTIjuLb3xlS-kdUfWflmfnFJSA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "detectAutomatically"
+            }
+          }
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "상태",
+              "lookupValue": "발행완료"
+            },
+            {
+              "lookupColumn": "상태",
+              "lookupValue": "발행대기"
+            }
+          ]
+        },
+        "combineFilters": "OR"
+      },
+      "id": "node-dup-1-sheets-published",
+      "name": "Sheets Read (Published Keywords)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "amt5R8weAKcq8xmn",
+          "name": "Google Service Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "/**\n * Check Duplicate — 기존 발행글과 키워드 유사도 비교\n * Mode: runOnceForAllItems\n * 위치: Sheets Read (Status=대기) → [Check Duplicate] → IF Not Duplicate?\n * 입력: Sheets Read (대기) 결과 (각 아이템에 키워드 포함)\n * 참조: Sheets Read (Published Keywords) 노드에서 기존 키워드 가져옴\n * 출력: duplicate_check 필드 추가된 아이템\n */\n\n// 이전에 실행된 \"Sheets Read (Published Keywords)\" 노드에서 발행 완료/대기 키워드 조회\nconst publishedItems = $('Sheets Read (Published Keywords)').all();\nconst existingKeywords = publishedItems\n  .map(item => item.json['키워드'] || '')\n  .filter(kw => kw.length > 0);\n\nconst OVERLAP_THRESHOLD = 0.7;\n\nfunction keywordOverlap(kwA, kwB) {\n  const tokensA = new Set(kwA.toLowerCase().split(/\\s+/).filter(t => t.length > 0));\n  const tokensB = new Set(kwB.toLowerCase().split(/\\s+/).filter(t => t.length > 0));\n  // 단일 토큰 키워드: 정확 일치만 판정\n  if (tokensA.size < 2 || tokensB.size < 2) {\n    return kwA.toLowerCase().trim() === kwB.toLowerCase().trim() ? 1.0 : 0;\n  }\n  const intersection = [...tokensA].filter(t => tokensB.has(t));\n  const smaller = Math.min(tokensA.size, tokensB.size);\n  return smaller > 0 ? intersection.length / smaller : 0;\n}\n\nconst results = [];\nfor (const item of $input.all()) {\n  const keyword = item.json['키워드'] || '';\n  let isDuplicate = false;\n  let duplicateOf = '';\n  let maxOverlap = 0;\n\n  for (const existing of existingKeywords) {\n    const overlap = keywordOverlap(keyword, existing);\n    if (overlap > maxOverlap) {\n      maxOverlap = overlap;\n      duplicateOf = existing;\n    }\n    if (overlap >= OVERLAP_THRESHOLD) {\n      isDuplicate = true;\n      break;\n    }\n  }\n\n  results.push({\n    json: {\n      ...item.json,\n      duplicate_check: {\n        is_duplicate: isDuplicate,\n        duplicate_of: isDuplicate ? duplicateOf : '',\n        max_overlap: Math.round(maxOverlap * 100) / 100,\n        threshold: OVERLAP_THRESHOLD,\n      }\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "id": "node-dup-2-check",
+      "name": "Check Duplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "dup-check-condition",
+              "leftValue": "={{ $json.duplicate_check.is_duplicate }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-dup-3-if",
+      "name": "IF Not Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1VbyEQNuIAKpmTfk_5pTIjuLb3xlS-kdUfWflmfnFJSA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "키워드": "={{ $json[\"키워드\"] }}",
+            "상태": "중복스킵",
+            "에러메시지": "={{ \"중복 키워드: \" + $json.duplicate_check.duplicate_of + \" (유사도: \" + ($json.duplicate_check.max_overlap * 100) + \"%)\" }}",
+            "생성일시": "={{ new Date().toISOString().slice(0,19).replace(\"T\",\" \") }}"
+          },
+          "matchingColumns": [
+            "키워드"
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-dup-4-sheets-skip",
+      "name": "Sheets Update (중복스킵)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1120,
+        500
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "amt5R8weAKcq8xmn",
+          "name": "Google Service Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Published Keywords 데이터는 $(\"Sheets Read (Published Keywords)\").all()로 접근 가능\n// Sheets Read (대기)가 1번만 실행되도록 단일 트리거 아이템 반환\nreturn [{ json: { _trigger: true } }];"
+      },
+      "id": "node-dup-0-reduce",
+      "name": "Reduce to Trigger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        570,
+        300
+      ]
     }
   ],
   "connections": {
@@ -483,7 +635,7 @@
       "main": [
         [
           {
-            "node": "Sheets Read (Status=대기)",
+            "node": "Sheets Read (Published Keywords)",
             "type": "main",
             "index": 0
           }
@@ -494,7 +646,7 @@
       "main": [
         [
           {
-            "node": "SerpAPI Search",
+            "node": "Check Duplicate",
             "type": "main",
             "index": 0
           }
@@ -693,7 +845,7 @@
       "main": [
         [
           {
-            "node": "Sheets Read (Status=대기)",
+            "node": "Sheets Read (Published Keywords)",
             "type": "main",
             "index": 0
           }
@@ -705,6 +857,57 @@
         [
           {
             "node": "Validate Structure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheets Read (Published Keywords)": {
+      "main": [
+        [
+          {
+            "node": "Reduce to Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Duplicate": {
+      "main": [
+        [
+          {
+            "node": "IF Not Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Not Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "SerpAPI Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sheets Update (중복스킵)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reduce to Trigger": {
+      "main": [
+        [
+          {
+            "node": "Sheets Read (Status=대기)",
             "type": "main",
             "index": 0
           }
@@ -723,7 +926,7 @@
   },
   "meta": null,
   "pinData": null,
-  "versionId": "1fd8d09c-a832-4d6a-a8d4-b531a619963c",
+  "versionId": "6f2117ca-302f-4716-98b2-02a41f9dcb3b",
   "triggerCount": 1,
   "shared": [
     {

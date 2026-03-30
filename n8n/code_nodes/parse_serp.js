@@ -7,16 +7,33 @@
 
 const serpResults = $input.item.json;
 
+// 공식 문서 도메인 리스트
+const OFFICIAL_DOMAINS = [
+  'learn.microsoft.com', 'docs.aws.amazon.com', 'cloud.google.com',
+  'developer.mozilla.org', 'docs.docker.com', 'kubernetes.io/docs',
+  'docs.github.com', 'developer.hashicorp.com', 'docs.ansible.com',
+  'docs.oracle.com', 'docs.redhat.com', 'wiki.archlinux.org',
+  'man7.org', 'nginx.org/en/docs', 'docs.python.org',
+  'go.dev/doc', 'docs.microsoft.com', 'cloud.google.com/docs',
+  'docs.anthropic.com', 'platform.openai.com/docs',
+];
+
 // 1. Organic Results (상위 7개) — 제목, 스니펫, URL
 let organicText = '';
 const serpUrls = [];
+const officialUrls = [];
 if (serpResults.organic_results && serpResults.organic_results.length > 0) {
   const top7 = serpResults.organic_results.slice(0, 7);
   organicText = top7.map((r, i) =>
     `${i + 1}. ${r.title}\n   ${r.snippet || '(스니펫 없음)'}\n   URL: ${r.link || ''}`
   ).join('\n');
   for (const r of top7) {
-    if (r.link) serpUrls.push(r.link);
+    if (r.link) {
+      serpUrls.push(r.link);
+      if (OFFICIAL_DOMAINS.some(d => r.link.includes(d))) {
+        officialUrls.push({ url: r.link, title: r.title, snippet: r.snippet });
+      }
+    }
   }
 }
 
@@ -78,6 +95,7 @@ return {
     ...sheetData,
     serp_text: serpText,
     serp_urls: serpUrls,
+    official_urls: officialUrls.slice(0, 3),
     serp_organic_count: serpResults.organic_results ? serpResults.organic_results.length : 0,
     serp_paa_count: serpResults.related_questions ? serpResults.related_questions.length : 0,
     serp_related_count: serpResults.related_searches ? serpResults.related_searches.length : 0,

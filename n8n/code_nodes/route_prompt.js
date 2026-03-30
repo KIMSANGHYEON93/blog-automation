@@ -29,6 +29,16 @@ if (category.includes('비교') || category.includes('트렌드') || keyword.inc
   promptType = 'A';
 }
 
+// 작성 기준일 (최신성 강화)
+const today = new Date();
+const yearMonth = `${today.getFullYear()}년 ${today.getMonth() + 1}월`;
+
+// 공식 문서 본문 (Fetch Official Docs 노드에서 전달)
+const officialDocsText = $input.item.json.official_docs_text || '';
+const docsSection = officialDocsText
+  ? `\n\n## 공식 문서 본문 (최우선 참고 자료)\n${officialDocsText}`
+  : '';
+
 // SERP URL 풀 구성
 const serpUrls = $input.item.json.serp_urls || [];
 const urlPoolText = serpUrls.length > 0
@@ -42,6 +52,6 @@ return {
     row_index: rowIndex,
     prompt_type: promptType,
     system_prompt: systemPrompt,
-    user_message: `키워드: ${keyword}\n\n## SERP 인텔리전스\n${serpText}\n\n## 참조 가능 URL 풀\n아래 URL만 references와 인라인 출처에 사용하세요:\n${urlPoolText}`,
+    user_message: `키워드: ${keyword}\n작성 기준일: ${yearMonth} (최신 정보 기준으로 작성하세요)${docsSection}\n\n## SERP 인텔리전스\n${serpText}\n\n## 참조 가능 URL 풀\n아래 URL만 references와 인라인 출처에 사용하세요:\n${urlPoolText}`,
   }
 };

@@ -13,6 +13,7 @@ services:
       - TZ=Asia/Seoul
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       - NODE_FUNCTION_ALLOW_BUILTIN=zlib
+      - NODE_OPTIONS=--max-old-space-size=4096
     volumes:
       - n8n_data:/home/node/.n8n
     env_file:

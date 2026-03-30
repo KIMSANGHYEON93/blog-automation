@@ -12,6 +12,12 @@
 
 const raw = $input.item.json.text;
 
+// 알려진 최상위 JSON 필드 목록 (구조적 키 판별에 사용)
+const TOP_LEVEL_KEYS = new Set([
+  'title', 'content', 'meta_description', 'faq_schema',
+  'references', 'internal_link_keywords', '_warning',
+]);
+
 // === Step 1: JSON 블록 추출 ===
 let jsonStr;
 const fenceStart = raw.indexOf('```json');
@@ -81,16 +87,30 @@ function repairJson(str) {
           i++;
           return;
         } else if (str[peek] === '"') {
-          // 다음도 " → 다음 " 뒤에 : 이 있으면 객체 키 → 구조적 종료
+          // 다음도 " → 다음 "..." 사이가 유효한 JSON 키인지 검증
           let j = peek + 1;
-          while (j < str.length && str[j] !== '"' && str[j] !== ':') j++;
-          if (j < str.length && str[j] === ':') {
-            // "value" "key": → 쉼표 누락이지만 구조적 종료
-            result += '"';
-            i++;
-            return;
+          let candidateKey = '';
+          while (j < str.length && str[j] !== '"' && str[j] !== ':') {
+            candidateKey += str[j];
+            j++;
           }
-          // 다음 " 뒤에 : 없음 → content 내 인용부호
+          // 조건 강화: (1) " 로 닫혀야 하고 (2) 그 뒤에 : 이 있고
+          // (3) 키가 유효한 JSON 키 패턴 (짧고, 알파벳/언더스코어)
+          // (4) 알려진 최상위 필드명이어야 구조적 종료로 판단
+          if (j < str.length && str[j] === '"') {
+            let k = j + 1;
+            while (k < str.length && /[\s]/.test(str[k])) k++;
+            if (k < str.length && str[k] === ':'
+                && candidateKey.length > 0 && candidateKey.length < 30
+                && /^[a-zA-Z_][\w_]*$/.test(candidateKey)
+                && TOP_LEVEL_KEYS.has(candidateKey)) {
+              // "value" "known_key": → 쉼표 누락이지만 구조적 종료
+              result += '"';
+              i++;
+              return;
+            }
+          }
+          // 유효한 키가 아님 → content 내 인용부호
           result += '\\"';
           i++;
           continue;
@@ -174,6 +194,88 @@ function repairJson(str) {
   return result;
 }
 
+// === Step 2.5: 필드 경계 기반 추출 (3차 폴백) ===
+// 최상위 키 위치를 정규식으로 찾아 값을 개별 추출 → 안전하게 이스케이프
+function extractByFieldBoundary(str) {
+  // 최상위 키의 시작 위치 찾기: "key" 다음에 : 이 오는 패턴
+  // 들여쓰기 기반 필터: 최상위 키는 보통 2~4칸 들여쓰기 또는 줄 시작
+  const keyPattern = /(?:^|[\n{,])\s*"(title|content|meta_description|faq_schema|references|internal_link_keywords)"\s*:/g;
+  const seen = new Set();
+  const positions = [];
+  let m;
+  while ((m = keyPattern.exec(str)) !== null) {
+    // 각 키의 첫 번째 매치만 사용 (중복 방지)
+    if (seen.has(m[1])) continue;
+    seen.add(m[1]);
+    // 실제 키 시작 위치 보정 (prefix 문자 제외)
+    const keyStart = str.indexOf('"' + m[1] + '"', m.index);
+    const fullMatch = '"' + m[1] + '"';
+    let vs = keyStart + fullMatch.length;
+    while (vs < str.length && /[\s:]/.test(str[vs])) vs++;
+    positions.push({ key: m[1], start: keyStart, valueStart: vs });
+  }
+  if (positions.length === 0) {
+    throw new Error("필드 경계를 찾을 수 없음");
+  }
+  // 키 위치 순서로 정렬
+  positions.sort((a, b) => a.start - b.start);
+
+  const obj = {};
+  for (let pi = 0; pi < positions.length; pi++) {
+    const pos = positions[pi];
+    // 값 영역: 현재 valueStart ~ 다음 키의 start (또는 문자열 끝)
+    const valueEnd = pi + 1 < positions.length ? positions[pi + 1].start : str.length;
+    let rawValue = str.substring(pos.valueStart, valueEnd).trim();
+
+    // 후행 쉼표 제거
+    if (rawValue.endsWith(',')) rawValue = rawValue.slice(0, -1).trim();
+    // 마지막 필드일 때 닫는 } 제거
+    if (pi === positions.length - 1 && rawValue.endsWith('}')) {
+      rawValue = rawValue.slice(0, -1).trim();
+      if (rawValue.endsWith(',')) rawValue = rawValue.slice(0, -1).trim();
+    }
+
+    // 배열/객체 값은 직접 파싱 시도
+    if (rawValue.startsWith('[') || rawValue.startsWith('{')) {
+      try {
+        obj[pos.key] = JSON.parse(rawValue);
+        continue;
+      } catch (_) {
+        // 배열/객체 파싱 실패 → 문자열 repair 시도
+        try {
+          obj[pos.key] = JSON.parse(repairJson(rawValue));
+          continue;
+        } catch (__) {
+          // 그래도 실패 → 문자열로 저장
+        }
+      }
+    }
+
+    // 문자열 값: 앞뒤 " 제거 후 내부 " 이스케이프
+    if (rawValue.startsWith('"')) rawValue = rawValue.slice(1);
+    if (rawValue.endsWith('"')) rawValue = rawValue.slice(0, -1);
+    // 이미 이스케이프된 \" 보존, 나머지 " 이스케이프
+    rawValue = rawValue.replace(/\\"/g, '<<ESC_Q>>');
+    rawValue = rawValue.replace(/"/g, '\\"');
+    rawValue = rawValue.replace(/<<ESC_Q>>/g, '\\"');
+    // 제어 문자 이스케이프
+    rawValue = rawValue.replace(/[\x00-\x1f]/g, (c) => {
+      if (c === '\n') return '\\n';
+      if (c === '\r') return '\\r';
+      if (c === '\t') return '\\t';
+      return '';
+    });
+
+    try {
+      obj[pos.key] = JSON.parse('"' + rawValue + '"');
+    } catch (_) {
+      obj[pos.key] = rawValue; // 최후 수단: raw 문자열 그대로
+    }
+  }
+
+  return obj;
+}
+
 // === Step 3: 파싱 ===
 let parsed;
 
@@ -186,7 +288,14 @@ try {
     const repaired = repairJson(jsonStr);
     parsed = JSON.parse(repaired);
   } catch (e2) {
-    throw new Error("JSON 파싱 실패: " + e1.message + " | repair 후: " + e2.message);
+    // 3차: 필드 경계 추출 (content 필드의 unescaped quote 대응)
+    try {
+      parsed = extractByFieldBoundary(jsonStr);
+    } catch (e3) {
+      throw new Error("JSON 파싱 실패: " + e1.message
+        + " | repair 후: " + e2.message
+        + " | boundary 후: " + e3.message);
+    }
   }
 }
 

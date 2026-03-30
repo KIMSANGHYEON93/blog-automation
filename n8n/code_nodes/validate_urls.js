@@ -122,7 +122,7 @@ const cleanedReferences = references.filter(ref => {
 
 const passed = deadUrls.length === 0;
 
-return [{
+return {
   json: {
     ...item,
     content: cleanedContent,
@@ -137,4 +137,4 @@ return [{
       issues,
     }
   }
-}];
+};

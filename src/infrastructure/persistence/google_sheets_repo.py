@@ -40,6 +40,17 @@ class GoogleSheetsPostRepository(PostRepository):
         self._sheet = client.open(sheet_name).sheet1
         self._header_row = 1  # 1행은 헤더
 
+    @staticmethod
+    def _parse_status(raw: str) -> PostStatus:
+        """시트의 상태 문자열을 PostStatus로 변환. 비표준 값은 HOLD 처리."""
+        if not raw:
+            return PostStatus.PENDING
+        try:
+            return PostStatus(raw)
+        except ValueError:
+            logger.warning("알 수 없는 상태값 '%s' → HOLD 처리", raw)
+            return PostStatus.HOLD
+
     def _row_to_post(self, row_values: list, row_index: int) -> Post:
         def get(col_key: str) -> str:
             idx = COL[col_key] - 1
@@ -74,7 +85,7 @@ class GoogleSheetsPostRepository(PostRepository):
             keyword=get("keyword"),
             category=get("category"),
             content=content,
-            status=PostStatus(get("status")) if get("status") else PostStatus.PENDING,
+            status=self._parse_status(get("status")),
             published_url=get("published_url"),
             error_message=get("error_msg"),
             entry_id=get("entry_id"),

@@ -22,7 +22,7 @@ def call_tistory_post_api(
     """POST /manage/post.json API 호출. 성공 시 (entryUrl, entryId) 반환.
 
     entry_id='0'이면 신규 생성, entry_id=<postId>이면 기존 글 수정.
-    script timeout 시 max_retries까지 재시도 (지수 백오프).
+    script timeout 시 window.__publishResult를 확인하여 중복 방지.
     """
     import contextlib
 
@@ -34,10 +34,19 @@ def call_tistory_post_api(
                 f"API 발행 재시도 ({attempt + 1}/{max_retries}), "
                 f"backoff={backoff}s, timeout={timeout}s"
             )
-            # 재시도 전 script timeout 연장
+
             with contextlib.suppress(Exception):
                 sb.driver.set_script_timeout(timeout)
+            # backoff 대기 — 이 동안 timed-out fetch가 완료될 수 있음
             time.sleep(backoff)
+
+            # backoff 후: script timeout된 fetch가 실제 성공했는지 확인
+            saved = _check_saved_publish_result(sb, blog_name)
+            if saved is not None:
+                logger.info(
+                    f"script timeout 후 fetch 성공 확인 — 재시도 불필요: {saved[0]}"
+                )
+                return saved
 
         result = _call_tistory_post_api_once(
             sb, blog_name, title, html_body, tags,
@@ -47,6 +56,35 @@ def call_tistory_post_api(
         if result is not None:
             return result
 
+    return None
+
+
+def _check_saved_publish_result(
+    sb, blog_name: str,
+) -> tuple[str, str] | None:
+    """script timeout 후 window.__publishResult에 저장된 결과를 확인."""
+    import contextlib
+    import json as json_mod
+
+    try:
+        raw = sb.execute_script("return window.__publishResult || null;")
+        if not raw:
+            return None
+        result = json_mod.loads(raw) if isinstance(raw, str) else raw
+        if result.get("success"):
+            entry_url = result.get("entryUrl", "")
+            entry_id = str(result.get("entryId") or "")
+            if not entry_id and entry_url:
+                url_parts = entry_url.rstrip("/").split("/")
+                if url_parts and url_parts[-1].isdigit():
+                    entry_id = url_parts[-1]
+            if entry_url:
+                return (entry_url, entry_id)
+            if entry_id:
+                return (f"https://{blog_name}.tistory.com/{entry_id}", entry_id)
+    except Exception:
+        with contextlib.suppress(Exception):
+            logger.debug("window.__publishResult 확인 실패")
     return None
 
 
@@ -71,6 +109,9 @@ def _call_tistory_post_api_once(
             var contentType = arguments[6] || '';
             var entryId = arguments[7] || '0';
             var viewChannel = arguments[8] || '';
+
+            // 이전 결과 초기화 (script timeout 후 확인용)
+            window.__publishResult = null;
 
             var manageUrl = '';
             if (window.appInfo && window.appInfo.manageUrl) {
@@ -145,12 +186,16 @@ def _call_tistory_post_api_once(
                     result.success = false;
                 }
 
+                // script timeout 대비: 결과를 window에 저장
+                window.__publishResult = JSON.stringify(result);
                 callback(JSON.stringify(result));
             })
             .catch(function(e) {
-                callback(JSON.stringify({
+                var errResult = {
                     success: false, error: 'fetch:' + e.message
-                }));
+                };
+                window.__publishResult = JSON.stringify(errResult);
+                callback(JSON.stringify(errResult));
             });
         """, title, html_body, tags, blog_name, thumbnail_url, category_id,
             content_type, entry_id, view_channel)

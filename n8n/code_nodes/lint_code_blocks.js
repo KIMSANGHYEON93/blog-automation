@@ -3,7 +3,7 @@
  * 언어 태그 존재 여부, 닫히지 않은 블록 감지
  */
 
-const content = $input.first().json.content;
+const content = $input.item.json.content;
 
 const issues = [];
 
@@ -47,13 +47,13 @@ while ((langMatch = langRegex.exec(content)) !== null) {
 
 const passed = issues.length === 0;
 
-return [{
+return {
   json: {
-    ...$input.first().json,
+    ...$input.item.json,
     code_lint: {
       passed,
       block_count: blockCount,
       issues,
     }
   }
-}];
+};

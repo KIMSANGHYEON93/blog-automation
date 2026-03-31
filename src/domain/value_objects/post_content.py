@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,7 @@ class PostContent:
     def faq_ld_json(self) -> str:
         """FAQ 스키마를 LD+JSON 형식으로 반환. 파싱 실패 시 빈 문자열."""
         if not self.faq_schema:
+            logger.debug("faq_schema 비어있음 — FAQ LD+JSON 생략")
             return ""
         try:
             faq_list = (
@@ -56,6 +60,7 @@ class PostContent:
                 else self.faq_schema
             )
             if not isinstance(faq_list, list) or len(faq_list) == 0:
+                logger.warning("faq_schema가 배열이 아니거나 비어있음: %s", type(faq_list).__name__)
                 return ""
             main_entity = []
             for faq in faq_list:
@@ -70,6 +75,7 @@ class PostContent:
                     }
                 })
             if not main_entity:
+                logger.warning("faq_schema에 유효 항목 0건 (총 %d건 중)", len(faq_list))
                 return ""
             schema = {
                 "@context": "https://schema.org",
@@ -77,5 +83,6 @@ class PostContent:
                 "mainEntity": main_entity
             }
             return json.dumps(schema, ensure_ascii=False, indent=2)
-        except (json.JSONDecodeError, TypeError, KeyError):
+        except (json.JSONDecodeError, TypeError, KeyError) as exc:
+            logger.warning("faq_schema 파싱 실패: %s", exc)
             return ""

@@ -246,7 +246,12 @@ function extractByFieldBoundary(str) {
           obj[pos.key] = JSON.parse(repairJson(rawValue));
           continue;
         } catch (__) {
-          // 그래도 실패 → 문자열로 저장
+          // 배열 필드는 빈 배열로 초기화 (문자열로 저장 방지)
+          if (['faq_schema', 'references', 'internal_link_keywords'].includes(pos.key)) {
+            obj[pos.key] = [];
+            continue;
+          }
+          // 그 외 → 문자열로 저장
         }
       }
     }
@@ -317,10 +322,27 @@ if (metaLen < 120 || metaLen > 155) {
 if (!Array.isArray(parsed.faq_schema) || parsed.faq_schema.length === 0) {
   throw new Error("faq_schema가 비어있거나 배열이 아닙니다");
 }
+const FAQ_PLACEHOLDER = /참조|참고하세요|확인하세요|문서를 보세요|홈페이지를 방문/;
 for (const faq of parsed.faq_schema) {
   if (!faq.question || !faq.answer) {
     throw new Error("faq_schema 항목에 question/answer 누락");
   }
+  if (faq.answer.length < 80) {
+    throw new Error(`FAQ 답변 길이 부족: ${faq.answer.length}자 (최소 80자)`);
+  }
+  if (FAQ_PLACEHOLDER.test(faq.answer) && faq.answer.length < 120) {
+    throw new Error(`FAQ 답변이 플레이스홀더: "${faq.answer.slice(0, 50)}..."`);
+  }
+}
+
+// references 플레이스홀더 필터링
+if (Array.isArray(parsed.references)) {
+  parsed.references = parsed.references.filter(ref => {
+    if (typeof ref !== 'string') return false;
+    if (ref.length < 10) return false;
+    if (/^참조|^참고|^확인|^검색/.test(ref) && !ref.startsWith('http')) return false;
+    return true;
+  });
 }
 
 // 본문 길이 검증 (프롬프트 유형별 최소 글자 수)

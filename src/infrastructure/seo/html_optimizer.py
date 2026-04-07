@@ -48,13 +48,16 @@ def optimize_html(html: str) -> str:
         if not iframe.get("loading"):
             iframe["loading"] = "lazy"
 
-    # 3. 외부 리소스 preconnect 힌트
+    # 3. LCP 이미지 preload (첫 번째 이미지를 <link rel="preload">로 선언)
+    _add_lcp_preload(soup, all_imgs)
+
+    # 4. 외부 리소스 preconnect 힌트
     _add_preconnect_hints(soup)
 
-    # 4. viewport 메타 태그 주입
+    # 5. viewport 메타 태그 주입
     _ensure_viewport(soup)
 
-    # 5. <figure> 반응형
+    # 6. <figure> 반응형
     for figure in soup.find_all("figure"):
         existing_style = str(figure.get("style", ""))
         if "max-width" not in existing_style:
@@ -70,6 +73,55 @@ _DNS_PREFETCH_DOMAINS = [
     "https://kroki.io",
     "https://images.unsplash.com",
 ]
+
+_PRECONNECT_DOMAINS = [
+    "https://images.unsplash.com",
+    "https://kroki.io",
+]
+
+
+def _add_lcp_preload(soup: BeautifulSoup, all_imgs: list) -> None:
+    """LCP candidate 이미지에 <link rel="preload"> 추가.
+
+    브라우저가 HTML 파싱 초기에 이미지 다운로드를 시작하도록 한다.
+    LCP를 수 초 단축하는 핵심 최적화.
+    """
+    if not all_imgs:
+        return
+    first_img = all_imgs[0]
+    src = first_img.get("src", "")
+    if not src:
+        return
+
+    head = soup.find("head")
+    if not head:
+        head = soup.new_tag("head")
+        if soup.html:
+            soup.html.insert(0, head)
+        else:
+            soup.insert(0, head)
+
+    # 이미 preload 존재하는지 확인
+    for link in head.find_all("link", rel="preload"):
+        if link.get("href") == src:
+            return
+
+    preload = soup.new_tag(
+        "link",
+        rel="preload",
+        href=src,
+        attrs={"as": "image"},
+    )
+    # srcset이 있으면 imagesrcset으로 전달
+    srcset = first_img.get("srcset")
+    if srcset:
+        preload["imagesrcset"] = srcset
+        sizes = first_img.get("sizes")
+        if sizes:
+            preload["imagesizes"] = sizes
+
+    preload["fetchpriority"] = "high"
+    head.insert(0, preload)
 
 
 def _add_preconnect_hints(soup: BeautifulSoup) -> None:
@@ -99,8 +151,14 @@ def _add_preconnect_hints(soup: BeautifulSoup) -> None:
             new_link = soup.new_tag("link", rel="preconnect", href=domain)
             head.insert(0, new_link)
 
-    # 알려진 외부 도메인에 dns-prefetch 추가
+    # 알려진 외부 도메인에 preconnect + dns-prefetch 추가
     if head:
+        for domain in _PRECONNECT_DOMAINS:
+            if domain not in existing_preconnects:
+                pc = soup.new_tag(
+                    "link", rel="preconnect", href=domain, crossorigin="",
+                )
+                head.insert(0, pc)
         for domain in _DNS_PREFETCH_DOMAINS:
             if domain not in existing_prefetch:
                 prefetch = soup.new_tag("link", rel="dns-prefetch", href=domain)

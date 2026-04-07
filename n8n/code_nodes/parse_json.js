@@ -14,8 +14,8 @@ const raw = $input.item.json.text;
 
 // 알려진 최상위 JSON 필드 목록 (구조적 키 판별에 사용)
 const TOP_LEVEL_KEYS = new Set([
-  'title', 'content', 'meta_description', 'faq_schema',
-  'references', 'internal_link_keywords', '_warning',
+  'title', 'url_slug', 'content', 'meta_description', 'faq_schema',
+  'references', 'internal_link_keywords', 'tags', '_warning',
 ]);
 
 // === Step 1: JSON 블록 추출 ===

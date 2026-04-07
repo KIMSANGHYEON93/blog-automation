@@ -52,13 +52,15 @@ def _preserve_mermaid_blocks(md_text: str) -> str:
         # 1차: kroki.io SVG 렌더링 시도
         svg = _render_mermaid_via_kroki(code)
         if svg:
-            # SVG에 width가 없으면 반응형 설정
+            # SVG에 width가 없으면 반응형 설정 (800px 상한)
             processed_svg = svg
             if "width=" not in processed_svg:
-                processed_svg = processed_svg.replace("<svg", '<svg width="100%"', 1)
+                processed_svg = processed_svg.replace(
+                    "<svg", '<svg width="100%"', 1,
+                )
             return (
                 f'<div class="mermaid-diagram" role="img" aria-label="{safe_alt}" '
-                f'style="max-width:100%;overflow-x:auto;margin:16px 0;">'
+                f'style="max-width:800px;overflow-x:auto;margin:16px 0;">'
                 f"{processed_svg}</div>"
             )
 

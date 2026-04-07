@@ -84,10 +84,17 @@ async function searchUnsplash(keyword, usedIds) {
     const idx = Math.floor(Math.random() * Math.min(available.length, 6));
     const photo = available[idx];
 
+    // 원본 비율 계산 (CLS 방지용 width/height)
+    const origW = photo.width || 1080;
+    const origH = photo.height || 720;
+
     return {
       id: photo.id,
-      thumb: photo.urls.small,
-      url: photo.urls.regular,
+      thumb: photo.urls.small,        // 400w (thumbnail/OG)
+      small: photo.urls.small,         // 400w (섹션 이미지)
+      url: photo.urls.regular,         // 1080w (hero 이미지)
+      width: origW,
+      height: origH,
       photographer: photo.user.name || 'Unknown',
       photographerUrl: photo.user.links?.html || 'https://unsplash.com',
     };
@@ -106,11 +113,20 @@ async function searchUnsplash(keyword, usedIds) {
 function unsplashFigureTag(photo, altText, isHero) {
   const safeAlt = altText.replace(/"/g, '&quot;');
   const priority = isHero ? ' fetchpriority="high"' : ' loading="lazy"';
-  const imgUrl = isHero ? photo.url : photo.url;
+  // Hero: 1080w (regular), Section: 400w (small) — 모바일 LCP 개선
+  const imgUrl = isHero ? photo.url : photo.small;
+  // CLS 방지: 표시 크기 기준 width/height 명시
+  const displayW = isHero ? 800 : 400;
+  const displayH = Math.round(displayW * (photo.height / photo.width));
+  // Hero 이미지에 srcset 제공 (반응형)
+  const srcset = isHero
+    ? ` srcset="${photo.small} 400w, ${photo.url} 1080w" sizes="(max-width: 768px) 100vw, 800px"`
+    : '';
   return (
     `<figure style="max-width:100%;border-radius:8px;margin:24px 0;">` +
-    `<img src="${imgUrl}" alt="${safeAlt}"${priority} decoding="async" ` +
-    `style="max-width:100%;height:auto;border-radius:8px;" />` +
+    `<img src="${imgUrl}" alt="${safeAlt}"${priority} decoding="async"` +
+    ` width="${displayW}" height="${displayH}"${srcset}` +
+    ` style="max-width:100%;height:auto;border-radius:8px;" />` +
     `<!-- Photo by ${photo.photographer} on Unsplash -->` +
     `</figure>`
   );
@@ -166,7 +182,10 @@ function mermaidToImgTag(code, altText) {
   const url = mermaidToKrokiUrl(code);
   if (!url) return null;
   const safeAlt = altText.replace(/"/g, '&quot;');
-  return `<img src="${url}" alt="${safeAlt}" width="800" height="auto" style="max-width:100%;height:auto;margin:16px 0;" />`;
+  // CLS 방지: 다이어그램 종류별 예상 높이 설정 (aspect-ratio로 보완)
+  const lines = code.split('\n').length;
+  const estimatedH = Math.max(300, Math.min(lines * 40, 600));
+  return `<img src="${url}" alt="${safeAlt}" width="800" height="${estimatedH}" loading="lazy" decoding="async" style="max-width:100%;height:auto;margin:16px 0;" />`;
 }
 
 // 글 내 Unsplash 이미지 중복 방지용 Set

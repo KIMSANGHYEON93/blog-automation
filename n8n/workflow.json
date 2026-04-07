@@ -227,6 +227,7 @@
             "상태": "발행대기",
             "제목": "={{ $json.title }}",
             "메타설명": "={{ $json.meta_description }}",
+            "URL슬러그": "={{ $json.url_slug || '' }}",
             "본문마크다운": "={{ $json.content }}"
           }
         }

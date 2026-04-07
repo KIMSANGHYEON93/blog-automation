@@ -1,0 +1,226 @@
+{
+  "name": "Keyword Research — Google Ads Keyword Metrics",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "30 0 * * *" }]
+        }
+      },
+      "id": "kw-1-schedule",
+      "name": "Schedule Trigger (00:30 AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": { "value": "={{ $env.SHEET_ID }}" },
+        "range": "A:H",
+        "options": {
+          "filters": {
+            "column": "검색볼륨",
+            "value": ""
+          }
+        }
+      },
+      "id": "kw-2-sheets-read",
+      "name": "Sheets Read (검색볼륨 비어있는 행)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [460, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// batch_keywords.js — 키워드 10개씩 배치 분할\n// n8n/code_nodes/batch_keywords.js 내용을 여기에 복사"
+      },
+      "id": "kw-3-batch",
+      "name": "Batch Keywords (10개씩)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "kw-4-loop",
+      "name": "Loop Over Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// get_access_token.js — Service Account JWT → Access Token 교환\n// n8n/code_nodes/get_access_token.js 내용을 여기에 복사"
+      },
+      "id": "kw-5-auth",
+      "name": "Get Access Token (JWT)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://googleads.googleapis.com/v18/customers/{{ $env.GOOGLE_ADS_CUSTOMER_ID }}:generateKeywordIdeas",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $json.accessToken }}" },
+            { "name": "developer-token", "value": "={{ $env.GOOGLE_ADS_DEVELOPER_TOKEN }}" },
+            { "name": "login-customer-id", "value": "={{ $env.GOOGLE_ADS_LOGIN_CUSTOMER_ID }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"language\": \"languageConstants/1023\",\n  \"geoTargetConstants\": [\"geoTargetConstants/2410\"],\n  \"keywordPlanNetwork\": \"GOOGLE_SEARCH\",\n  \"keywordSeed\": {\n    \"keywords\": {{ JSON.stringify($json.keywords) }}\n  }\n}",
+        "options": {
+          "response": { "response": { "fullResponse": true } },
+          "timeout": 30000
+        }
+      },
+      "id": "kw-6-google-ads",
+      "name": "Google Ads generateKeywordIdeas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// parse_keyword_metrics.js — Google Ads 응답 → 볼륨/CPC/난이도/우선순위 변환\n// n8n/code_nodes/parse_keyword_metrics.js 내용을 여기에 복사"
+      },
+      "id": "kw-7-parse",
+      "name": "Parse Keyword Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": { "value": "={{ $env.SHEET_ID }}" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "검색볼륨": "={{ $json.검색볼륨 }}",
+            "예상CPC": "={{ $json.예상CPC }}",
+            "난이도": "={{ $json.난이도 }}",
+            "우선순위": "={{ $json.우선순위 }}"
+          },
+          "matchingColumns": ["키워드"]
+        }
+      },
+      "id": "kw-8-sheets-update",
+      "name": "Sheets Update (메트릭 기록)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1780, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
+    },
+    {
+      "parameters": {
+        "amount": 1.5,
+        "unit": "seconds"
+      },
+      "id": "kw-9-wait",
+      "name": "Wait 1.5s (Rate Limit)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Error Handler — API 에러 시 기본값으로 graceful degradation\nconst batchData = $('Loop Over Batches').item.json;\nconst keywords = batchData.keywords || [];\nconst rowNumbers = batchData.rowNumbers || [];\nconst output = [];\n\nfor (let i = 0; i < keywords.length; i++) {\n  output.push({\n    json: {\n      키워드: keywords[i],\n      rowNumber: rowNumbers[i] || '',\n      검색볼륨: 0,\n      예상CPC: 0,\n      난이도: 20,\n      우선순위: 'C',\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "kw-err-handler",
+      "name": "Error Handler (Graceful Degradation)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 500]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": { "value": "={{ $env.SHEET_ID }}" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "검색볼륨": "={{ $json.검색볼륨 }}",
+            "예상CPC": "={{ $json.예상CPC }}",
+            "난이도": "={{ $json.난이도 }}",
+            "우선순위": "={{ $json.우선순위 }}"
+          },
+          "matchingColumns": ["키워드"]
+        }
+      },
+      "id": "kw-err-sheets-update",
+      "name": "Sheets Update (에러 기본값)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1780, 500],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_CREDS_ID" } }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (00:30 AM)": {
+      "main": [[{ "node": "Sheets Read (검색볼륨 비어있는 행)", "type": "main", "index": 0 }]]
+    },
+    "Sheets Read (검색볼륨 비어있는 행)": {
+      "main": [[{ "node": "Batch Keywords (10개씩)", "type": "main", "index": 0 }]]
+    },
+    "Batch Keywords (10개씩)": {
+      "main": [[{ "node": "Loop Over Batches", "type": "main", "index": 0 }]]
+    },
+    "Loop Over Batches": {
+      "main": [
+        [{ "node": "Get Access Token (JWT)", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Get Access Token (JWT)": {
+      "main": [[{ "node": "Google Ads generateKeywordIdeas", "type": "main", "index": 0 }]]
+    },
+    "Google Ads generateKeywordIdeas": {
+      "main": [
+        [{ "node": "Parse Keyword Metrics", "type": "main", "index": 0 }],
+        [{ "node": "Error Handler (Graceful Degradation)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Keyword Metrics": {
+      "main": [[{ "node": "Sheets Update (메트릭 기록)", "type": "main", "index": 0 }]]
+    },
+    "Sheets Update (메트릭 기록)": {
+      "main": [[{ "node": "Wait 1.5s (Rate Limit)", "type": "main", "index": 0 }]]
+    },
+    "Wait 1.5s (Rate Limit)": {
+      "main": [[{ "node": "Loop Over Batches", "type": "main", "index": 0 }]]
+    },
+    "Error Handler (Graceful Degradation)": {
+      "main": [[{ "node": "Sheets Update (에러 기본값)", "type": "main", "index": 0 }]]
+    },
+    "Sheets Update (에러 기본값)": {
+      "main": [[{ "node": "Wait 1.5s (Rate Limit)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "",
+    "templateId": "",
+    "notes": "Pipeline A 보조 워크플로우: Google Ads Keyword Planner API로 키워드 메트릭 사전 수집.\n매일 00:30에 실행, Pipeline A(01:00)보다 30분 먼저.\n검색볼륨이 비어있는 행만 대상.\n에러 시 기본값 유지 (graceful degradation)."
+  }
+}

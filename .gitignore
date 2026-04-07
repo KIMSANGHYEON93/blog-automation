@@ -19,3 +19,4 @@ credentials.json
 .DS_Store
 .claude/worktrees/
 .python-version
+.gstack/

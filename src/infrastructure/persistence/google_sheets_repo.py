@@ -1,6 +1,7 @@
 """GoogleSheetsPostRepository — PostRepository implementation using gspread."""
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import datetime
@@ -80,6 +81,18 @@ class GoogleSheetsPostRepository(PostRepository):
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
 
+        # CWV 측정값 파싱
+        cwv_lcp: float | None = None
+        cwv_cls: float | None = None
+        raw_lcp = get("cwv_lcp")
+        raw_cls = get("cwv_cls")
+        if raw_lcp:
+            with contextlib.suppress(ValueError, TypeError):
+                cwv_lcp = float(raw_lcp)
+        if raw_cls:
+            with contextlib.suppress(ValueError, TypeError):
+                cwv_cls = float(raw_cls)
+
         post = Post(
             row_index=row_index,
             keyword=get("keyword"),
@@ -90,6 +103,8 @@ class GoogleSheetsPostRepository(PostRepository):
             error_message=get("error_msg"),
             entry_id=get("entry_id"),
             quality_score=quality_score,
+            cwv_lcp=cwv_lcp,
+            cwv_cls=cwv_cls,
         )
 
         raw_links = get("internal_links")

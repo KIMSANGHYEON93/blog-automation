@@ -76,8 +76,11 @@ class PublishPostsUseCase:
             if is_dup and not any(
                 pub.row_index == p.row_index for pub in published_posts
             ):
+                reason = f"중복: {matched} ({score:.0%})"
+                p.mark_hold(reason)
+                self._repo.save(p)
                 logger.warning(
-                    f"중복 키워드 스킵: {p.keyword} "
+                    f"중복 키워드 → 보류: {p.keyword} "
                     f"(유사: {matched}, 유사도: {score:.0%})"
                 )
                 stats.skipped += 1

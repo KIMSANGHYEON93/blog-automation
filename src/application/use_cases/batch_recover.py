@@ -28,13 +28,14 @@ class BatchRecoverUseCase:
         self._repo = repo
         self._classifier = ErrorClassifier()
 
-    def execute(self) -> RecoverResult:
+    def execute(self, *, force_unknown: bool = False) -> RecoverResult:
         """발행실패 포스트를 일괄 복구.
 
         1. find_failed()로 전체 실패 포스트 조회
         2. ErrorClassifier로 에러 유형 분류
         3. 자동 복구 가능한 건만 reset_failed_to_pending()
-        4. 통계 반환
+        4. force_unknown=True 시 unknown 유형도 강제 복구
+        5. 통계 반환
         """
         result = RecoverResult()
         failed_posts = self._repo.find_failed()
@@ -48,13 +49,23 @@ class BatchRecoverUseCase:
             classified = self._classifier.classify(post.error_message)
             result.details.append((post.row_index, post.keyword, classified))
 
-            if classified.should_auto_recover:
-                post.reset_failed_to_pending()
+            should_recover = classified.should_auto_recover or (
+                force_unknown and classified.error_type.value == "unknown"
+            )
+
+            if should_recover:
+                if post.was_previously_published():
+                    post.reset_failed_to_revision_pending()
+                    target = "수정대기"
+                else:
+                    post.reset_failed_to_pending()
+                    target = "발행대기"
                 self._repo.save(post)
                 result.recovered += 1
+                label = "강제 복구" if not classified.should_auto_recover else "자동 복구"
                 logger.info(
-                    f"자동 복구: row={post.row_index}, keyword={post.keyword}, "
-                    f"type={classified.error_type.value}"
+                    f"{label}: row={post.row_index}, keyword={post.keyword}, "
+                    f"type={classified.error_type.value} → {target}"
                 )
             elif classified.action.value == "mark_revision":
                 result.skipped_revision += 1

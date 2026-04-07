@@ -27,6 +27,8 @@ class Post:
     quality_score: int = 0
     retry_count: int = 0
     next_retry_at: datetime | None = None
+    cwv_lcp: float | None = None
+    cwv_cls: float | None = None
 
     def mark_publishing(self) -> None:
         """PENDING → PUBLISHING (only from PENDING)."""
@@ -60,6 +62,25 @@ class Post:
             raise InvalidStatusTransitionError(self.status, PostStatus.PENDING)
         self.status = PostStatus.PENDING
         self.error_message = ""
+
+    def reset_failed_to_revision_pending(self) -> None:
+        """Retry recovery for revisions: FAILED → REVISION_PENDING."""
+        if self.status != PostStatus.FAILED:
+            raise InvalidStatusTransitionError(self.status, PostStatus.REVISION_PENDING)
+        self.status = PostStatus.REVISION_PENDING
+        self.error_message = ""
+
+    def was_previously_published(self) -> bool:
+        """True if this post has been published before (has entry_id and URL)."""
+        return bool(self.entry_id) and bool(self.published_url)
+
+    def mark_hold(self, reason: str = "") -> None:
+        """PENDING → HOLD. 중복 키워드 등 발행 보류 처리."""
+        if self.status != PostStatus.PENDING:
+            raise InvalidStatusTransitionError(self.status, PostStatus.HOLD)
+        self.status = PostStatus.HOLD
+        if reason:
+            self.error_message = reason[:200]
 
     def is_publishable(self) -> bool:
         """True only when PENDING + quality body + sufficient length + quality_score."""

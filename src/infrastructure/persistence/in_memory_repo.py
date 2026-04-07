@@ -56,6 +56,11 @@ class InMemoryPostRepository(PostRepository):
         lcp: float, cls_score: float,
     ) -> None:
         self._cwv_records[row_index] = {"lcp": lcp, "cls": cls_score}
+        for post in self._posts:
+            if post.row_index == row_index:
+                post.cwv_lcp = lcp
+                post.cwv_cls = cls_score
+                break
 
     def find_all(self) -> list[Post]:
         return list(self._posts)

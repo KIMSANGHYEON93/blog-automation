@@ -53,13 +53,34 @@ class GetStatusUseCase:
             else:
                 report.other += 1
 
-        # CWV 데이터는 repo의 cwv_records에서 집계
-        # (InMemory에서는 _cwv_records 사용, 실제 시트에서는 find_cwv_checked 호출)
+        # CWV 데이터 집계 — Post 엔티티의 cwv_lcp/cwv_cls 필드 기반
         cwv_checked_posts = [
             p for p in posts
-            if p.status == PostStatus.PUBLISHED and p.published_url
+            if p.status == PostStatus.PUBLISHED
+            and p.published_url
+            and p.cwv_lcp is not None
         ]
         report.cwv_checked = len(cwv_checked_posts)
+
+        if cwv_checked_posts:
+            lcp_threshold = 2.5
+            report.cwv_passed = sum(
+                1 for p in cwv_checked_posts
+                if p.cwv_lcp is not None
+                and p.cwv_lcp < lcp_threshold
+            )
+            lcp_values = [
+                p.cwv_lcp for p in cwv_checked_posts
+                if p.cwv_lcp is not None
+            ]
+            if lcp_values:
+                report.avg_lcp = sum(lcp_values) / len(lcp_values)
+            cls_values = [
+                p.cwv_cls for p in cwv_checked_posts
+                if p.cwv_cls is not None
+            ]
+            if cls_values:
+                report.avg_cls = sum(cls_values) / len(cls_values)
 
         return report
 

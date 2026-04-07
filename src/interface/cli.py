@@ -97,6 +97,11 @@ def _parse_args() -> argparse.Namespace:
         help="--discover-keywords 시 발굴된 키워드를 시트에 대기 상태로 자동 등록",
     )
     parser.add_argument(
+        "--force-reset",
+        action="store_true",
+        help="--recover-failed 시 unknown 유형도 강제로 발행대기 전환",
+    )
+    parser.add_argument(
         "--set-thumbnails",
         action="store_true",
         help="발행완료 포스트에 AI 생성 대표이미지(썸네일) 설정",
@@ -363,7 +368,7 @@ def _discover_keywords(config: Config, auto_register: bool = False) -> None:
         logger.error(f"키워드 발굴 실패: {result.error}")
 
 
-def _recover_failed(config: Config) -> None:
+def _recover_failed(config: Config, *, force_unknown: bool = False) -> None:
     """발행실패 포스트 일괄 복구 워크플로우."""
     config.validate()
 
@@ -374,15 +379,19 @@ def _recover_failed(config: Config) -> None:
         sheet_name=config.sheet_name,
     )
     uc = BatchRecoverUseCase(repo=repo)
-    result = uc.execute()
+    result = uc.execute(force_unknown=force_unknown)
 
     print(
         f"일괄 복구 결과: "
         f"전체={result.total_failed}, 복구={result.recovered}, "
         f"수동={result.skipped_manual}, 수정필요={result.skipped_revision}"
     )
+    recovered_rows = {
+        row_idx for row_idx, _, cl in result.details
+        if cl.should_auto_recover or (force_unknown and cl.error_type.value == "unknown")
+    }
     for row_idx, keyword, classified in result.details:
-        status = "✓ 복구" if classified.should_auto_recover else "✗ 건너뜀"
+        status = "✓ 복구" if row_idx in recovered_rows else "✗ 건너뜀"
         print(f"  [{status}] row={row_idx} {keyword} — {classified.error_type.value}")
 
 
@@ -600,7 +609,7 @@ def _main_inner() -> None:
         return
 
     if args.recover_failed:
-        _recover_failed(config)
+        _recover_failed(config, force_unknown=args.force_reset)
         return
 
     if args.set_thumbnails:

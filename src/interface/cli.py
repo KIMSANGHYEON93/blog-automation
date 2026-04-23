@@ -72,6 +72,12 @@ def _parse_args() -> argparse.Namespace:
         help="블로그 현황 대시보드 출력",
     )
     parser.add_argument(
+        "--dashboard",
+        action="store_true",
+        dest="status",
+        help="--status의 alias (crontab 호환)",
+    )
+    parser.add_argument(
         "--discover-keywords",
         action="store_true",
         help="GSC 검색 데이터에서 키워드 자동 발굴",

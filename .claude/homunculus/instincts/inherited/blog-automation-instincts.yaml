@@ -1,0 +1,323 @@
+# Instincts generated from https://github.com/KIMSANGHYEON93/blog-automation
+# Generated: 2026-03-22T14:32:30.154Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: blog-automation-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, docs, fix, refactor, chore
+
+## Evidence
+
+- 108 commits analyzed
+- Detected conventional commit pattern
+- Examples: fix(infra): set_script_timeout을 sb.open() 이후로 이동하여 첫 시도 timeout 해결, feat: 카테고리 자동 분류 + 홈주제(daumLike) 발행 지원
+
+---
+id: blog-automation-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Commit Length
+
+## Action
+
+Write moderate-length commit messages (~59 characters)
+
+## Evidence
+
+- Average commit message length: 59 chars
+- Based on 108 commits
+
+---
+id: blog-automation-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: blog-automation-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: blog-automation-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: blog-automation-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: blog-automation-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~17x per month
+- Files: **/*.test.*, **/api/**
+
+---
+id: blog-automation-workflow-refactoring
+trigger: "when refactoring code"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Workflow Refactoring
+
+## Action
+
+Follow the refactoring workflow:
+1. Ensure tests pass before refactor
+2. Refactor code structure
+3. Verify tests still pass
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~8x per month
+- Files: src/**/*
+
+---
+id: blog-automation-workflow-n8n-prompt-and-code-node-update
+trigger: "when doing n8n prompt and code node update"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Workflow N8n Prompt And Code Node Update
+
+## Action
+
+Follow the n8n-prompt-and-code-node-update workflow:
+1. Edit one or more prompt markdown files in n8n/prompts/ (e.g., to raise content length, add new sections, or clarify instructions)
+2. Edit or add code node JS files in n8n/code_nodes/ (e.g., to add validation, parsing, or enrichment logic)
+3. Update n8n/workflow_complete.json to sync with new code nodes or prompt logic
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: n8n/prompts/prompt_a_terminology.md, n8n/prompts/prompt_b_comparison.md, n8n/prompts/prompt_c_troubleshooting.md
+
+---
+id: blog-automation-workflow-domain-entity-or-policy-gate-enhancement
+trigger: "when doing domain entity or policy gate enhancement"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Workflow Domain Entity Or Policy Gate Enhancement
+
+## Action
+
+Follow the domain-entity-or-policy-gate-enhancement workflow:
+1. Edit src/domain/entities/post.py to add or change publishability logic (e.g., min content length, quality score)
+2. Edit or add tests in tests/unit/domain/ and tests/unit/application/ to cover new rules
+3. If needed, update src/infrastructure/persistence/ or related adapters to support new fields
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: src/domain/entities/post.py, tests/unit/domain/test_post_entity.py, tests/unit/domain/test_publish_policy.py
+
+---
+id: blog-automation-workflow-infrastructure-module-extraction-and-refactor
+trigger: "when doing infrastructure module extraction and refactor"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Workflow Infrastructure Module Extraction And Refactor
+
+## Action
+
+Follow the infrastructure-module-extraction-and-refactor workflow:
+1. Extract new submodules from the large file (e.g., create api_publisher.py, publish_verifier.py, etc.)
+2. Update the original orchestrator module to delegate to submodules
+3. Update all external callers to import from new submodules
+4. Update or add tests to use new imports and structure
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: src/infrastructure/browser/tistory_editor.py, src/infrastructure/browser/api_publisher.py, src/infrastructure/browser/publish_verifier.py
+
+---
+id: blog-automation-workflow-application-service-extraction-and-di-refactor
+trigger: "when doing application service extraction and di refactor"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Workflow Application Service Extraction And Di Refactor
+
+## Action
+
+Follow the application-service-extraction-and-di-refactor workflow:
+1. Extract new service class into src/application/services/
+2. Update use cases in src/application/use_cases/ to accept the service via constructor injection
+3. Update CLI composition root to assemble dependencies
+4. Update or add unit tests for both the new service and affected use cases
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: src/application/services/internal_link_enricher.py, src/application/use_cases/publish_posts.py, src/application/use_cases/revise_posts.py
+
+---
+id: blog-automation-workflow-category-management-and-auto-classification-enhancement
+trigger: "when doing category management and auto classification enhancement"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Workflow Category Management And Auto Classification Enhancement
+
+## Action
+
+Follow the category-management-and-auto-classification-enhancement workflow:
+1. Edit site_profile.json to add or reorder categories and patterns
+2. Update src/domain/value_objects/site_profile.py and related adapters
+3. Update src/infrastructure/persistence/json_site_profile.py and in_memory_repo.py
+4. Update or add use cases for classification and syncing
+5. Update or add tests for new logic
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: site_profile.json, src/domain/value_objects/site_profile.py, src/infrastructure/persistence/json_site_profile.py
+
+---
+id: blog-automation-workflow-documentation-and-execution-guide-update
+trigger: "when doing documentation and execution guide update"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/KIMSANGHYEON93/blog-automation
+---
+
+# Blog Automation Workflow Documentation And Execution Guide Update
+
+## Action
+
+Follow the documentation-and-execution-guide-update workflow:
+1. Edit or add markdown files in docs/ (e.g., EXECUTION_GUIDE.md, SHEETS_GUIDE.md)
+2. Edit README.md and other top-level docs
+3. Update or add shell scripts (e.g., run_pipeline_b.sh, run_dashboard.sh) to match new documented flows
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: docs/EXECUTION_GUIDE.md, docs/SHEETS_GUIDE.md, README.md
+

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Blog Automation"
+  short_description: "Repo-specific patterns and workflows for blog-automation"
+  default_prompt: "Use the blog-automation repo skill to follow existing architecture, testing, and workflow conventions."
+policy:
+  allow_implicit_invocation: true

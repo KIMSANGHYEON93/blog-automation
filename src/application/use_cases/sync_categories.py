@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-from src.domain.ports.category_sync_port import CategorySyncPort
+from src.domain.ports.category_sync_port import CategorySyncPort, RemoteCategory
 from src.domain.ports.site_profile_port import SiteProfilePort
 from src.domain.value_objects.site_profile import CategoryMapping
 
@@ -30,6 +30,64 @@ class SyncResult:
     updated: bool = False
 
 
+def _leaf(name: str) -> str:
+    """Tistory label은 '상위/하위' 전체 경로 — 마지막 구간이 로컬 카테고리명에 대응."""
+    return name.rsplit("/", 1)[-1]
+
+
+def _root(name: str) -> str:
+    return name.split("/", 1)[0]
+
+
+def _find_by_leaf(
+    name: str, remote_cats: list[RemoteCategory], roots: set[str],
+) -> RemoteCategory | None:
+    candidates = [r for r in remote_cats if _leaf(r.name) == name]
+    in_roots = [r for r in candidates if _root(r.name) in roots]
+    preferred = in_roots or candidates
+    return preferred[0] if preferred else None
+
+
+def _diff_categories(
+    local_cats: list[CategoryMapping], remote_cats: list[RemoteCategory],
+) -> list[CategoryDiff]:
+    """ID 우선 매칭 → 마지막 이름으로 ID 불일치 판정 → 관리 루트 안의 신규 원격만 보고."""
+    remote_by_id = {r.category_id: r for r in remote_cats}
+    hierarchical = any("/" in r.name for r in remote_cats)
+
+    matched_ids = {c.tistory_id for c in local_cats if c.tistory_id in remote_by_id}
+    roots = {_root(remote_by_id[rid].name) for rid in matched_ids}
+
+    diffs: list[CategoryDiff] = []
+    for local in local_cats:
+        if local.tistory_id in remote_by_id:
+            continue
+        remote = _find_by_leaf(local.name, remote_cats, roots)
+        if remote is None:
+            diffs.append(CategoryDiff(
+                category_name=local.name, diff_type="missing_remote", local_id=local.tistory_id,
+            ))
+            continue
+        matched_ids.add(remote.category_id)
+        roots.add(_root(remote.name))
+        diffs.append(CategoryDiff(
+            category_name=local.name, diff_type="id_mismatch",
+            local_id=local.tistory_id, remote_id=remote.category_id,
+        ))
+
+    # 하위 카테고리를 가진 원격 카테고리는 컨테이너이므로 신규 대상에서 제외
+    parents = {r.name.rsplit("/", 1)[0] for r in remote_cats if "/" in r.name}
+    for remote in remote_cats:
+        if remote.category_id in matched_ids or remote.name in parents:
+            continue
+        if hierarchical and _root(remote.name) not in roots:
+            continue  # 블로그의 다른 주제(개인 카테고리 등)는 관리 대상 아님
+        diffs.append(CategoryDiff(
+            category_name=_leaf(remote.name), diff_type="new_remote", remote_id=remote.category_id,
+        ))
+    return diffs
+
+
 class SyncCategoriesUseCase:
     """Tistory 원격 카테고리와 로컬 site_profile.json 비교/동기화."""
 
@@ -45,41 +103,8 @@ class SyncCategoriesUseCase:
         profile = self._profile_port.load()
         remote_cats = self._sync_port.fetch_categories()
 
-        # 로컬 카테고리 이름 → ID 매핑
-        local_map: dict[str, str] = {c.name: c.tistory_id for c in profile.categories}
-        # 원격 카테고리 이름 → ID 매핑
-        remote_map: dict[str, str] = {r.name: r.category_id for r in remote_cats}
-
         result = SyncResult()
-
-        # 1. 원격에만 있는 카테고리
-        for name, rid in remote_map.items():
-            if name not in local_map:
-                result.diffs.append(CategoryDiff(
-                    category_name=name,
-                    diff_type="new_remote",
-                    remote_id=rid,
-                ))
-
-        # 2. 로컬에만 있는 카테고리
-        for name in local_map:
-            if name not in remote_map:
-                result.diffs.append(CategoryDiff(
-                    category_name=name,
-                    diff_type="missing_remote",
-                    local_id=local_map[name],
-                ))
-
-        # 3. ID 불일치
-        for name in local_map:
-            if name in remote_map and local_map[name] != remote_map[name]:
-                result.diffs.append(CategoryDiff(
-                    category_name=name,
-                    diff_type="id_mismatch",
-                    local_id=local_map[name],
-                    remote_id=remote_map[name],
-                ))
-
+        result.diffs.extend(_diff_categories(list(profile.categories), remote_cats))
         result.synced = len(result.diffs) == 0
 
         # 자동 갱신: 신규 원격 카테고리 추가 + ID 불일치 수정

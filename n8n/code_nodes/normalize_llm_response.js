@@ -4,7 +4,7 @@
  * 입력: LLM API 원시 응답 (provider마다 구조가 다름)
  * 출력: { text, _llm_provider }
  *
- * Gemini 응답: candidates[0].content.parts[0].text
+ * Gemini 응답: candidates[0].content.parts[*].text (thought 제외 결합)
  * Claude 응답: content[0].text
  */
 
@@ -16,7 +16,12 @@ let text;
 const data = $input.item.json;
 
 if (provider === 'gemini') {
-  text = data.candidates[0].content.parts[0].text;
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  // 추론 모델 + Search Grounding 응답은 텍스트가 여러 part로 분할될 수 있음
+  text = parts.filter(p => !p.thought && typeof p.text === 'string').map(p => p.text).join('');
+  if (!text) {
+    throw new Error(`Gemini 빈 응답 (finishReason: ${data.candidates?.[0]?.finishReason || 'unknown'})`);
+  }
 } else if (provider === 'claude') {
   text = data.content[0].text;
 } else {

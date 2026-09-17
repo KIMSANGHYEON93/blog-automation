@@ -16,7 +16,7 @@ const purpose = $input.item.json._llm_purpose || 'content_gen';
 
 const PROVIDERS = {
   gemini: {
-    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${$env.GOOGLE_API_KEY}`,
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${$env.GOOGLE_API_KEY}`,
     headers: { 'content-type': 'application/json' },
     body: (sys, user, opts) => {
       const payload = {

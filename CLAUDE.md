@@ -51,6 +51,23 @@ python -m src.interface.cli --publish-pages      # AdSense 필수 페이지
 
 운영 환경에서는 launchd(`~/Library/LaunchAgents/com.blog-automation.*.plist`)가 모드별로 실행함(00:00 discover-keywords, 08:30 recover-failed, 09:00 발행, 10:00 revise, 14:00 check-index, 14:30 submit-index, 15:00 dashboard). crontab은 쓰지 않음(중복 실행 방지). plist는 `~/bin/run_pipeline_b.sh`·`~/bin/run_dashboard.sh`를 호출하는데, 이 둘은 저장소의 같은 이름 스크립트를 가리키는 심볼릭 링크이므로 **저장소 스크립트를 고치면 곧바로 운영에 반영됨**. launchd는 셸 초기화를 하지 않으므로 스크립트는 `PROJECT_DIR`/`PYTHON`에 절대경로 기본값을 쓰고, `BLOG_PROJECT_DIR`/`BLOG_PYTHON`으로 덮어쓸 수 있음. `run_pipeline_b.sh`는 `.pipeline_b.lock` 디렉토리 락으로 동시 실행을 막고, 끝나면 남은 Chrome 프로세스를 정리함. 로그는 `logs/`.
 
+### 관리자 대시보드 (`src/interface/web/`) — 수동 발행
+
+자동 발행과 별개로, 로그인한 관리자가 게시물 현황을 보고 `발행대기` 글을 1건씩 수동 발행하는 로컬 웹앱 (Flask, 두 번째 Composition Root).
+
+```bash
+python -m src.interface.web hash-password   # .env: DASHBOARD_ADMIN_PASSWORD_HASH='...'
+python -m src.interface.web gen-secret      # .env: DASHBOARD_SECRET_KEY=...
+make dashboard                              # = python -m src.interface.web → http://127.0.0.1:8787
+python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 실행기 테스트
+```
+
+- 수동 발행은 `PublishSelectedPostUseCase`: 자동 발행과 같은 규칙(본문 3000자·품질 70점·일일 쿼터·중복 키워드·내부 링크)을 적용하되, 거부 시 게시물 상태를 바꾸지 않음. 발행 불가 사유는 `publish_blockers()`로 목록/상세 화면에도 표시
+- 자동 파이프라인과 같은 `.browser_data`를 쓰므로 `DirectoryPipelineLock`(`run_pipeline_b.sh`와 같은 `.pipeline_b.lock`)을 잡은 뒤에만 브라우저를 엶. 자동 실행 중이면 거부
+- 발행은 `PublishJobRunner` 백그라운드 스레드에서 동시에 1건만 실행, 작업 상태는 메모리에만 있음(서버 재시작 시 사라짐). 작업 페이지는 meta refresh로 갱신(CSP상 JS 없음)
+- 보안: 모든 페이지 로그인 필요, 모든 POST CSRF 검증, IP별 로그인 5회/15분 제한, `127.0.0.1` 바인딩 기본(외부 바인딩은 `DASHBOARD_ALLOW_REMOTE=true` 필요 — HTTP라 HTTPS 프록시 뒤에서만)
+- launchd에 등록하지 않음 — 필요할 때 직접 실행
+
 ## Architecture
 
 DDD 4-Layer + Hexagonal. 의존 방향: `Interface → Application → Domain ← Infrastructure`

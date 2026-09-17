@@ -1,4 +1,8 @@
-.PHONY: test-unit test-integ test-e2e test-all lint typecheck coverage clean
+.PHONY: test-unit test-integ test-e2e test-all lint typecheck coverage clean dashboard
+
+# 관리자 대시보드 (수동 발행 + 게시물 현황, http://127.0.0.1:8787)
+dashboard:
+	python -m src.interface.web
 
 # Unit tests (Domain + Application only, fast)
 test-unit:

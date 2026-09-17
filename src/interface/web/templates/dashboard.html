@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+{% if active_job %}
+<div class="notice notice-info">
+  {{ active_job.row_index }}행 발행 진행 중 —
+  <a href="{{ url_for('job_status', job_id=active_job.job_id) }}">진행 상황 보기</a>
+</div>
+{% endif %}
+
+<section class="stats">
+  <a class="stat {% if not selected_status %}active{% endif %}" href="{{ url_for('index', q=search) }}">
+    <span class="stat-label">전체</span><span class="stat-value">{{ page.total }}</span>
+  </a>
+  {% for status in statuses %}
+  <a class="stat {% if selected_status == status %}active{% endif %}"
+     href="{{ url_for('index', status=status.value, q=search) }}">
+    <span class="stat-label">{{ status.value }}</span>
+    <span class="stat-value">{{ page.counts.get(status, 0) }}</span>
+  </a>
+  {% endfor %}
+</section>
+
+<form method="get" action="{{ url_for('index') }}" class="search">
+  {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status.value }}">{% endif %}
+  <input name="q" value="{{ search }}" placeholder="키워드 또는 제목 검색" maxlength="100">
+  <button type="submit">검색</button>
+</form>
+
+<section class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>행</th><th>키워드 / 제목</th><th>상태</th><th>본문</th><th>품질</th><th>발행</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for post in page.items %}
+        <tr>
+          <td class="num">{{ post.row_index }}</td>
+          <td>
+            <div class="kw">{{ post.keyword }}</div>
+            <div class="sub">{{ post.title }}</div>
+          </td>
+          <td><span class="badge badge-{{ post.status.name|lower }}">{{ post.status.value }}</span></td>
+          <td class="num">{{ "{:,}".format(post.body_length) }}</td>
+          <td class="num">{{ post.quality_score }}</td>
+          <td class="sub">
+            {% set url = post.published_url|safe_url %}
+            {% if url %}<a href="{{ url }}" rel="noopener noreferrer" target="_blank">{{ post.published_at or "보기" }}</a>{% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('post_detail', row_index=post.row_index) }}">
+              {% if post.can_publish %}<strong>발행하기</strong>{% else %}상세{% endif %}
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">조건에 맞는 게시물이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if recent_jobs %}
+<section class="card">
+  <h2>최근 수동 발행</h2>
+  <ul class="jobs">
+    {% for job in recent_jobs %}
+    <li>
+      <a href="{{ url_for('job_status', job_id=job.job_id) }}">{{ job.row_index }}행</a>
+      · {{ job.started_at.strftime("%m-%d %H:%M") }}
+      · {% if job.result %}{{ job.result.message }}{% else %}진행 중{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

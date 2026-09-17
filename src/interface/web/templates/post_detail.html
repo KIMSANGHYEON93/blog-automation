@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ post.keyword }} · 블로그 관리자{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('index') }}">← 목록</a></p>
+<section class="card">
+  <h1>{{ post.title }}</h1>
+  <dl class="meta">
+    <dt>행</dt><dd>{{ post.row_index }}</dd>
+    <dt>키워드</dt><dd>{{ post.keyword }}</dd>
+    <dt>상태</dt><dd><span class="badge badge-{{ post.status.name|lower }}">{{ post.status.value }}</span></dd>
+    <dt>카테고리</dt><dd>{{ post.category or "—" }}</dd>
+    <dt>본문</dt><dd>{{ "{:,}".format(post.body_length) }}자</dd>
+    <dt>품질 점수</dt><dd>{{ post.quality_score }}</dd>
+    <dt>메타 설명</dt><dd>{{ post.meta_description or "—" }}</dd>
+    {% if post.published_url %}
+    {% set url = post.published_url|safe_url %}
+    <dt>발행 URL</dt>
+    <dd>
+      {% if url %}<a href="{{ url }}" rel="noopener noreferrer" target="_blank">{{ url }}</a>{% else %}{{ post.published_url }}{% endif %}
+      {% if post.published_at %}<span class="sub">({{ post.published_at }})</span>{% endif %}
+    </dd>
+    {% endif %}
+    {% if post.error_message %}<dt>최근 오류</dt><dd class="error-text">{{ post.error_message }}</dd>{% endif %}
+  </dl>
+</section>
+
+<section class="card">
+  <h2>수동 발행</h2>
+  {% if post.can_publish %}
+    {% if active_job %}
+    <p class="notice notice-info">{{ active_job.row_index }}행 발행이 진행 중입니다. 끝난 뒤 발행할 수 있습니다.</p>
+    {% else %}
+    <p>지금 Tistory에 공개 발행합니다. 약 1~3분 걸리며, 자동 발행과 같은 중복·쿼터 검사를 다시 거칩니다.</p>
+    <form method="post" action="{{ url_for('publish', row_index=post.row_index) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="primary">이 게시물 발행</button>
+    </form>
+    {% endif %}
+  {% else %}
+    <p>발행할 수 없습니다:</p>
+    <ul class="blockers">
+      {% for reason in post.blockers %}<li>{{ reason }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+</section>
+{% endblock %}

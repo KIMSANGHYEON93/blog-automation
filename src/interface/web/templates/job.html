@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block head %}{% if running %}<meta http-equiv="refresh" content="{{ refresh_seconds }}">{% endif %}{% endblock %}
+{% block title %}발행 작업 · 블로그 관리자{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('post_detail', row_index=job.row_index) }}">← {{ job.row_index }}행 게시물</a></p>
+<section class="card">
+  <h1>수동 발행 — {{ job.row_index }}행</h1>
+  <dl class="meta">
+    <dt>시작</dt><dd>{{ job.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</dd>
+    {% if job.finished_at %}<dt>종료</dt><dd>{{ job.finished_at.strftime("%Y-%m-%d %H:%M:%S") }}</dd>{% endif %}
+  </dl>
+  {% if running %}
+    <p class="notice notice-info">발행 중입니다… 이 페이지는 {{ refresh_seconds }}초마다 새로고침됩니다.</p>
+  {% else %}
+    {% set outcome = job.result.outcome.value %}
+    <p class="notice notice-{{ 'success' if outcome == 'published' else 'error' }}">{{ job.result.message }}</p>
+    {% set url = job.result.url|safe_url %}
+    {% if url %}
+    <p><a href="{{ url }}" rel="noopener noreferrer" target="_blank">{{ url }}</a></p>
+    {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

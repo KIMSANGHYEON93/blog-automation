@@ -142,3 +142,91 @@ class TestSyncCategories:
         assert result.synced is False
         types = {d.diff_type for d in result.diffs}
         assert types == {"new_remote", "missing_remote", "id_mismatch"}
+
+
+def _hierarchical_remote(*extra: RemoteCategory) -> list[RemoteCategory]:
+    """Tistory category.json 실제 응답 형태: label이 '상위/하위' 전체 경로."""
+    return [
+        RemoteCategory(name="그땐그랬지", category_id="966408"),
+        RemoteCategory(name="그땐그랬지/리뷰", category_id="966410"),
+        RemoteCategory(name="B2B Solution", category_id="966384"),
+        RemoteCategory(name="B2B Solution/비교", category_id="984395"),
+        RemoteCategory(name="B2B Solution/용어", category_id="991463"),
+        RemoteCategory(name="Learn", category_id="1174373"),
+        RemoteCategory(name="Learn/MS", category_id="966388"),
+        *extra,
+    ]
+
+
+def _run(profile: SiteProfile, remote: list[RemoteCategory], **kwargs):
+    port = StubProfilePort(profile)
+    uc = SyncCategoriesUseCase(profile_port=port, sync_port=StubSyncPort(remote))
+    return uc.execute(**kwargs), port
+
+
+class TestSyncCategoriesHierarchical:
+    """원격 이름이 전체 경로이고 블로그에 관리 대상이 아닌 루트가 섞인 경우."""
+
+    def test_ID가_같으면_경로형_이름이어도_동기화됨(self):
+        profile = _profile(
+            CategoryMapping(name="비교", tistory_id="984395"),
+            CategoryMapping(name="용어", tistory_id="991463"),
+        )
+        result, _ = _run(profile, _hierarchical_remote())
+        assert result.synced is True
+        assert result.diffs == []
+
+    def test_상위_카테고리에_매핑한_별칭_카테고리도_동기화됨(self):
+        profile = _profile(
+            CategoryMapping(name="비교", tistory_id="984395"),
+            CategoryMapping(name="가이드", tistory_id="966384"),
+            CategoryMapping(name="트렌드", tistory_id="966384"),
+        )
+        result, _ = _run(profile, _hierarchical_remote())
+        assert [d for d in result.diffs if d.diff_type == "missing_remote"] == []
+
+    def test_관리_루트_밖의_원격_카테고리는_신규로_보지_않음(self):
+        profile = _profile(
+            CategoryMapping(name="비교", tistory_id="984395"),
+            CategoryMapping(name="용어", tistory_id="991463"),
+        )
+        result, _ = _run(profile, _hierarchical_remote())
+        new_names = {d.category_name for d in result.diffs if d.diff_type == "new_remote"}
+        unrelated = {"그땐그랬지", "그땐그랬지/리뷰", "리뷰", "Learn", "Learn/MS", "MS"}
+        assert new_names.isdisjoint(unrelated)
+
+    def test_관리_루트_아래_신규_하위_카테고리는_마지막_이름으로_감지(self):
+        profile = _profile(
+            CategoryMapping(name="비교", tistory_id="984395"),
+            CategoryMapping(name="용어", tistory_id="991463"),
+        )
+        result, _ = _run(profile, _hierarchical_remote(
+            RemoteCategory(name="B2B Solution/보안", category_id="777777"),
+        ))
+        new = [d for d in result.diffs if d.diff_type == "new_remote"]
+        assert [(d.category_name, d.remote_id) for d in new] == [("보안", "777777")]
+
+    def test_ID가_다르면_마지막_이름으로_ID_불일치_감지(self):
+        profile = _profile(
+            CategoryMapping(name="비교", tistory_id="111"),
+            CategoryMapping(name="용어", tistory_id="991463"),
+        )
+        result, _ = _run(profile, _hierarchical_remote())
+        mismatch = [d for d in result.diffs if d.diff_type == "id_mismatch"]
+        assert [(d.category_name, d.local_id, d.remote_id) for d in mismatch] == [
+            ("비교", "111", "984395"),
+        ]
+        assert [d for d in result.diffs if d.diff_type == "missing_remote"] == []
+
+    def test_auto_update는_관리_루트_밖_카테고리를_추가하지_않음(self):
+        profile = _profile(
+            CategoryMapping(name="비교", tistory_id="984395"),
+            CategoryMapping(name="용어", tistory_id="991463"),
+        )
+        _, port = _run(
+            profile,
+            _hierarchical_remote(RemoteCategory(name="B2B Solution/보안", category_id="777777")),
+            auto_update=True,
+        )
+        names = {c.name for c in port.load().categories}
+        assert names == {"비교", "용어", "보안"}

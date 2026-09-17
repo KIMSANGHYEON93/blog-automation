@@ -86,6 +86,41 @@ def validate_html(html_text: str) -> bool:
     return result.passed
 
 
+SUMMARY_LEAD_CLASS = "post-summary"
+
+# 본문 맨 앞의 텍스트 없는 블록(히어로 figure, 이미지만 있는 p)과 제목 h1
+_LEADING_BLOCK = re.compile(
+    r"\s*(?:<figure\b[^>]*>.*?</figure>"
+    r"|<p>\s*(?:<a\b[^>]*>\s*)?<img\b[^>]*>\s*(?:</a>\s*)?</p>"
+    r"|<h1\b[^>]*>.*?</h1>)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def insert_summary_lead(html_text: str, summary: str) -> str:
+    """요약문을 본문 첫 텍스트 블록으로 삽입.
+
+    Tistory는 post API에 description 필드가 없고 본문 첫 텍스트로 meta description을
+    자동 생성한다. 요약을 목차/도입부보다 앞(히어로 이미지·H1 제목 뒤)에 두어
+    검색 스니펫이 '목차…' 대신 요약문이 되게 한다.
+    """
+    import html as html_lib
+
+    normalized = " ".join((summary or "").split())
+    if not html_text or not normalized or f'class="{SUMMARY_LEAD_CLASS}"' in html_text:
+        return html_text
+
+    pos = 0
+    while True:
+        match = _LEADING_BLOCK.match(html_text, pos)
+        if not match:
+            break
+        pos = match.end()
+
+    lead = f'<p class="{SUMMARY_LEAD_CLASS}">{html_lib.escape(normalized, quote=False)}</p>'
+    return html_text[:pos] + lead + html_text[pos:]
+
+
 def append_faq_schema(body_markdown: str, faq_ld_json: str) -> str:
     """본문 하단에 FAQ LD+JSON 스키마를 추가.
 

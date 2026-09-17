@@ -256,38 +256,3 @@ def input_tags(sb, tags: list[str]) -> None:
         logger.info(f"태그 입력 완료: {tags} (등록된 태그: {tag_count}개)")
     except Exception as e:
         logger.warning(f"태그 입력 중 오류 (무시): {e}")
-
-
-def inject_meta_description(sb, meta_description: str) -> None:
-    """발행 설정 레이어 또는 에디터의 meta description 필드에 값 주입."""
-    try:
-        result = sb.execute_script("""
-            var desc = arguments[0];
-            // 방법 1: 발행 설정의 description textarea/input
-            var selectors = [
-                '#post-description',
-                'textarea[name="description"]',
-                'input[name="description"]',
-                '#meta-description',
-                'textarea.tf_excerpt',
-                '#excerpt'
-            ];
-            for (var i = 0; i < selectors.length; i++) {
-                var el = document.querySelector(selectors[i]);
-                if (el) {
-                    el.value = desc;
-                    el.dispatchEvent(new Event('input', {bubbles: true}));
-                    el.dispatchEvent(new Event('change', {bubbles: true}));
-                    return 'injected:' + selectors[i];
-                }
-            }
-            // 방법 2: og:description / name=description 메타 태그 직접 생성은
-            // 발행 시 Tistory가 자체 처리하므로 여기서는 폼 필드만 처리
-            return null;
-        """, meta_description)
-        if result:
-            logger.info(f"메타 설명 주입: {result}")
-        else:
-            logger.warning("메타 설명 필드를 찾지 못함 — 건너뜀")
-    except Exception as e:
-        logger.warning(f"메타 설명 주입 중 오류 (무시): {e}")

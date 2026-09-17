@@ -139,6 +139,9 @@ def publish_post(
         # --- MD→HTML 변환 (방향 A: Python 측 변환 후 WYSIWYG 모드 주입) ---
         html_body = markdown_converter.convert_markdown_to_html(body_markdown)
 
+        # 요약 문단: Tistory는 본문 첫 텍스트로 meta description을 자동 생성
+        html_body = html_transformer.insert_summary_lead(html_body, content.meta_description)
+
         # 이미지 lazy loading 적용
         html_body = html_transformer.add_lazy_loading(html_body)
 
@@ -202,11 +205,6 @@ def publish_post(
         if content.tags:
             form_filler.input_tags(sb, content.tag_list())
             time.sleep(1)
-
-        # 메타 설명(meta description) 주입
-        if content.meta_description:
-            form_filler.inject_meta_description(sb, content.meta_description)
-            time.sleep(0.5)
 
         # 저장 전 콘텐츠 동기화 확인
         content_injector.ensure_content_in_form(sb, html_body)
@@ -297,6 +295,7 @@ def update_post(
 
         # MD→HTML 변환 (publish_post와 동일 파이프라인)
         html_body = markdown_converter.convert_markdown_to_html(body_markdown)
+        html_body = html_transformer.insert_summary_lead(html_body, content.meta_description)
         html_body = html_transformer.add_lazy_loading(html_body)
         html_body = html_transformer.add_nofollow_to_external_links(html_body, blog_name)
 

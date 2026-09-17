@@ -151,7 +151,10 @@ _ALLOWED_TAGS = [
 _ALLOWED_ATTRS = {
     "*": ["class", "id", "style", "role", "aria-label"],
     "a": ["href", "target", "rel", "title"],
-    "img": ["src", "alt", "width", "height", "loading", "decoding", "fetchpriority"],
+    "img": [
+        "src", "alt", "width", "height", "loading", "decoding", "fetchpriority",
+        "srcset", "sizes",
+    ],
     "td": ["colspan", "rowspan"],
     "th": ["colspan", "rowspan", "scope"],
     "col": ["span"],
@@ -163,6 +166,15 @@ _ALLOWED_ATTRS = {
     "g": ["transform", "fill", "stroke"],
     "text": ["x", "y", "font-size", "text-anchor", "fill"],
 }
+# bleach 기본 CSS 허용 목록에 없지만 코드 하이라이트/이미지/TOC 레이아웃에 필요한 속성
+_EXTRA_CSS_PROPERTIES = frozenset({
+    "background", "margin", "margin-top", "margin-bottom", "margin-left", "margin-right",
+    "padding", "padding-top", "padding-bottom", "padding-left", "padding-right",
+    "max-width", "min-width", "max-height",
+    "border", "border-top", "border-bottom", "border-left", "border-right",
+    "border-width", "border-style", "border-radius",
+    "overflow-x", "overflow-y", "box-sizing", "object-fit", "aspect-ratio",
+})
 
 
 def sanitize_html(html_text: str) -> str:
@@ -171,15 +183,19 @@ def sanitize_html(html_text: str) -> str:
         return html_text
     try:
         import bleach
-        from bleach.css_sanitizer import CSSSanitizer
-
-        return bleach.clean(
-            html_text,
-            tags=_ALLOWED_TAGS,
-            attributes=_ALLOWED_ATTRS,
-            css_sanitizer=CSSSanitizer(),
-            strip=True,
-        )
-    except ImportError:
-        logger.warning("bleach 미설치 — HTML sanitization 건너뜀")
+        from bleach.css_sanitizer import ALLOWED_CSS_PROPERTIES, CSSSanitizer
+    except ImportError as e:
+        # bleach[css] extra(tinycss2) 누락도 여기서 잡히므로 실제 원인을 남김
+        logger.warning(f"HTML sanitization 건너뜀 — 의존성 누락: {e} (pip install 'bleach[css]')")
         return html_text
+
+    css_sanitizer = CSSSanitizer(
+        allowed_css_properties=ALLOWED_CSS_PROPERTIES | _EXTRA_CSS_PROPERTIES,
+    )
+    return str(bleach.clean(
+        html_text,
+        tags=_ALLOWED_TAGS,
+        attributes=_ALLOWED_ATTRS,
+        css_sanitizer=css_sanitizer,
+        strip=True,
+    ))

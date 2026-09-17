@@ -883,6 +883,10 @@ import time
 import urllib.request
 import urllib.parse
 
+# SerpAPI 무료 플랜은 월 250건이고 Pipeline A 콘텐츠 생성도 같은 한도를 사용한다.
+# 난이도가 비어 있는 키워드만 조회하고, 한 번 실행의 호출 시도 수를 제한한다.
+MAX_SERP_CALLS_PER_RUN = 20
+
 # 대형 도메인 (경쟁 강도 판별용)
 AUTHORITY_DOMAINS = {
     "wikipedia.org", "namu.wiki", "tistory.com", "velog.io",
@@ -989,6 +993,15 @@ def calc_priority(vol: int, cpc: int, difficulty: str) -> str:
     return "B"
 
 
+def estimate_difficulty(vol: int) -> str:
+    """SERP 조회 없이 검색볼륨 기반으로 난이도 추정."""
+    if vol >= 2000:
+        return "상"
+    if vol >= 500:
+        return "중"
+    return "하"
+
+
 def estimate_cpc(vol: int) -> int:
     """검색볼륨 기반 예상CPC 추정 (기존 데이터 패턴)."""
     if vol >= 2000:
@@ -1023,6 +1036,7 @@ def fill_keyword_meta(
     serp_cells: list[gspread.Cell] = []  # U열 SERP 데이터 저장용
     filled_count = 0
     serp_calls = 0
+    serp_attempts = 0  # 실패(타임아웃)도 과금될 수 있으므로 시도 기준으로 상한 적용
 
     for i, row in enumerate(data):
         row_num = i + 2
@@ -1067,8 +1081,10 @@ def fill_keyword_meta(
             changed = True
 
         # SERP 기반 난이도 산출
-        difficulty = diff_str or "중"
-        if use_serp and keyword and (needs_diff or needs_prio):
+        difficulty = diff_str or estimate_difficulty(vol)
+        serp_budget_left = serp_attempts < MAX_SERP_CALLS_PER_RUN
+        if use_serp and keyword and not diff_str and serp_budget_left:
+            serp_attempts += 1
             try:
                 serp_data = fetch_serp(serpapi_key, keyword)
                 score, detail = analyze_serp_difficulty(serp_data)
@@ -1093,13 +1109,7 @@ def fill_keyword_meta(
             except Exception as e:
                 if not dry_run:
                     print(f"  SERP 조회 실패 ({keyword}): {e}")
-                # fallback: 검색볼륨 기반
-                if vol >= 2000:
-                    difficulty = "상"
-                elif vol >= 500:
-                    difficulty = "중"
-                else:
-                    difficulty = "하"
+                difficulty = estimate_difficulty(vol)
 
         # 난이도 기록
         if needs_diff:

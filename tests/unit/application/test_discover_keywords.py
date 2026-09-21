@@ -118,6 +118,9 @@ class TestB2CBlocklist:
         "애플 인도 계정 만들기",
         "payment method required 인도",
         "codex 나무위키",
+        "애플 기프트카드",
+        "구글 기프트카드 충전",
+        "애플페이 등록",
     ]
     KEEP = [
         "rabbitmq 502 bad gateway",

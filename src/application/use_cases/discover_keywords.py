@@ -36,6 +36,9 @@ B2C_BLOCKLIST: set[str] = {
     "애플 인도", "인도 계정", "payment method required", "invalid address",
     "purchase could not be completed", "your purchase", "billing address",
     "나무위키",
+    # 소비자 결제 수단 (B2B 인프라와 무관)
+    "기프트카드", "상품권", "애플페이", "삼성페이", "페이코", "카카오페이",
+    "포인트 충전", "충전 방법",
 }
 
 # n8n check_duplicate.js와 같은 값 — 등록 단계에서 미리 같은 기준으로 거른다

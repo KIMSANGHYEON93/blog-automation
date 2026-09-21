@@ -118,6 +118,9 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 - `workflow_complete.json`이 메인 워크플로우, `workflow_keyword_research.json`은 키워드 리서치용
 - `code_nodes/*.js`는 Code 노드의 원본 소스이고, 워크플로우 JSON의 `jsCode` 필드에 **인라인 복사**되어 있음(동기화 스크립트 없음). `.js`만 고치면 n8n에 반영되지 않으므로 JSON도 같이 수정하거나 n8n UI에 다시 붙여넣을 것
 - 프롬프트(`prompts/`): 용어(a) / 비교(b) / 에러해결(c)은 `route_prompt.js`가 선택하고, 교차 검증은 d. `*_v1.md`는 이전 버전
+- **LLM 토큰 예산**: Gemini 3.x는 추론(thoughts) 토큰을 먼저 쓰므로 `maxTokens`가 빠듯하면 응답 JSON이 `MAX_TOKENS`로 잘리고, 파서가 품질 0점으로 처리해 발행이 막힌다(검증 호출 800 → 4096으로 수정). 모델 교체 시 실행 로그의 `finishReason` 확인
+- JSON의 `jsCode`에 코드를 넣을 때 줄바꿈이 이중 이스케이프되면 코드 전체가 주석 한 줄이 되어 조용히 죽는다. 넣은 뒤 `node --check`로 문법 확인
+- 키워드 자동 등록: launchd 00:00이 `--auto-register --discover-limit 3`으로 실행. 등록 1건당 Pipeline A가 SerpAPI를 1회 쓰므로(무료 플랜 월 250건) 건수 조절은 `--discover-limit`으로
 
 ### 설정
 

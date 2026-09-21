@@ -121,7 +121,7 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 - **LLM 토큰 예산**: Gemini 3.x는 추론(thoughts) 토큰을 먼저 쓰므로 `maxTokens`가 빠듯하면 응답 JSON이 `MAX_TOKENS`로 잘리고, 파서가 품질 0점으로 처리해 발행이 막힌다(검증 호출 800 → 4096으로 수정). 모델 교체 시 실행 로그의 `finishReason` 확인
 - JSON의 `jsCode`에 코드를 넣을 때 줄바꿈이 이중 이스케이프되면 코드 전체가 주석 한 줄이 되어 조용히 죽는다. 넣은 뒤 `node --check`로 문법 확인
 - 키워드 자동 등록: launchd 00:00이 `--auto-register --discover-limit 3`으로 실행. 등록 1건당 Pipeline A가 SerpAPI를 1회 쓰므로(무료 플랜 월 250건) 건수 조절은 `--discover-limit`으로
-- **AI-Brain 용어 주입**: 시트 `AI브레인용어` 탭(용어·별칭·한줄정의·혼동포인트·출처)을 `Sheets Read (Brain Terms)`가 읽고, `Route Prompt`가 키워드와 매칭되는 용어를 최대 3건까지 user_message에 넣는다. 원본은 Google Drive 옵시디언 볼트 `AI-Brain/10_Terms`이며 탭은 수동 동기화. n8n은 병렬 브랜치 실행 순서를 보장하지 않으므로 용어 노드는 `Reduce to Trigger → Sheets Read (Brain Terms) → Reduce Brain Terms → Sheets Read (Status=대기)`로 **직렬 배치**하고, 축약 노드가 뒤 노드의 중복 실행을 막는다
+- **AI-Brain 용어 주입**: 시트 `AI브레인용어` 탭(용어·별칭·한줄정의·혼동포인트·출처)을 `Sheets Read (Brain Terms)`가 읽고, `Route Prompt`가 키워드와 매칭되는 용어를 최대 3건까지 user_message에 넣는다. 원본은 Google Drive 옵시디언 볼트 `AI-Brain/10_Terms`이고, `python scripts/sync_brain_terms.py`(`.env`의 `BRAIN_VAULT_FOLDER_ID`, `--dry-run` 지원)로 탭을 갱신한다 — 서비스 계정에 볼트 폴더가 읽기 권한으로 공유돼 있어야 함. n8n은 병렬 브랜치 실행 순서를 보장하지 않으므로 용어 노드는 `Reduce to Trigger → Sheets Read (Brain Terms) → Reduce Brain Terms → Sheets Read (Status=대기)`로 **직렬 배치**하고, 축약 노드가 뒤 노드의 중복 실행을 막는다
 
 ### 설정
 

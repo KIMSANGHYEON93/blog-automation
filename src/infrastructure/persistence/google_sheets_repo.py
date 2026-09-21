@@ -33,6 +33,24 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
+# 시트 R열에 섞여 있는 형식들 (저장은 항상 첫 번째 형식)
+_DATETIME_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d")
+
+
+def parse_sheet_datetime(raw: str) -> datetime | None:
+    """시트 날짜 문자열을 datetime으로 변환. 해석 불가 값은 None.
+
+    None이면 save()가 해당 셀을 건드리지 않으므로, 시트 일련번호처럼
+    형식을 모르는 값이 덮어써지지 않는다.
+    """
+    value = (raw or "").strip()
+    for fmt in _DATETIME_FORMATS:
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
+
 
 class GoogleSheetsPostRepository(PostRepository):
     def __init__(self, creds_path: str, sheet_name: str):
@@ -100,6 +118,7 @@ class GoogleSheetsPostRepository(PostRepository):
             content=content,
             status=self._parse_status(get("status")),
             published_url=get("published_url"),
+            published_at=parse_sheet_datetime(get("published_at")),
             error_message=get("error_msg"),
             entry_id=get("entry_id"),
             quality_score=quality_score,

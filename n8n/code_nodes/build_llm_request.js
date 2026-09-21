@@ -51,8 +51,9 @@ const PROVIDERS = {
 const config = PROVIDERS[provider];
 if (!config) throw new Error(`지원하지 않는 LLM provider: ${provider}`);
 
+// 추론 모델(gemini-3.x)은 thoughts 토큰을 먼저 쓰므로 검증 응답 JSON이 잘리지 않도록 여유를 둔다
 const opts = purpose === 'verification'
-  ? { maxTokens: 800, temperature: 0, model: 'claude-haiku-4-5-20251001' }
+  ? { maxTokens: 4096, temperature: 0, model: 'claude-haiku-4-5-20251001' }
   : { maxTokens: 32768, temperature: 0.7, useSearchGrounding: true };
 
 return {

@@ -1,5 +1,9 @@
 """Unit tests for KeywordMatcher domain service."""
-from src.domain.services.keyword_matcher import find_duplicate, keyword_overlap
+from src.domain.services.keyword_matcher import (
+    find_duplicate,
+    is_covered_by_existing,
+    keyword_overlap,
+)
 
 
 class TestKeywordOverlap:
@@ -79,3 +83,27 @@ class TestFindDuplicate:
     def test_앞뒤_공백_무시(self):
         is_dup, matched, _ = find_duplicate("  SSO란  ", ["SSO란"])
         assert is_dup is True
+
+
+class TestIsCoveredByExisting:
+    """단일 토큰 키워드는 토큰 겹침 판정이 정확 일치만 보므로, 포함 관계를 따로 본다."""
+
+    EXISTING = [
+        "AADSTS50105 에러 해결: Azure AD 앱 할당 오류",
+        "그룹 정책(GPO)이란? Active Directory GPO 설정 기초",
+        "Kafka vs RabbitMQ 비교",
+    ]
+
+    def test_기존_키워드에_포함된_단일_토큰은_중복(self):
+        assert is_covered_by_existing("aadsts50105", self.EXISTING) is True
+
+    def test_기존_키워드에_포함된_복수_토큰도_중복(self):
+        assert is_covered_by_existing("Kafka RabbitMQ", self.EXISTING) is True
+
+    def test_토큰_하나라도_없으면_중복_아님(self):
+        assert is_covered_by_existing("ad gpo", self.EXISTING) is False
+        assert is_covered_by_existing("aadsts700016", self.EXISTING) is False
+
+    def test_빈_키워드는_중복_아님(self):
+        assert is_covered_by_existing("", self.EXISTING) is False
+        assert is_covered_by_existing("   ", self.EXISTING) is False

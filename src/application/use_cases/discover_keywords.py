@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 
 from src.domain.ports.keyword_port import KeywordResearchPort
 from src.domain.ports.post_repository import PostRepository
+from src.domain.services.keyword_matcher import find_duplicate, is_covered_by_existing
 from src.domain.value_objects.keyword_suggestion import KeywordSuggestion
 
 logger = logging.getLogger(__name__)
@@ -30,7 +32,27 @@ B2C_BLOCKLIST: set[str] = {
     "앱스토어", "환불", "해지", "결제", "구독", "꿀팁",
     "미역국", "레시피", "맛집", "요리", "회원가입 안됨", "가입 안됨",
     "아마존 인도",
+    # 해외 스토어 결제/배송 문의 유입 (2026-09-21 자동 등록된 잡음)
+    "애플 인도", "인도 계정", "payment method required", "invalid address",
+    "purchase could not be completed", "your purchase", "billing address",
+    "나무위키",
 }
+
+# n8n check_duplicate.js와 같은 값 — 등록 단계에서 미리 같은 기준으로 거른다
+DUPLICATE_THRESHOLD = 0.7
+
+# '인도 payment' 처럼 단어 단위로만 막을 패턴 (인도네시아 등 정상 키워드 보호)
+B2C_TOKEN_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?:^|\s)인도(?:\s|$)"),
+)
+
+
+def is_b2c_noise(keyword: str, blocked: set[str]) -> bool:
+    """B2B IT 블로그와 무관한 B2C 검색어인지 판정."""
+    kw = keyword.lower().strip()
+    if any(term in kw for term in blocked):
+        return True
+    return any(pattern.search(kw) for pattern in B2C_TOKEN_PATTERNS)
 
 
 class DiscoverKeywordsUseCase:
@@ -79,7 +101,7 @@ class DiscoverKeywordsUseCase:
 
         # 기존 키워드 수집 (중복 제외용)
         all_posts = self._repo.find_all()
-        existing_keywords = {p.keyword.lower().strip() for p in all_posts if p.keyword}
+        existing_keywords = [p.keyword for p in all_posts if p.keyword]
 
         # 필터링 (게이트별 탈락 카운트)
         filtered = []
@@ -95,10 +117,13 @@ class DiscoverKeywordsUseCase:
                 gate_ctr += 1
                 continue
             kw_lower = q.keyword.lower().strip()
-            if kw_lower in existing_keywords:
+            # Pipeline A와 같은 기준(토큰 겹침 70%)으로 유사 중복까지 제외 —
+            # 등록해도 n8n이 중복스킵 처리하므로 자리만 낭비됨
+            is_dup, _, _ = find_duplicate(q.keyword, existing_keywords, DUPLICATE_THRESHOLD)
+            if is_dup or is_covered_by_existing(q.keyword, existing_keywords):
                 gate_existing += 1
                 continue
-            if any(term in kw_lower for term in self._blocked):
+            if is_b2c_noise(kw_lower, self._blocked):
                 gate_b2c += 1
                 continue
             filtered.append(q)

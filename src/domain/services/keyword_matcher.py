@@ -22,6 +22,19 @@ def keyword_overlap(kw_a: str, kw_b: str) -> float:
     return len(intersection) / smaller if smaller > 0 else 0.0
 
 
+def is_covered_by_existing(keyword: str, existing_keywords: list[str]) -> bool:
+    """키워드의 모든 토큰이 기존 키워드 하나에 포함되면 중복으로 본다.
+
+    keyword_overlap()은 단일 토큰 키워드를 정확 일치로만 비교하므로
+    "aadsts50105" 같은 축약 검색어가 "AADSTS50105 에러 해결: ..." 과 중복인데도
+    통과한다. 이 함수가 그 빈틈을 메운다.
+    """
+    tokens = set(keyword.lower().split())
+    if not tokens:
+        return False
+    return any(tokens <= set(existing.lower().split()) for existing in existing_keywords)
+
+
 def find_duplicate(
     keyword: str,
     existing_keywords: list[str],

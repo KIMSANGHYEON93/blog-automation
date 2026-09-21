@@ -103,6 +103,15 @@ def _parse_args() -> argparse.Namespace:
         help="--discover-keywords 시 발굴된 키워드를 시트에 대기 상태로 자동 등록",
     )
     parser.add_argument(
+        "--discover-limit",
+        type=int,
+        default=10,
+        help=(
+            "--discover-keywords 제안/등록 건수 상한 (기본: 10). "
+            "등록된 키워드 1건당 Pipeline A가 SerpAPI를 1회 사용함"
+        ),
+    )
+    parser.add_argument(
         "--force-reset",
         action="store_true",
         help="--recover-failed 시 unknown 유형도 강제로 발행대기 전환",
@@ -340,7 +349,7 @@ def _status(config: Config) -> None:
     print(uc.format_report(report))
 
 
-def _discover_keywords(config: Config, auto_register: bool = False) -> None:
+def _discover_keywords(config: Config, auto_register: bool = False, limit: int = 10) -> None:
     """GSC 검색 데이터에서 키워드 발굴."""
     config.validate()
 
@@ -352,7 +361,7 @@ def _discover_keywords(config: Config, auto_register: bool = False) -> None:
     from src.infrastructure.seo.keyword_researcher import GscKeywordResearchAdapter
 
     kr = GscKeywordResearchAdapter()
-    uc = DiscoverKeywordsUseCase(repo=repo, keyword_research=kr)
+    uc = DiscoverKeywordsUseCase(repo=repo, keyword_research=kr, top_n=limit)
 
     site_url = f"https://{config.tistory_blog}.tistory.com/"
     result = uc.execute(site_url, auto_register=auto_register)
@@ -607,7 +616,9 @@ def _main_inner() -> None:
         return
 
     if args.discover_keywords:
-        _discover_keywords(config, auto_register=args.auto_register)
+        _discover_keywords(
+            config, auto_register=args.auto_register, limit=args.discover_limit,
+        )
         return
 
     if args.sync_categories:

@@ -49,7 +49,7 @@ python -m src.interface.cli --set-thumbnails [--thumbnail-max N]
 python -m src.interface.cli --publish-pages      # AdSense 필수 페이지
 ```
 
-운영 환경에서는 launchd(`~/Library/LaunchAgents/com.blog-automation.*.plist`)가 모드별로 실행함(00:00 discover-keywords, 08:30 recover-failed, 09:00 발행, 10:00 revise, 14:00 check-index, 14:30 submit-index, 15:00 dashboard). crontab은 쓰지 않음(중복 실행 방지). plist는 `~/bin/run_pipeline_b.sh`·`~/bin/run_dashboard.sh`를 호출하는데, 이 둘은 저장소의 같은 이름 스크립트를 가리키는 심볼릭 링크이므로 **저장소 스크립트를 고치면 곧바로 운영에 반영됨**. launchd는 셸 초기화를 하지 않으므로 스크립트는 `PROJECT_DIR`/`PYTHON`에 절대경로 기본값을 쓰고, `BLOG_PROJECT_DIR`/`BLOG_PYTHON`으로 덮어쓸 수 있음. `run_pipeline_b.sh`는 `.pipeline_b.lock` 디렉토리 락으로 동시 실행을 막고, 끝나면 남은 Chrome 프로세스를 정리함. 로그는 `logs/`.
+운영 환경에서는 launchd(`~/Library/LaunchAgents/com.blog-automation.*.plist`)가 모드별로 실행함(00:00 discover-keywords, 08:30 recover-failed, 09:00 발행, 10:00 revise, 14:00 check-index, 14:30 submit-index, 15:00 dashboard, 일요일 23:00 sync-brain-terms). crontab은 쓰지 않음(중복 실행 방지). plist는 `~/bin/run_pipeline_b.sh`·`~/bin/run_dashboard.sh`를 호출하는데, 이 둘은 저장소의 같은 이름 스크립트를 가리키는 심볼릭 링크이므로 **저장소 스크립트를 고치면 곧바로 운영에 반영됨**. launchd는 셸 초기화를 하지 않으므로 스크립트는 `PROJECT_DIR`/`PYTHON`에 절대경로 기본값을 쓰고, `BLOG_PROJECT_DIR`/`BLOG_PYTHON`으로 덮어쓸 수 있음. `run_pipeline_b.sh`는 `.pipeline_b.lock` 디렉토리 락으로 동시 실행을 막고, 끝나면 남은 Chrome 프로세스를 정리함. 로그는 `logs/`.
 
 ### 관리자 대시보드 (`src/interface/web/`) — 수동 발행
 

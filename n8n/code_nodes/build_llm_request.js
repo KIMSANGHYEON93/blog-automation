@@ -30,8 +30,10 @@ const PROVIDERS = {
   },
   claude: {
     url: 'https://api.anthropic.com/v1/messages',
+    // API 키는 n8n Credential(Header Auth, x-api-key)이 주입한다.
+    // LLM_PROVIDER=claude로 바꿀 때는 LLM Request 노드 2개의 자격증명을
+    // 'Claude API Key (Header)'로 함께 바꿔야 한다.
     headers: {
-      'x-api-key': $env.CLAUDE_API_KEY,
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json',
     },

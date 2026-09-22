@@ -274,7 +274,16 @@ function extractByFieldBoundary(str) {
     try {
       obj[pos.key] = JSON.parse('"' + rawValue + '"');
     } catch (_) {
-      obj[pos.key] = rawValue; // 최후 수단: raw 문자열 그대로
+      // 최후 수단: JSON.parse 없이 이스케이프만 직접 되돌린다.
+      // 그대로 두면 본문에 리터럴 \n 이 남아 마크다운 변환기가 문단·헤딩을
+      // 인식하지 못하고 한 덩어리로 렌더링된다(2026-09-22 발행글 539·540).
+      obj[pos.key] = rawValue
+        .replace(/\\u([0-9a-fA-F]{4})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
     }
   }
 

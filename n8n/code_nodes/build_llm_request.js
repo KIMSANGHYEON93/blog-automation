@@ -1,12 +1,7 @@
 /**
  * Build LLM Request — provider별 URL/headers/body 생성
- * Mode: runOnceForEachItem
  * 입력: system_prompt, user_message, _llm_purpose(optional)
  * 출력: _llm_url, _llm_headers, _llm_body, _llm_provider + 원본 데이터 패스스루
- *
- * .env의 LLM_PROVIDER 값에 따라 요청 형식을 자동 분기:
- *   - gemini: Gemini API (URL에 API key 포함)
- *   - claude: Anthropic Messages API (헤더에 API key)
  */
 
 const provider = $env.LLM_PROVIDER || 'gemini';
@@ -16,7 +11,9 @@ const purpose = $input.item.json._llm_purpose || 'content_gen';
 
 const PROVIDERS = {
   gemini: {
-    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${$env.GOOGLE_API_KEY}`,
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`,
+    // API 키는 n8n Credential(Header Auth, x-goog-api-key)이 주입한다 —
+    // URL/헤더에 넣으면 실행 기록에 평문으로 남는다
     headers: { 'content-type': 'application/json' },
     body: (sys, user, opts) => {
       const payload = {
@@ -51,7 +48,6 @@ const PROVIDERS = {
 const config = PROVIDERS[provider];
 if (!config) throw new Error(`지원하지 않는 LLM provider: ${provider}`);
 
-// 추론 모델(gemini-3.x)은 thoughts 토큰을 먼저 쓰므로 검증 응답 JSON이 잘리지 않도록 여유를 둔다
 const opts = purpose === 'verification'
   ? { maxTokens: 4096, temperature: 0, model: 'claude-haiku-4-5-20251001' }
   : { maxTokens: 32768, temperature: 0.7, useSearchGrounding: true };
@@ -62,7 +58,6 @@ return {
     _llm_headers: config.headers,
     _llm_body: config.body(systemPrompt, userMessage, opts),
     _llm_provider: provider,
-    // 원본 데이터 패스스루 (_llm 접두사 필드 제외)
     ...Object.fromEntries(
       Object.entries($input.item.json).filter(([k]) => !k.startsWith('_llm'))
     ),

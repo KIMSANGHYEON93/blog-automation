@@ -19,9 +19,12 @@ def call_tistory_post_api(
     view_channel: str = "",
     *, max_retries: int = 3,
 ) -> tuple[str, str] | None:
-    """POST /manage/post.json API 호출. 성공 시 (entryUrl, entryId) 반환.
+    """Tistory 글 저장 API 호출. 성공 시 (entryUrl, entryId) 반환.
 
-    entry_id='0'이면 신규 생성, entry_id=<postId>이면 기존 글 수정.
+    entry_id='0'이면 신규 생성(POST /manage/post.json),
+    그 외에는 기존 글 수정(PUT /manage/post/<id>.json).
+    에디터 번들(post-editor.min.js)이 쓰는 분기와 동일하다 —
+    수정인데 POST /post.json을 쓰면 서버가 새 글을 만든다.
     script timeout 시 window.__publishResult를 확인하여 중복 방지.
     """
     import contextlib
@@ -54,9 +57,29 @@ def call_tistory_post_api(
             view_channel,
         )
         if result is not None:
+            if not _is_expected_entry(result, entry_id):
+                logger.error(
+                    f"수정 요청({entry_id})인데 다른 글이 반환됨: {result[0]} — "
+                    "중복 글 생성 가능성. 시트를 덮어쓰지 않고 실패 처리한다."
+                )
+                return None
             return result
 
     return None
+
+
+def _is_expected_entry(result: tuple[str, str], entry_id: str) -> bool:
+    """수정 호출의 응답이 요청한 글과 같은지 확인.
+
+    Tistory는 잘못된 수정 요청을 오류 대신 '새 글 생성'으로 처리한다.
+    이 검증이 없으면 시트 URL이 새 중복 글로 덮어써진다(2026-04, 2026-09 사고).
+    """
+    if not entry_id or entry_id == "0":
+        return True
+    returned_url, returned_id = result
+    if returned_id:
+        return returned_id == entry_id
+    return returned_url.rstrip("/").endswith(f"/{entry_id}")
 
 
 def _check_saved_publish_result(
@@ -149,10 +172,16 @@ def _call_tistory_post_api_once(
                 draftSequence: null
             };
 
-            var url = manageUrl + '/post.json';
+            // 에디터 번들과 동일한 분기: 신규는 POST /post.json,
+            // 수정은 PUT /post/<id>.json. POST로 수정하면 새 글이 생긴다.
+            var isUpdate = entryId && entryId !== '0';
+            var method = isUpdate ? 'PUT' : 'POST';
+            var url = manageUrl + (isUpdate
+                ? '/post/' + entryId + '.json'
+                : '/post.json');
 
             fetch(url, {
-                method: 'POST',
+                method: method,
                 headers: {
                     'Content-Type': 'application/json; charset=UTF-8',
                     'X-Requested-With': 'XMLHttpRequest'
@@ -169,7 +198,8 @@ def _call_tistory_post_api_once(
                 var result = {
                     status: r.status,
                     response: r.text.substring(0, 2000),
-                    url: url
+                    url: url,
+                    method: method
                 };
 
                 if (r.status >= 200 && r.status < 300) {

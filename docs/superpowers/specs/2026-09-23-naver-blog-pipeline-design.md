@@ -20,7 +20,7 @@
 ## 2. 전체 흐름
 
 ```
-[n8n] workflow_naver.json (매일 1회)
+[n8n] workflow_naver.json (매일 02:00, 티스토리 01:00과 분리)
   naver_calendar 탭 '대기' 행
    → 네이버 검색 API(blog): 상위 글 5개 제목·요약 수집
    → Route Prompt (naver_e / naver_f / naver_g)
@@ -53,13 +53,15 @@
 
 ### 3.1 생성 프롬프트 (`n8n/prompts/`, 기존 a~d는 수정하지 않음)
 
+공통 규칙은 `prompt_naver_common.md`에 두고 각 유형 파일 앞에 붙인다.
+
 | 파일 | 대상 키워드 예 | 구조 |
 |------|---------------|------|
 | `prompt_naver_e_howto.md` | "노션 AI 사용법", "ChatGPT 엑셀 자동화" | 문제 상황 → 단계별 따라하기 → 자주 막히는 곳 → 정리 |
 | `prompt_naver_f_compare.md` | "Claude vs ChatGPT 업무용" | 한줄 결론 → 비교표 → 상황별 추천 → FAQ |
 | `prompt_naver_g_explain.md` | "MCP란", "RAG 쉽게" | 비유로 시작 → 핵심 개념 → 실무 예시 → 오해 바로잡기 |
 
-`route_prompt`는 키워드 패턴으로 고른다. `vs`·`비교`·`차이`는 f, `란`·`뜻`·`개념`이나 AI-Brain 용어와 일치하는 키워드는 g, 나머지는 e.
+`route_prompt`는 키워드 패턴으로 고른다. `vs`·`비교`·`차이`는 f, `란`·`이란`·`뜻`·`개념`·`쉽게`로 끝나는 키워드나 AI-Brain 용어와 **정확히 일치**하는 키워드는 g, 나머지는 e. 부분 일치로 정하면 'AI' 같은 짧은 용어가 대부분의 키워드를 g로 끌고 간다.
 
 ### 3.2 네이버 규칙 (세 프롬프트 공통)
 
@@ -75,7 +77,7 @@
 
 ### 3.3 검증
 
-1. **코드 검사**: `validate_structure.js`에 `platform: 'naver'` 매개변수를 추가한다. 아래 항목을 어기면 LLM 검증 없이 `검수필요`로 기록한다.
+1. **코드 검사**: `validate_structure.js`에 `platform: 'naver'` 매개변수를 추가한다. 아래 항목을 어기면 LLM 점수와 무관하게 `검수필요`로 기록한다 (판정은 Parse Verification Result에서 합친다 — n8n에 분기 노드를 늘리지 않으려고 LLM 검증 호출은 그대로 한다).
    - 문단 최대 길이
    - 키워드 반복 상한(6회)
    - 외부 링크 3개 이하
@@ -101,10 +103,10 @@
 
 | 상황 | 처리 |
 |------|------|
-| 네이버 검색 API 실패 (n8n) | 2회 재시도 후 `검수필요`와 사유를 기록한다. 상위 글 없이 생성하지 않는다 |
+| 네이버 검색 API 실패 (n8n) | HTTP 노드가 3회 시도한다. 그래도 실패하면 실행이 오류로 멈추고 행은 `대기`로 남아 다음 날 다시 시도한다. 검색 결과가 0건이면 생성은 하되 `검수필요`로 기록한다 |
 | LLM 응답 잘림 | 생성·검증 모두 `maxTokens` 4096 이상. 실행 로그의 `finishReason`을 확인한다 |
 | 검증 70점 미만 | `검수필요` (기존과 같음) |
-| 네이버 세션 만료 | `login()`이 False → `LoginFailedError` → 텔레그램 알림. 대시보드 작업 화면에 `naver_blog.py login` 재실행을 안내한다 |
+| 네이버 세션 만료 | 대시보드 작업 결과가 "로그인 실패 — 발행대기 유지"로 끝나고 글 상태는 바뀌지 않는다. 로그(`logs/dashboard-web.log`)에 `scripts/naver_blog.py login` 재실행 안내가 남는다. `NAVER_BLOG_ID`가 블로그 주소와 다르면 로그인 확인 단계에서 원인을 적은 예외가 난다 |
 | 본문 붙여넣기 실패·DOM 변경 | `NaverEditorError` → `발행실패`, `logs/naver/`에 스크린샷을 남긴다 |
 | **발행 확인 클릭 후 URL 확인 실패** | 실제로는 발행됐을 수 있다. 사유에 "발행 여부 수동 확인 필요"를 적고 자동 재시도하지 않는다. `--recover-failed`는 티스토리 탭만 보므로 네이버 탭에는 적용되지 않는다 |
 

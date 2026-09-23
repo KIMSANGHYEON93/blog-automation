@@ -69,6 +69,15 @@ python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 �
 - 보안: 모든 페이지 로그인 필요, 모든 POST CSRF 검증, IP별 로그인 5회/15분 제한, `127.0.0.1` 바인딩 기본(외부 바인딩은 `DASHBOARD_ALLOW_REMOTE=true` 필요 — HTTP라 HTTPS 프록시 뒤에서만)
 - launchd에 등록하지 않음 — 필요할 때 직접 실행
 
+### 네이버 블로그 (`--platform naver`)
+
+- 흐름: `naver_calendar` 탭 '대기' → n8n `workflow_naver.json`(02:00) → '발행대기' → `python -m src.interface.web --platform naver`에서 사람이 1건씩 발행. 자동 발행 없음, 하루 1건
+- **워크플로우 JSON은 손으로 고치지 않는다**: 노드 코드는 `n8n/code_nodes/naver/*.js`, 프롬프트는 `n8n/prompts/prompt_naver_*.md`가 원본이고 `python scripts/build_naver_workflow.py`가 `workflow_complete.json`을 복사해 넣는다. 원본을 고친 뒤 스크립트를 돌려 n8n에 다시 가져올 것. `make test-n8n`이 최신 여부를 검사한다
+- 로그인은 사람이 한다: `python scripts/naver_blog.py login`('로그인 상태 유지' 체크), 세션은 `.browser_data_naver/`. `NAVER_BLOG_ID`는 로그인 아이디가 아니라 블로그 주소(`sangpedia`)
+- SmartEditor 실측(2026-09-23): 진입은 `?Redirect=Write`(`/postwrite`는 홈으로 튕길 때가 있음), 제목·본문 입력은 숨은 `input_buffer*` iframe으로 간다. 셀렉터는 `naver/selectors.py` 한 곳
+- 발행 확인 뒤 URL을 못 받으면 사유에 "발행 여부 수동 확인 필요"가 남는다 — 네이버에서 직접 확인 전에는 다시 발행하지 말 것(중복 발행)
+- 네이버 검색 API 키는 n8n 자격증명 `Naver Search API (Custom Auth)`에 둔다(`{"headers": {"X-Naver-Client-Id": ..., "X-Naver-Client-Secret": ...}}`)
+
 ## Architecture
 
 DDD 4-Layer + Hexagonal. 의존 방향: `Interface → Application → Domain ← Infrastructure`

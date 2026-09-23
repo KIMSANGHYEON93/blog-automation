@@ -1,4 +1,4 @@
-.PHONY: test-unit test-integ test-e2e test-all lint typecheck coverage clean dashboard
+.PHONY: test-unit test-integ test-e2e test-all lint typecheck coverage clean dashboard test-n8n
 
 # 관리자 대시보드 (수동 발행 + 게시물 현황, http://127.0.0.1:8787)
 dashboard:
@@ -7,6 +7,11 @@ dashboard:
 # Unit tests (Domain + Application only, fast)
 test-unit:
 	python -m pytest tests/unit/ -v --tb=short
+
+# n8n 네이버 노드 순수 함수 테스트 + 생성된 워크플로우가 최신인지
+test-n8n:
+	node --test "n8n/code_nodes/naver/tests/*.test.js"
+	python scripts/build_naver_workflow.py --check
 
 # Integration tests (requires real services)
 test-integ:
@@ -48,7 +53,7 @@ validate-ddd:
 	@echo "✅ DDD Layer Rules: ALL VALID"
 
 # Full quality gate
-quality: test-unit coverage lint typecheck validate-ddd
+quality: test-unit coverage lint typecheck validate-ddd test-n8n
 	@echo "✅ ALL QUALITY GATES PASSED"
 
 # Clean

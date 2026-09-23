@@ -16,6 +16,9 @@ from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.application.use_cases.check_cwv import CheckCwvUseCase
 from src.application.use_cases.check_indexing import CheckIndexingUseCase
 from src.application.use_cases.discover_keywords import DiscoverKeywordsUseCase
+from src.application.use_cases.generate_keywords_from_terms import (
+    GenerateKeywordsFromTermsUseCase,
+)
 from src.application.use_cases.generate_sitemap import GenerateSitemapUseCase
 from src.application.use_cases.get_status import GetStatusUseCase
 from src.application.use_cases.publish_posts import PublishPostsUseCase
@@ -33,6 +36,9 @@ from src.infrastructure.config import Config
 from src.infrastructure.logging_setup import setup_logging
 from src.infrastructure.persistence.google_sheets_repo import GoogleSheetsPostRepository
 from src.infrastructure.persistence.json_site_profile import JsonSiteProfileAdapter
+from src.infrastructure.persistence.sheets_brain_term_adapter import (
+    SheetsBrainTermAdapter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +127,14 @@ def _parse_args() -> argparse.Namespace:
         help=(
             "--discover-keywords GSC 조회 기간(일). 기본 90. "
             "창이 좁으면 쿼리별 노출이 흩어져 발굴이 0건이 된다"
+        ),
+    )
+    parser.add_argument(
+        "--generate-term-keywords",
+        action="store_true",
+        help=(
+            "AI-Brain 볼트 용어에서 키워드 생성 (GSC와 달리 트래픽에 의존하지 않음). "
+            "--auto-register / --discover-limit 를 함께 쓴다"
         ),
     )
     parser.add_argument(
@@ -429,6 +443,44 @@ def _recover_failed(config: Config, *, force_unknown: bool = False) -> None:
         print(f"  [{status}] row={row_idx} {keyword} — {classified.error_type.value}")
 
 
+def _generate_term_keywords(
+    config: Config, auto_register: bool = False, limit: int = 10,
+) -> None:
+    """볼트 용어에서 키워드 생성.
+
+    GSC 발굴은 '이미 노출된 쿼리'만 주므로 트래픽 없는 주제가 영원히 빠진다.
+    볼트 용어는 트래픽과 무관한 시드라 그 루프를 끊는다.
+    """
+    config.validate()
+
+    repo = GoogleSheetsPostRepository(
+        creds_path=config.google_creds,
+        sheet_name=config.sheet_name,
+    )
+    uc = GenerateKeywordsFromTermsUseCase(
+        repo=repo,
+        term_port=SheetsBrainTermAdapter(
+            creds_path=config.google_creds,
+            sheet_name=config.sheet_name,
+        ),
+        top_n=limit,
+    )
+    result = uc.execute(auto_register=auto_register)
+
+    if not result.success:
+        logger.error(f"용어 키워드 생성 실패: {result.error}")
+        return
+
+    logger.info(
+        f"용어 키워드: 용어 {result.total_terms}건 → 후보 {result.generated}건 "
+        f"→ 제안 {len(result.suggestions)}건"
+    )
+    for i, s in enumerate(result.suggestions, 1):
+        print(f"  {i}. {s.keyword}")
+    if auto_register:
+        logger.info(f"시트 자동 등록 완료: {result.registered}건 (대기 상태)")
+
+
 def _sync_categories(config: Config, *, auto_update: bool = False) -> None:
     """Tistory 카테고리와 site_profile.json 동기화 확인."""
     from src.application.use_cases.sync_categories import SyncCategoriesUseCase
@@ -638,6 +690,12 @@ def _main_inner() -> None:
         _discover_keywords(
             config, auto_register=args.auto_register, limit=args.discover_limit,
             days=args.discover_days,
+        )
+        return
+
+    if args.generate_term_keywords:
+        _generate_term_keywords(
+            config, auto_register=args.auto_register, limit=args.discover_limit,
         )
         return
 

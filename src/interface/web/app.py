@@ -58,6 +58,7 @@ def create_app(
     secure_cookies: bool = False,
     session_hours: int = 8,
     allowed_hosts: frozenset[str] | None = None,
+    brand_label: str = "블로그 관리자",
 ) -> Flask:
     if len(secret_key) < 16:
         raise ValueError("secret_key는 16자 이상이어야 합니다")
@@ -71,7 +72,7 @@ def create_app(
         MAX_CONTENT_LENGTH=64 * 1024,
     )
     login_throttle = throttle or LoginThrottle()
-    _register_guards(app, allowed_hosts)
+    _register_guards(app, allowed_hosts, brand_label)
     _register_auth_routes(app, authenticator, login_throttle)
     _register_dashboard_routes(app, list_posts, job_runner)
     return app
@@ -89,8 +90,11 @@ def safe_url(value: str) -> str:
     return parts.geturl() if parts.scheme.lower() in SAFE_URL_SCHEMES and parts.netloc else ""
 
 
-def _register_guards(app: Flask, allowed_hosts: frozenset[str] | None) -> None:
+def _register_guards(
+    app: Flask, allowed_hosts: frozenset[str] | None, brand_label: str,
+) -> None:
     app.jinja_env.globals["csrf_token"] = _csrf_token
+    app.jinja_env.globals["brand_label"] = brand_label
     app.jinja_env.filters["safe_url"] = safe_url
 
     @app.get("/favicon.ico")

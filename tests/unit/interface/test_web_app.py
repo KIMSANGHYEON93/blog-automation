@@ -260,3 +260,19 @@ class TestJobResultUrl:
         job_path = resp.headers["Location"]
         h.runner.wait(job_path.rsplit("/", 1)[-1], timeout=5)
         assert 'href="javascript:' not in h.client.get(job_path).get_data(as_text=True)
+
+
+def test_brand_label이_화면에_표시된다():
+    repo = InMemoryPostRepository([_post(2, "MCP란")])
+    app = create_app(
+        authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
+        list_posts=ListPostsUseCase(repo),
+        job_runner=PublishJobRunner(
+            publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
+        ),
+        secret_key="test-secret-key-0123456789",
+        brand_label="네이버 블로그 관리자",
+    )
+    app.config["TESTING"] = True
+    html = app.test_client().get("/login").get_data(as_text=True)
+    assert "네이버 블로그 관리자" in html

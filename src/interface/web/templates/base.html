@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   {% block head %}{% endblock %}
-  <title>{% block title %}블로그 관리자{% endblock %}</title>
+  <title>{% block title %}{{ brand_label }}{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('index') }}">블로그 관리자</a>
+    <a class="brand" href="{{ url_for('index') }}">{{ brand_label }}</a>
     {% if session.get('admin') %}
     <nav>
       <span class="who">{{ session['admin'] }}</span>

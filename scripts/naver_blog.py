@@ -17,9 +17,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from src.domain.entities.post import Post
-from src.domain.value_objects.post_content import PostContent
-from src.infrastructure.browser.naver.adapter import (
+# `python scripts/naver_blog.py`로 실행하면 sys.path에 scripts/만 들어가 src를 못 찾는다
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.domain.entities.post import Post  # noqa: E402
+from src.domain.value_objects.post_content import PostContent  # noqa: E402
+from src.infrastructure.browser.naver.adapter import (  # noqa: E402
     DEFAULT_PROFILE_DIR,
     DRAFT_ONLY_MESSAGE,
     NaverBrowserAdapter,

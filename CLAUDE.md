@@ -43,7 +43,8 @@ python -m src.interface.cli --check-index        # 미색인 발행완료 글 �
 python -m src.interface.cli --submit-index       # Google Indexing API 제출
 python -m src.interface.cli --generate-sitemap
 python -m src.interface.cli --status             # (= --dashboard, crontab 호환 alias)
-python -m src.interface.cli --discover-keywords [--auto-register]
+python -m src.interface.cli --discover-keywords [--auto-register] [--discover-days N]
+python -m src.interface.cli --generate-term-keywords [--auto-register]  # 볼트 용어 → 키워드
 python -m src.interface.cli --sync-categories [--auto-update]
 python -m src.interface.cli --set-thumbnails [--thumbnail-max N]
 python -m src.interface.cli --publish-pages      # AdSense 필수 페이지
@@ -118,9 +119,12 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 - `workflow_complete.json`이 메인 워크플로우, `workflow_keyword_research.json`은 키워드 리서치용
 - `code_nodes/*.js`는 Code 노드의 원본 소스이고, 워크플로우 JSON의 `jsCode` 필드에 **인라인 복사**되어 있음(동기화 스크립트 없음). `.js`만 고치면 n8n에 반영되지 않으므로 JSON도 같이 수정하거나 n8n UI에 다시 붙여넣을 것
 - 프롬프트(`prompts/`): 용어(a) / 비교(b) / 에러해결(c)은 `route_prompt.js`가 선택하고, 교차 검증은 d. `*_v1.md`는 이전 버전
+- **키워드 발굴 조회 기간**: `DEFAULT_LOOKBACK_DAYS = 90`. 저트래픽 블로그에서 28일 창은 쿼리별 노출이 흩어져 `min_impressions=5`를 아무도 못 넘긴다(2026-09-23 실측: 28일 0건 / 90일 10건). `--discover-days`로 조절
+- **로그인 실패는 예외다**: `browser.login()` 실패 시 `LoginFailedError`가 올라가 종료코드가 0이 아니게 되고 알림이 나간다. 조용히 `return`하면 launchd가 성공으로 기록해 장애가 몇 달간 묻힌다(2026-05~09 실제 사례). 2FA 감지 시에도 즉시 알림이 나가고 승인 대기는 300초
 - **LLM 토큰 예산**: Gemini 3.x는 추론(thoughts) 토큰을 먼저 쓰므로 `maxTokens`가 빠듯하면 응답 JSON이 `MAX_TOKENS`로 잘리고, 파서가 품질 0점으로 처리해 발행이 막힌다(검증 호출 800 → 4096으로 수정). 모델 교체 시 실행 로그의 `finishReason` 확인
 - JSON의 `jsCode`에 코드를 넣을 때 줄바꿈이 이중 이스케이프되면 코드 전체가 주석 한 줄이 되어 조용히 죽는다. 넣은 뒤 `node --check`로 문법 확인
 - 키워드 자동 등록: launchd 00:00이 `--auto-register --discover-limit 3`으로 실행. 등록 1건당 Pipeline A가 SerpAPI를 1회 쓰므로(무료 플랜 월 250건) 건수 조절은 `--discover-limit`으로
+- **AI-Brain 용어 → 키워드**: `--generate-term-keywords`는 `AI브레인용어` 탭에서 키워드를 역방향 생성한다. GSC 발굴은 '이미 노출된 쿼리'만 주므로 트래픽 없는 주제가 영원히 빠지는데(트래픽 없음 → 키워드 없음 → 글 없음 → 트래픽 없음), 볼트 용어는 트래픽과 무관한 시드라 그 루프를 끊는다. `혼동포인트`의 `A ≠ B` 형식(376/381건)에서 비교 글 주제가 나온다. 실측 381건 → 후보 468건. GSC 발굴과 같은 중복·B2C 필터를 쓴다 — 기준이 갈리면 Pipeline A가 중복으로 버린다
 - **AI-Brain 용어 주입**: 시트 `AI브레인용어` 탭(용어·별칭·한줄정의·혼동포인트·출처)을 `Sheets Read (Brain Terms)`가 읽고, `Route Prompt`가 키워드와 매칭되는 용어를 최대 3건까지 user_message에 넣는다. 원본은 Google Drive 옵시디언 볼트 `AI-Brain/10_Terms`이고, `python scripts/sync_brain_terms.py`(`.env`의 `BRAIN_VAULT_FOLDER_ID`, `--dry-run` 지원)로 탭을 갱신한다 — 서비스 계정에 볼트 폴더가 읽기 권한으로 공유돼 있어야 함. n8n은 병렬 브랜치 실행 순서를 보장하지 않으므로 용어 노드는 `Reduce to Trigger → Sheets Read (Brain Terms) → Reduce Brain Terms → Sheets Read (Status=대기)`로 **직렬 배치**하고, 축약 노드가 뒤 노드의 중복 실행을 막는다
 
 ### 설정

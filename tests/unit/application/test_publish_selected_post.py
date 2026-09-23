@@ -140,6 +140,7 @@ class TestManualPublishFailure:
         result = _use_case(InMemoryPostRepository([post]), browser).execute(row_index=2)
         assert result.outcome == ManualPublishOutcome.FAILED
         assert "로그인" in result.message
+        assert "Tistory" not in result.message  # 네이버 대시보드도 같은 메시지를 쓴다
         assert post.status == PostStatus.PENDING
         assert browser.stopped is True
 

@@ -114,7 +114,7 @@ class PublishSelectedPostUseCase:
         try:
             if not self._browser.login():
                 return ManualPublishResult.failed(
-                    post.row_index, "Tistory 로그인 실패 — 발행대기 유지",
+                    post.row_index, "로그인 실패 — 발행대기 유지",
                 )
             self._enricher.enrich_with_related_links(
                 post, published, self._enricher.identify_hubs(published),

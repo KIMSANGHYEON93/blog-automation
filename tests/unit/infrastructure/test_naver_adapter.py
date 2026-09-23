@@ -65,5 +65,12 @@ def test_empty_body_is_rejected_before_opening_editor(calls):
     assert calls == []
 
 
+def test_write_url_uses_redirect_write_entry():
+    # /postwrite 는 블로그 홈으로 튕기는 경우가 있었다(2026-09-23 실측)
+    assert editor.write_url("myblog") == (
+        "https://blog.naver.com/myblog?Redirect=Write&categoryNo=0"
+    )
+
+
 def test_update_is_not_supported(calls):
     assert not NaverBrowserAdapter("myblog").update(_post()).success

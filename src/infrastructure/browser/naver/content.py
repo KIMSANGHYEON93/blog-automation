@@ -57,5 +57,18 @@ def parse_log_no(url: str) -> str:
     return match.group(1) if match else ""
 
 
+def parse_blog_id(url: str) -> str:
+    """blog.naver.com/<블로그아이디> 형태의 URL에서 블로그 아이디를 뽑는다.
+
+    네이버 로그인 아이디와 블로그 주소는 다를 수 있어, 로그인 후 MyBlog.naver 가 이동한
+    주소로 실제 블로그 아이디를 확인한다.
+    """
+    parsed = urlparse(url)
+    if parsed.netloc not in ("blog.naver.com", "m.blog.naver.com"):
+        return ""
+    first = parsed.path.strip("/").split("/")[0]
+    return "" if "." in first else first
+
+
 def post_url(blog_id: str, log_no: str) -> str:
     return f"{BLOG_HOST}/{blog_id}/{log_no}"

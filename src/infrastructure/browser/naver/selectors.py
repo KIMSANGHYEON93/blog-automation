@@ -7,12 +7,17 @@
 """
 from __future__ import annotations
 
-WRITE_PATH = "/{blog_id}/postwrite"
+# /{blog_id}/postwrite 는 블로그 홈으로 튕기는 경우가 있었다. 이 경로는 매번
+# #mainFrame 안에 PostWriteForm.naver 를 연다(2026-09-23 실측).
+WRITE_PATH = "/{blog_id}?Redirect=Write&categoryNo=0"
 
-# 구버전 글쓰기 화면은 #mainFrame iframe 안에 에디터가 있다. 없으면 최상위 문서.
 MAIN_FRAME = "#mainFrame"
 
-EDITOR_READY = [".se-content", ".se-editor", ".se-section-documentTitle"]
+EDITOR_READY = [".se-section-documentTitle"]
+
+# 제목·본문을 클릭하면 포커스가 이 숨은 iframe(id="input_buffer<숫자>")의 body로 간다.
+# 키 입력과 paste 이벤트는 여기로 보내야 에디터가 받는다.
+INPUT_BUFFER_FRAME = "iframe[id^='input_buffer']"
 
 # "작성 중인 글이 있습니다" → 취소(새 글), 도움말 패널 닫기
 POPUP_CLOSE = [
@@ -22,21 +27,20 @@ POPUP_CLOSE = [
 ]
 
 TITLE = [
-    ".se-section-documentTitle .se-module-text",
-    ".se-documentTitle .se-text-paragraph",
     ".se-section-documentTitle",
+    ".se-documentTitle .se-text-paragraph",
 ]
 
 BODY = [
-    ".se-section-text .se-module-text",
+    ".se-section-text",
     ".se-component.se-text .se-text-paragraph",
-    "div.se-section-text div[contenteditable='true']",
 ]
 
-# 본문 붙여넣기가 먹혔는지 셀 때 쓰는 컴포넌트
-BODY_COMPONENTS = ".se-main-container .se-component"
+# 편집 화면 컴포넌트(제목 포함). .se-main-container 는 보기 화면에만 있다.
+BODY_COMPONENTS = ".se-component"
 
 SAVE_DRAFT = [
+    "button[class^='save_btn__']",
     "button[class*='save_btn']",
     "//button[contains(normalize-space(), '저장')]",
 ]

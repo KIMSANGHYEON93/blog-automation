@@ -3,6 +3,7 @@ from src.infrastructure.browser.naver.content import (
     MAX_TAGS,
     build_naver_html,
     normalize_tags,
+    parse_blog_id,
     parse_log_no,
     post_url,
 )
@@ -51,6 +52,18 @@ class TestParseLogNo:
     def test_editor_url_has_no_log_no(self):
         assert parse_log_no("https://blog.naver.com/myblog/postwrite") == ""
         assert parse_log_no("") == ""
+
+
+class TestParseBlogId:
+    # 로그인 아이디와 블로그 주소가 다를 수 있다(kuk6475 → sangpedia, 2026-09-23 실측)
+    def test_blog_home_url(self):
+        assert parse_blog_id("https://blog.naver.com/sangpedia") == "sangpedia"
+
+    def test_ignores_query(self):
+        assert parse_blog_id("https://blog.naver.com/sangpedia?Redirect=Write") == "sangpedia"
+
+    def test_login_page_is_not_a_blog(self):
+        assert parse_blog_id("https://nid.naver.com/nidlogin.login") == ""
 
 
 def test_post_url():

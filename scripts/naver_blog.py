@@ -27,6 +27,7 @@ from src.infrastructure.browser.naver.adapter import (  # noqa: E402
     DRAFT_ONLY_MESSAGE,
     NaverBrowserAdapter,
 )
+from src.infrastructure.browser.naver.editor import NaverEditorError  # noqa: E402
 
 load_dotenv()
 
@@ -87,6 +88,9 @@ def main() -> int:
         if args.cmd == "check":
             return _check(adapter)
         return _draft(adapter, args.markdown, args.title)
+    except NaverEditorError as e:
+        print(f"실패: {e}")
+        return 1
     finally:
         adapter.stop()
 

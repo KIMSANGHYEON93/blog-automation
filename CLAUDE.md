@@ -77,7 +77,7 @@ python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 �
 - SmartEditor 실측(2026-09-23): 진입은 `?Redirect=Write`(`/postwrite`는 홈으로 튕길 때가 있음), 제목·본문 입력은 숨은 `input_buffer*` iframe으로 간다. 셀렉터는 `naver/selectors.py` 한 곳
 - 발행 확인 뒤 URL을 못 받거나 브라우저 오류가 나면 사유에 "발행 여부 수동 확인 필요"가 남는다 — 네이버에서 직접 확인 전에는 다시 발행하지 말 것(중복 발행)
 - 네이버 수동 발행도 `.pipeline_b.lock`을 잡는다. 락을 나누면 안 된다: `run_pipeline_b.sh`의 Chrome 정리(`pkill -f ...browser_data`)가 `.browser_data_naver`에도 걸려 발행 중인 네이버 브라우저를 죽인다. 대신 자동 실행 시각(08:30·09:00·10:00·14:00·14:30) 전후에 네이버 발행을 하면 그 자동 실행이 `[SKIP]`으로 건너뛰어진다
-- 네이버 검색 API 키는 n8n 자격증명 `Naver Search API (Custom Auth)`에 둔다(`{"headers": {"X-Naver-Client-Id": ..., "X-Naver-Client-Secret": ...}}`)
+- 상위 글 수집은 SerpAPI 네이버 엔진(`engine=naver`, `web_results`)으로 한다. 네이버 검색 API는 발급이 막혀(2026-09-23) 쓰지 않는다. 티스토리와 같은 `SERPAPI_KEY`·월 250회 한도를 나눠 쓴다(네이버는 하루 1건 → 월 약 30회). SerpAPI는 블로그 전용 검색(`where=blog`)을 지원하지 않아 블로그·카페·웹 문서가 섞여 온다
 
 ## Architecture
 

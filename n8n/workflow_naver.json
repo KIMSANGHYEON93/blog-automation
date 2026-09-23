@@ -70,42 +70,34 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://openapi.naver.com/v1/search/blog.json",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpCustomAuth",
+        "url": "https://serpapi.com/search.json",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
+            {
+              "name": "engine",
+              "value": "naver"
+            },
             {
               "name": "query",
               "value": "={{ $json['키워드'] }}"
             },
             {
-              "name": "display",
-              "value": "5"
-            },
-            {
-              "name": "sort",
-              "value": "sim"
+              "name": "api_key",
+              "value": "={{ $env.SERPAPI_KEY }}"
             }
           ]
         },
         "options": {}
       },
-      "id": "naver-blog-search",
-      "name": "Naver Blog Search",
+      "id": "naver-serpapi-search",
+      "name": "Naver Search (SerpAPI)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         1340,
         300
       ],
-      "credentials": {
-        "httpCustomAuth": {
-          "id": "naverSearchCustomAuth01",
-          "name": "Naver Search API (Custom Auth)"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000
@@ -113,7 +105,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "/**\n * Parse SERP Data (네이버판) — 네이버 블로그 검색 결과를 프롬프트용으로 정리\n * Mode: runOnceForEachItem\n * 입력: Naver Blog Search 노드 응답 (openapi.naver.com/v1/search/blog.json)\n * 출력: 시트 행 + serp_text, top_posts, search_ok\n * 노드 이름은 'Parse SERP Data' 그대로 둔다 — URL Validation이 이 이름으로 serp_urls를 읽는다.\n */\n\nconst TOP_LIMIT = 5;\n\nfunction stripTags(value) {\n  return String(value || '')\n    .replace(/<[^>]+>/g, '')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;/g, \"'\")\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&amp;/g, '&')\n    .trim();\n}\n\nfunction summarizeNaverBlogResults(response, limit = TOP_LIMIT) {\n  const items = response && Array.isArray(response.items) ? response.items : [];\n  const topPosts = items.slice(0, limit).map((it) => ({\n    title: stripTags(it.title),\n    description: stripTags(it.description),\n    link: it.link || '',\n    postdate: it.postdate || '',\n  }));\n  const serpText = topPosts\n    .map((p, i) => `${i + 1}. ${p.title}\\n   ${p.description}`)\n    .join('\\n');\n  return { topPosts, serpText, total: Number((response && response.total) || 0) };\n}\n\nif (typeof $input === 'undefined') {\n  module.exports = { stripTags, summarizeNaverBlogResults };\n  return;\n}\n\nconst summary = summarizeNaverBlogResults($input.item.json);\nconst sheetData = $('Sheets Read (Status=대기)').item.json;\n\nreturn {\n  json: {\n    ...sheetData,\n    serp_text: summary.serpText || '(네이버 검색 결과 없음)',\n    top_posts: summary.topPosts,\n    naver_result_total: summary.total,\n    search_ok: summary.topPosts.length > 0,\n    serp_urls: [],      // 경쟁 블로그 글은 인용하지 않는다\n    official_urls: [],  // Fetch Official Docs는 건너뛴다\n  },\n};\n"
+        "jsCode": "/**\n * Parse SERP Data (네이버판) — 네이버 검색 상위 글을 프롬프트용으로 정리\n * Mode: runOnceForEachItem\n * 입력: Naver Search (SerpAPI) 노드 응답 (engine=naver, web_results — 블로그·카페·웹 문서)\n *   네이버 검색 API 발급이 막혀 SerpAPI를 쓴다. SerpAPI는 블로그 전용(where=blog)을 지원하지 않는다.\n * 출력: 시트 행 + serp_text, top_posts, search_ok\n * 노드 이름은 'Parse SERP Data' 그대로 둔다 — URL Validation이 이 이름으로 serp_urls를 읽는다.\n */\n\nconst TOP_LIMIT = 5;\n\nfunction stripTags(value) {\n  return String(value || '')\n    .replace(/<[^>]+>/g, '')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;/g, \"'\")\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&amp;/g, '&')\n    .trim();\n}\n\nfunction summarizeNaverResults(response, limit = TOP_LIMIT) {\n  const items = response && Array.isArray(response.web_results) ? response.web_results : [];\n  const topPosts = items.slice(0, limit).map((it) => ({\n    title: stripTags(it.title),\n    description: stripTags(it.snippet),\n    link: it.link || '',\n  }));\n  const serpText = topPosts\n    .map((p, i) => `${i + 1}. ${p.title}\\n   ${p.description}`)\n    .join('\\n');\n  return { topPosts, serpText };\n}\n\nif (typeof $input === 'undefined') {\n  module.exports = { stripTags, summarizeNaverResults };\n  return;\n}\n\nconst summary = summarizeNaverResults($input.item.json);\nconst sheetData = $('Sheets Read (Status=대기)').item.json;\n\nreturn {\n  json: {\n    ...sheetData,\n    serp_text: summary.serpText || '(네이버 검색 결과 없음)',\n    top_posts: summary.topPosts,\n    search_ok: summary.topPosts.length > 0,\n    serp_urls: [],      // 경쟁 블로그 글은 인용하지 않는다\n    official_urls: [],  // Fetch Official Docs는 건너뛴다\n  },\n};\n"
       },
       "id": "node-3b-parse-serp",
       "name": "Parse SERP Data",
@@ -985,7 +977,7 @@
       "main": [
         [
           {
-            "node": "Naver Blog Search",
+            "node": "Naver Search (SerpAPI)",
             "type": "main",
             "index": 0
           }
@@ -1043,7 +1035,7 @@
         ]
       ]
     },
-    "Naver Blog Search": {
+    "Naver Search (SerpAPI)": {
       "main": [
         [
           {

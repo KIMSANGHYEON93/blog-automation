@@ -9,20 +9,19 @@ const verifyReq = require('../build_verify_request_naver.js');
 const verdict = require('../parse_verification_naver.js');
 const dup = require('../check_duplicate_naver.js');
 
-test('검색 결과: 태그·엔티티를 벗기고 상위 5개만', () => {
-  const items = Array.from({ length: 7 }, (_, i) => ({
-    title: `<b>MCP</b>란 ${i}`, description: '뜻&amp;예시', link: `https://blog.naver.com/a/${i}`, postdate: '20260901',
+test('검색 결과: SerpAPI 네이버 web_results에서 태그·엔티티를 벗기고 상위 5개만', () => {
+  const web_results = Array.from({ length: 7 }, (_, i) => ({
+    position: i + 1, title: `<b>MCP</b>란 ${i}`, snippet: '뜻&amp;예시', link: `https://blog.naver.com/a/${i}`,
   }));
-  const r = search.summarizeNaverBlogResults({ total: 120, items });
+  const r = search.summarizeNaverResults({ web_results });
   assert.equal(r.topPosts.length, 5);
   assert.equal(r.topPosts[0].title, 'MCP란 0');
   assert.equal(r.topPosts[0].description, '뜻&예시');
-  assert.equal(r.total, 120);
   assert.match(r.serpText, /^1\. MCP란 0/);
 });
 
 test('검색 결과: 비어 있으면 빈 목록', () => {
-  const r = search.summarizeNaverBlogResults({ total: 0, items: [] });
+  const r = search.summarizeNaverResults({});
   assert.equal(r.topPosts.length, 0);
   assert.equal(r.serpText, '');
 });

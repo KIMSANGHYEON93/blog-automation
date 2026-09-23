@@ -118,29 +118,21 @@ def _use_naver_tab(node: dict) -> None:
 
 
 def _replace_serp_with_naver_search(wf: dict) -> None:
-    _rename(wf, "SerpAPI Search", "Naver Blog Search")
-    node = _node(wf, "Naver Blog Search")
-    node["id"] = "naver-blog-search"
+    # 네이버 검색 API 발급이 막혀(2026-09-23) SerpAPI 네이버 엔진을 쓴다.
+    # 티스토리와 같은 SERPAPI_KEY·월 한도를 나눠 쓴다 — 네이버는 하루 1건이라 월 ~30회.
+    _rename(wf, "SerpAPI Search", "Naver Search (SerpAPI)")
+    node = _node(wf, "Naver Search (SerpAPI)")
+    node["id"] = "naver-serpapi-search"
     node["parameters"] = {
         "method": "GET",
-        "url": "https://openapi.naver.com/v1/search/blog.json",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpCustomAuth",
+        "url": "https://serpapi.com/search.json",
         "sendQuery": True,
         "queryParameters": {"parameters": [
+            {"name": "engine", "value": "naver"},
             {"name": "query", "value": "={{ $json['키워드'] }}"},
-            {"name": "display", "value": "5"},
-            {"name": "sort", "value": "sim"},
+            {"name": "api_key", "value": "={{ $env.SERPAPI_KEY }}"},
         ]},
         "options": {},
-    }
-    # 두 헤더(X-Naver-Client-Id/Secret)가 필요해 Header Auth 대신 Custom Auth
-    # 키를 $env로 넣으면 실행 기록에 평문으로 남는다.
-    node["credentials"] = {
-        "httpCustomAuth": {
-            "id": "naverSearchCustomAuth01",
-            "name": "Naver Search API (Custom Auth)",
-        },
     }
     node["retryOnFail"] = True
     node["maxTries"] = 3

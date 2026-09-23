@@ -42,10 +42,13 @@ def test_티스토리_발행_키워드는_티스토리_탭에서_읽는다(wf):
 def test_serpapi_대신_네이버_검색(wf):
     names = {n["name"] for n in wf["nodes"]}
     assert "SerpAPI Search" not in names
-    node = _node(wf, "Naver Blog Search")
-    assert node["parameters"]["url"] == "https://openapi.naver.com/v1/search/blog.json"
+    node = _node(wf, "Naver Search (SerpAPI)")
+    assert node["parameters"]["url"] == "https://serpapi.com/search.json"
+    params = {p["name"]: p["value"] for p in node["parameters"]["queryParameters"]["parameters"]}
+    assert params["engine"] == "naver"
+    assert params["api_key"] == "={{ $env.SERPAPI_KEY }}"  # 티스토리와 같은 키
     assert node["retryOnFail"] is True and node["maxTries"] == 3
-    assert "httpCustomAuth" in node["credentials"]
+    assert "credentials" not in node
 
 
 def test_이미지_주입_노드는_없다(wf):

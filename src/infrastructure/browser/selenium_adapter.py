@@ -7,6 +7,7 @@ import time
 
 from src.domain.entities.post import Post
 from src.domain.ports.browser_port import BrowserPort
+from src.domain.ports.notification_port import NotificationPort
 from src.domain.value_objects.credentials import Credentials
 from src.domain.value_objects.publish_result import PublishResult
 from src.domain.value_objects.site_profile import SiteProfile
@@ -20,7 +21,10 @@ class SeleniumBrowserAdapter(BrowserPort):
     def __init__(self, credentials: Credentials, headless: bool = True,
                  min_delay: int = 300, max_delay: int = 900,
                  user_data_dir: str = "",
-                 site_profile: SiteProfile | None = None):
+                 site_profile: SiteProfile | None = None,
+                 notifier: NotificationPort | None = None):
+        # notifier: 카카오 2FA 감지 시 즉시 알리기 위한 채널. 없으면 조용히 진행.
+        self._notifier = notifier
         self._credentials = credentials
         self._headless = headless
         self._min_delay = min_delay
@@ -92,6 +96,7 @@ class SeleniumBrowserAdapter(BrowserPort):
             self._sb,
             self._credentials.kakao_id,
             self._credentials.kakao_pw,
+            notifier=self._notifier,
         )
 
     def publish(self, post: Post) -> PublishResult:

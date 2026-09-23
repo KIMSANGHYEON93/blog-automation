@@ -34,6 +34,7 @@ from src.infrastructure.locking.directory_lock import DirectoryPipelineLock
 from src.infrastructure.logging_setup import setup_logging
 from src.infrastructure.persistence.google_sheets_repo import GoogleSheetsPostRepository
 from src.infrastructure.persistence.json_site_profile import JsonSiteProfileAdapter
+from src.interface.cli import _build_notification as build_notification
 from src.interface.web.app import create_app
 from src.interface.web.auth import AdminAuthenticator
 from src.interface.web.jobs import PublishJobRunner
@@ -83,6 +84,8 @@ def _build_publisher(config: Config, repo: GoogleSheetsPostRepository):  # type:
             max_delay=0,
             user_data_dir=str(PROJECT_ROOT / ".browser_data"),
             site_profile=site_profile,
+            # 2FA가 뜨면 브라우저 앞에 사람이 없다 — 즉시 알려야 승인할 수 있다
+            notifier=build_notification(),
         )
         use_case = PublishSelectedPostUseCase(
             repo=repo,

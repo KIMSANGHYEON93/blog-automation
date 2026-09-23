@@ -178,6 +178,7 @@ def _publish_pages(config: Config) -> None:
         credentials=credentials,
         headless=config.headless,
         user_data_dir=".browser_data",
+        notifier=_build_notification(),
     )
 
     browser.start()
@@ -223,6 +224,7 @@ def _revise(config: Config, site_profile=None) -> None:
         max_delay=config.max_delay,
         user_data_dir=".browser_data",
         site_profile=site_profile,
+        notifier=_build_notification(),
     )
 
     # Step 1: 고스트 복구 (PUBLISHING + REVISING 모두 복구)
@@ -459,6 +461,7 @@ def _sync_categories(config: Config, *, auto_update: bool = False) -> None:
         credentials=credentials,
         headless=config.headless,
         user_data_dir=".browser_data",
+        notifier=_build_notification(),
     )
 
     browser.start()
@@ -539,6 +542,7 @@ def _set_thumbnails(
         site_profile=site_profile,
         min_delay=30,
         max_delay=60,
+        notifier=_build_notification(),
     )
 
     browser.start()
@@ -670,6 +674,7 @@ def _main_inner() -> None:
         max_delay=config.max_delay,
         user_data_dir=".browser_data",
         site_profile=site_profile,
+        notifier=_build_notification(),
     )
 
     # Step 1: 고스트 복구 (+ 옵트인 실패 재시도)

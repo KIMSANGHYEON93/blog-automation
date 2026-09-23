@@ -8,10 +8,14 @@ import logging
 import time
 from urllib.parse import urlparse
 
+from src.domain.ports.notification_port import NotificationPort
+
 logger = logging.getLogger(__name__)
 
 TISTORY_LOGIN_URL = "https://www.tistory.com/auth/login"
-TWO_FA_WAIT_SEC = 120
+# 카카오톡 푸시 승인은 사람이 눌러야 한다. 감지 즉시 알림을 보내므로
+# 알림을 보고 휴대폰을 열어 승인할 시간을 확보한다(120초는 짧았다).
+TWO_FA_WAIT_SEC = 300
 
 # --- 카카오 로그인 폼 셀렉터 Fallback Chain ---
 # React가 생성하는 불안정 ID(#loginId--1 등)를 최상위에 유지하되,
@@ -36,8 +40,14 @@ KAKAO_SUBMIT_SELECTORS = [
 ]
 
 
-def kakao_login(sb, kakao_id: str, kakao_pw: str) -> bool:
-    """티스토리 로그인 (카카오 OAuth 경유). 성공 시 True."""
+def kakao_login(
+    sb, kakao_id: str, kakao_pw: str,
+    notifier: NotificationPort | None = None,
+) -> bool:
+    """티스토리 로그인 (카카오 OAuth 경유). 성공 시 True.
+
+    notifier: 2FA가 감지되면 즉시 알린다. 없으면 조용히 진행한다.
+    """
     try:
         # 1) 티스토리 로그인 페이지 진입
         sb.open(TISTORY_LOGIN_URL)
@@ -99,7 +109,7 @@ def kakao_login(sb, kakao_id: str, kakao_pw: str) -> bool:
 
         # 카카오 로그인 페이지인 경우 → ID/PW 입력
         if "accounts.kakao" in current_url:
-            return _enter_credentials_and_wait(sb, kakao_id, kakao_pw)
+            return _enter_credentials_and_wait(sb, kakao_id, kakao_pw, notifier)
 
         # 이미 카카오 로그인 된 경우 (쿠키 유지) → 바로 티스토리로 리다이렉트
         if _is_tistory_logged_in(current_url):
@@ -172,7 +182,10 @@ def _find_kakao_elements_by_js(sb) -> dict[str, str] | None:
     return None
 
 
-def _enter_credentials_and_wait(sb, kakao_id: str, kakao_pw: str) -> bool:
+def _enter_credentials_and_wait(
+    sb, kakao_id: str, kakao_pw: str,
+    notifier: NotificationPort | None = None,
+) -> bool:
     """카카오 로그인 폼에 ID/PW 입력 후 2FA 처리."""
     try:
         # 셀렉터 탐색: Fallback Chain → JS 구조 탐색
@@ -246,7 +259,7 @@ def _enter_credentials_and_wait(sb, kakao_id: str, kakao_pw: str) -> bool:
 
         if is_2fa:
             logger.info("2단계 인증 감지 — 카카오톡에서 승인 대기...")
-            return _handle_two_fa(sb)
+            return _handle_two_fa(sb, notifier)
 
         return _is_tistory_logged_in(current_url)
 
@@ -255,8 +268,29 @@ def _enter_credentials_and_wait(sb, kakao_id: str, kakao_pw: str) -> bool:
         return False
 
 
-def _handle_two_fa(sb) -> bool:
-    """2FA: '이 브라우저에서 2단계 인증 사용 안 함' 체크 + 승인 대기."""
+
+def _notify_two_fa(notifier: NotificationPort | None) -> None:
+    """2FA 감지를 즉시 알린다. 알림 실패가 로그인을 깨면 안 된다."""
+    if notifier is None:
+        return
+    try:
+        notifier.send(
+            f"카카오 2단계 인증 필요 — 카카오톡에서 승인해 주세요 "
+            f"(최대 {TWO_FA_WAIT_SEC}초 대기). 미승인 시 발행이 중단됩니다.",
+            level="WARNING",
+        )
+    except Exception as e:
+        logger.warning(f"2FA 알림 전송 실패 (로그인은 계속): {e}")
+
+
+def _handle_two_fa(sb, notifier: NotificationPort | None = None) -> bool:
+    """2FA: '이 브라우저에서 2단계 인증 사용 안 함' 체크 + 승인 대기.
+
+    notifier가 있으면 대기 시작 전에 한 번 알린다. 조용히 기다리다 실패하면
+    사용자는 승인할 기회조차 못 얻는다.
+    """
+    _notify_two_fa(notifier)
+
     # 스킵 체크박스 클릭 시도
     try:
         skip_selectors = [

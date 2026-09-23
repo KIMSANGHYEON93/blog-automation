@@ -2,6 +2,8 @@
 Composition Root — 유일하게 모든 구체 클래스를 아는 진입점.
 의존성 역전(DIP): Application/Domain은 Port만 알고, 여기서 구체 구현을 조립.
 """
+from __future__ import annotations
+
 import argparse
 import contextlib
 import logging
@@ -109,6 +111,15 @@ def _parse_args() -> argparse.Namespace:
         help=(
             "--discover-keywords 제안/등록 건수 상한 (기본: 10). "
             "등록된 키워드 1건당 Pipeline A가 SerpAPI를 1회 사용함"
+        ),
+    )
+    parser.add_argument(
+        "--discover-days",
+        type=int,
+        default=None,
+        help=(
+            "--discover-keywords GSC 조회 기간(일). 기본 90. "
+            "창이 좁으면 쿼리별 노출이 흩어져 발굴이 0건이 된다"
         ),
     )
     parser.add_argument(
@@ -349,7 +360,10 @@ def _status(config: Config) -> None:
     print(uc.format_report(report))
 
 
-def _discover_keywords(config: Config, auto_register: bool = False, limit: int = 10) -> None:
+def _discover_keywords(
+    config: Config, auto_register: bool = False, limit: int = 10,
+    days: int | None = None,
+) -> None:
     """GSC 검색 데이터에서 키워드 발굴."""
     config.validate()
 
@@ -364,7 +378,10 @@ def _discover_keywords(config: Config, auto_register: bool = False, limit: int =
     uc = DiscoverKeywordsUseCase(repo=repo, keyword_research=kr, top_n=limit)
 
     site_url = f"https://{config.tistory_blog}.tistory.com/"
-    result = uc.execute(site_url, auto_register=auto_register)
+    result = uc.execute(
+        site_url, auto_register=auto_register,
+        **({} if days is None else {"days": days}),
+    )
 
     if result.success:
         logger.info(
@@ -618,6 +635,7 @@ def _main_inner() -> None:
     if args.discover_keywords:
         _discover_keywords(
             config, auto_register=args.auto_register, limit=args.discover_limit,
+            days=args.discover_days,
         )
         return
 

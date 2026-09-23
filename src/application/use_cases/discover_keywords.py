@@ -58,6 +58,12 @@ def is_b2c_noise(keyword: str, blocked: set[str]) -> bool:
     return any(pattern.search(kw) for pattern in B2C_TOKEN_PATTERNS)
 
 
+# GSC 조회 기간. 28일 창은 저트래픽 블로그에서 쿼리별 노출이 흩어져
+# min_impressions 임계치를 아무도 넘지 못한다 — 2026-09-23 실측으로
+# 28일 통과 0건 / 90일 통과 10건(최다 노출 49). 창을 넓혀 누적 노출로 본다.
+DEFAULT_LOOKBACK_DAYS = 90
+
+
 class DiscoverKeywordsUseCase:
     """GSC 검색 데이터에서 키워드를 발굴하여 제안.
 
@@ -89,7 +95,8 @@ class DiscoverKeywordsUseCase:
         self._blocked = blocked_keywords if blocked_keywords is not None else B2C_BLOCKLIST
 
     def execute(
-        self, site_url: str, days: int = 28, auto_register: bool = False,
+        self, site_url: str, days: int = DEFAULT_LOOKBACK_DAYS,
+        auto_register: bool = False,
     ) -> KeywordDiscoveryResult:
         try:
             queries = self._keyword_research.fetch_queries(site_url, days=days)

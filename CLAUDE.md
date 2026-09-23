@@ -75,7 +75,8 @@ python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 �
 - **워크플로우 JSON은 손으로 고치지 않는다**: 노드 코드는 `n8n/code_nodes/naver/*.js`, 프롬프트는 `n8n/prompts/prompt_naver_*.md`가 원본이고 `python scripts/build_naver_workflow.py`가 `workflow_complete.json`을 복사해 넣는다. 원본을 고친 뒤 스크립트를 돌려 n8n에 다시 가져올 것. `make test-n8n`이 최신 여부를 검사한다
 - 로그인은 사람이 한다: `python scripts/naver_blog.py login`('로그인 상태 유지' 체크), 세션은 `.browser_data_naver/`. `NAVER_BLOG_ID`는 로그인 아이디가 아니라 블로그 주소(`sangpedia`)
 - SmartEditor 실측(2026-09-23): 진입은 `?Redirect=Write`(`/postwrite`는 홈으로 튕길 때가 있음), 제목·본문 입력은 숨은 `input_buffer*` iframe으로 간다. 셀렉터는 `naver/selectors.py` 한 곳
-- 발행 확인 뒤 URL을 못 받으면 사유에 "발행 여부 수동 확인 필요"가 남는다 — 네이버에서 직접 확인 전에는 다시 발행하지 말 것(중복 발행)
+- 발행 확인 뒤 URL을 못 받거나 브라우저 오류가 나면 사유에 "발행 여부 수동 확인 필요"가 남는다 — 네이버에서 직접 확인 전에는 다시 발행하지 말 것(중복 발행)
+- 네이버 수동 발행도 `.pipeline_b.lock`을 잡는다. 락을 나누면 안 된다: `run_pipeline_b.sh`의 Chrome 정리(`pkill -f ...browser_data`)가 `.browser_data_naver`에도 걸려 발행 중인 네이버 브라우저를 죽인다. 대신 자동 실행 시각(08:30·09:00·10:00·14:00·14:30) 전후에 네이버 발행을 하면 그 자동 실행이 `[SKIP]`으로 건너뛰어진다
 - 네이버 검색 API 키는 n8n 자격증명 `Naver Search API (Custom Auth)`에 둔다(`{"headers": {"X-Naver-Client-Id": ..., "X-Naver-Client-Secret": ...}}`)
 
 ## Architecture

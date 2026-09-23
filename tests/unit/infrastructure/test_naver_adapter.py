@@ -117,3 +117,16 @@ def test_발행_URL_미확인은_수동_확인_필요로_표시(calls, monkeypat
     result = NaverBrowserAdapter("myblog", draft_only=False).publish(_post())
     assert not result.success
     assert editor.PUBLISH_UNCONFIRMED in result.error
+
+
+def test_발행_확인_뒤_일반_예외도_수동_확인_필요로_바꾼다(monkeypatch):
+    # 확인 버튼을 누른 뒤에는 실제로 발행됐을 수 있다 — 재발행하지 않게 표식을 남겨야 한다
+    monkeypatch.setattr(editor, "_click_first", lambda sb, s, name: None)
+    monkeypatch.setattr(editor.time, "sleep", lambda s: None)
+
+    def driver_died(sb):
+        raise RuntimeError("chrome not reachable")
+
+    monkeypatch.setattr(editor, "_wait_published_url", driver_died)
+    with pytest.raises(editor.NaverEditorError, match=editor.PUBLISH_UNCONFIRMED):
+        editor.publish(object(), [])

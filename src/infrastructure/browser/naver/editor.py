@@ -126,7 +126,13 @@ def publish(sb, tags: list[str]) -> str:
     if tags:
         _fill_tags(sb, tags)
     _click_first(sb, sel.PUBLISH_CONFIRM, "발행 확인 버튼")
-    return _wait_published_url(sb)
+    try:
+        return _wait_published_url(sb)
+    except NaverEditorError:
+        raise
+    except Exception as e:
+        # 확인을 누른 뒤라 실제로 발행됐을 수 있다 — 재발행하지 않게 표식을 남긴다
+        raise NaverEditorError(f"발행 확인 뒤 오류({e}) — {PUBLISH_UNCONFIRMED}") from e
 
 
 def _open(sb, url: str) -> None:

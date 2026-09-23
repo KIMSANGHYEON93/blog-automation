@@ -30,7 +30,7 @@
     {% if active_job %}
     <p class="notice notice-info">{{ active_job.row_index }}행 발행이 진행 중입니다. 끝난 뒤 발행할 수 있습니다.</p>
     {% else %}
-    <p>지금 Tistory에 공개 발행합니다. 약 1~3분 걸리며, 자동 발행과 같은 중복·쿼터 검사를 다시 거칩니다.</p>
+    <p>지금 공개 발행합니다. 약 1~3분 걸리며, 자동 발행과 같은 중복·쿼터 검사를 다시 거칩니다.</p>
     <form method="post" action="{{ url_for('publish', row_index=post.row_index) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="primary">이 게시물 발행</button>

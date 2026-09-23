@@ -18,6 +18,8 @@ class Config:
     owner_name: str
     sitemap_output: str
     site_profile_path: str
+    naver_blog_id: str = ""
+    naver_sheet_tab: str = "naver_calendar"
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -35,6 +37,8 @@ class Config:
             owner_name=os.getenv("OWNER_NAME", ""),
             sitemap_output=os.getenv("SITEMAP_OUTPUT", "sitemap.xml"),
             site_profile_path=os.getenv("SITE_PROFILE", "site_profile.json"),
+            naver_blog_id=os.getenv("NAVER_BLOG_ID", ""),
+            naver_sheet_tab=os.getenv("NAVER_SHEET_TAB", "naver_calendar"),
         )
 
     def validate(self) -> None:
@@ -68,3 +72,13 @@ class Config:
             raise OSError(
                 f"--publish-pages 필수 환경 변수 누락: {', '.join(missing)}"
             )
+
+    def validate_naver(self) -> None:
+        """네이버 대시보드 전용 검증. 카카오·티스토리 값은 필요 없다."""
+        missing = []
+        if not self.naver_blog_id:
+            missing.append("NAVER_BLOG_ID (블로그 주소의 아이디, 로그인 아이디 아님)")
+        if not os.path.exists(self.google_creds):
+            missing.append(f"GOOGLE_CREDS (파일 없음: {self.google_creds})")
+        if missing:
+            raise OSError(f"네이버 필수 환경 변수 누락: {', '.join(missing)}")

@@ -119,6 +119,49 @@ def test_발행_URL_미확인은_수동_확인_필요로_표시(calls, monkeypat
     assert editor.PUBLISH_UNCONFIRMED in result.error
 
 
+class _EditorSb:
+    """본문 붙여넣기 판정용 가짜 — 붙여넣으면 셀렉터별 개수가 바뀐다."""
+
+    def __init__(self, before: dict, after: dict):
+        self.counts, self._after = before, after
+
+    def is_element_visible(self, selector):
+        return True
+
+    def click(self, selector):
+        pass
+
+    def execute_script(self, script, selector):
+        return self.counts.get(selector, 0)
+
+    def paste(self):
+        self.counts = self._after
+
+
+def _paste_with(monkeypatch, sb):
+    monkeypatch.setattr(editor.time, "sleep", lambda s: None)
+    monkeypatch.setattr(editor, "_dispatch_paste_in_input_buffer", lambda s, h, p: sb.paste())
+    editor.paste_body(sb, "<p>본문</p>", "본문")
+
+
+def test_표_없는_본문은_컴포넌트가_늘지_않아도_문단이_늘면_성공(monkeypatch):
+    # 2026-09-23 실측: 텍스트만 있는 본문은 기존 텍스트 컴포넌트 하나에 들어가 .se-component 2→2
+    sb = _EditorSb(
+        before={".se-component": 2, ".se-text-paragraph": 2},
+        after={".se-component": 2, ".se-text-paragraph": 48},
+    )
+    _paste_with(monkeypatch, sb)  # 예외 없음
+
+
+def test_문단이_그대로면_붙여넣기_실패(monkeypatch):
+    sb = _EditorSb(
+        before={".se-component": 2, ".se-text-paragraph": 2},
+        after={".se-component": 2, ".se-text-paragraph": 2},
+    )
+    with pytest.raises(editor.NaverEditorError, match="붙여넣기"):
+        _paste_with(monkeypatch, sb)
+
+
 def test_발행_확인_뒤_일반_예외도_수동_확인_필요로_바꾼다(monkeypatch):
     # 확인 버튼을 누른 뒤에는 실제로 발행됐을 수 있다 — 재발행하지 않게 표식을 남겨야 한다
     monkeypatch.setattr(editor, "_click_first", lambda sb, s, name: None)

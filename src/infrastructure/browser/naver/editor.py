@@ -101,17 +101,17 @@ def paste_body(sb, html: str, plain_text: str) -> None:
     target = _first_visible(sb, sel.BODY)
     if not target:
         raise NaverEditorError("본문 입력란을 찾지 못함 — selectors.BODY 확인")
-    before = sb.execute_script(_COUNT_JS, sel.BODY_COMPONENTS)
+    before = sb.execute_script(_COUNT_JS, sel.BODY_PARAGRAPHS)
     sb.click(target)
     time.sleep(0.5)
     _dispatch_paste_in_input_buffer(sb, html, plain_text)
     time.sleep(2)
-    after = sb.execute_script(_COUNT_JS, sel.BODY_COMPONENTS)
+    after = sb.execute_script(_COUNT_JS, sel.BODY_PARAGRAPHS)
     if after <= before:
         raise NaverEditorError(
-            f"본문 붙여넣기가 반영되지 않음 (컴포넌트 {before} → {after})"
+            f"본문 붙여넣기가 반영되지 않음 (문단 {before} → {after})"
         )
-    logger.info(f"본문 붙여넣기 완료: 컴포넌트 {before} → {after}")
+    logger.info(f"본문 붙여넣기 완료: 문단 {before} → {after}")
 
 
 def save_draft(sb) -> None:

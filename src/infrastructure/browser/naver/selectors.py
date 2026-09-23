@@ -36,8 +36,10 @@ BODY = [
     ".se-component.se-text .se-text-paragraph",
 ]
 
-# 편집 화면 컴포넌트(제목 포함). .se-main-container 는 보기 화면에만 있다.
-BODY_COMPONENTS = ".se-component"
+# 붙여넣기 반영 확인용 — 편집 화면 문단(제목 포함). .se-main-container 는 보기 화면에만 있다.
+# .se-component 개수는 쓰지 않는다: 표 없는 본문은 기존 텍스트 컴포넌트 하나에 들어가
+# 개수가 그대로다(2026-09-23 실측 2→2, 본문은 정상 입력됨).
+BODY_PARAGRAPHS = ".se-text-paragraph"
 
 SAVE_DRAFT = [
     "button[class^='save_btn__']",

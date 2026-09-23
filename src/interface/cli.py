@@ -22,6 +22,7 @@ from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
 from src.application.use_cases.revise_posts import RevisePostsUseCase
 from src.application.use_cases.submit_indexing import SubmitIndexingUseCase
+from src.domain.exceptions import LoginFailedError
 from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.publish_policy import PublishPolicy
 from src.domain.services.quota_manager import QuotaManager
@@ -182,8 +183,7 @@ def _publish_pages(config: Config) -> None:
     browser.start()
     try:
         if not browser.login():
-            logger.error("로그인 실패 — 페이지 발행 중단")
-            return
+            raise LoginFailedError("Tistory 로그인 실패 — 페이지 발행 중단")
 
         results = publish_pages(
             browser._sb,
@@ -464,8 +464,7 @@ def _sync_categories(config: Config, *, auto_update: bool = False) -> None:
     browser.start()
     try:
         if not browser.login():
-            logger.error("로그인 실패 — 카테고리 동기화 중단")
-            return
+            raise LoginFailedError("Tistory 로그인 실패 — 카테고리 동기화 중단")
 
         sync_port = SeleniumCategorySyncAdapter(
             sb=browser._sb,
@@ -545,8 +544,7 @@ def _set_thumbnails(
     browser.start()
     try:
         if not browser.login():
-            logger.error("로그인 실패 — 썸네일 설정 중단")
-            return
+            raise LoginFailedError("Tistory 로그인 실패 — 썸네일 설정 중단")
 
         uc = SetThumbnailsUseCase(
             repo=repo,

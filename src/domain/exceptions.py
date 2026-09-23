@@ -30,3 +30,12 @@ class DailyPublishLimitError(DomainError):
 
 class PostNotRevisableError(DomainError):
     """수정 불가 상태에서 수정 시도 시 발생."""
+
+
+class LoginFailedError(DomainError):
+    """블로그 플랫폼 로그인 실패.
+
+    조용히 return하면 exit 0이 되어 launchd가 성공으로 기록하고,
+    장애가 몇 달간 드러나지 않는다(2026-05-06 ~ 09-21 실제 사례).
+    예외로 올려 main()의 알림·non-zero 종료 경로를 타게 한다.
+    """

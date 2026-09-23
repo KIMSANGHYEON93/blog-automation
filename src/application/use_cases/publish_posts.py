@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.domain.entities.post import Post
-from src.domain.exceptions import DailyPublishLimitError
+from src.domain.exceptions import DailyPublishLimitError, LoginFailedError
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.post_repository import PostRepository
 from src.domain.services.keyword_matcher import find_duplicate
@@ -96,8 +96,7 @@ class PublishPostsUseCase:
         self._browser.start()
         try:
             if not self._browser.login():
-                logger.error("로그인 실패 — 발행 중단")
-                return stats
+                raise LoginFailedError("Tistory 로그인 실패 — 발행 중단")
 
             consecutive_failures = 0
             for post in publishable:

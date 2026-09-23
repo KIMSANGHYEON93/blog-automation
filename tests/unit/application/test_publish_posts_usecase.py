@@ -1,10 +1,12 @@
 """Unit tests for PublishPostsUseCase — TDD RED phase."""
 from __future__ import annotations
 
+import pytest
+
 from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.domain.entities.post import Post
-from src.domain.exceptions import DailyPublishLimitError
+from src.domain.exceptions import DailyPublishLimitError, LoginFailedError
 from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.publish_policy import PublishPolicy
 from src.domain.services.quota_manager import QuotaManager
@@ -113,15 +115,17 @@ class TestPublishPostsFailure:
         assert saved.status == PostStatus.FAILED
         assert "에디터 로딩 실패" in saved.error_message
 
-    def test_로그인_실패_즉시_중단(self):
+    def test_로그인_실패는_예외로_중단(self):
+        """조용한 return은 exit 0이 되어 장애를 숨긴다 —
+        자세한 계약은 test_login_failure_is_loud.py 참고."""
         posts = [make_publishable_post(1), make_publishable_post(2)]
         repo = InMemoryPostRepository(posts)
         browser = MockBrowserAdapter(login_success=False)
         use_case = make_use_case(repo, browser)
 
-        stats = use_case.execute()
+        with pytest.raises(LoginFailedError):
+            use_case.execute()
 
-        assert stats.published == 0
         assert len(browser.published_posts) == 0
         assert browser.stopped is True
 

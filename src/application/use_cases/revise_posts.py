@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.domain.entities.post import Post
-from src.domain.exceptions import DailyPublishLimitError
+from src.domain.exceptions import DailyPublishLimitError, LoginFailedError
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.post_repository import PostRepository
 
@@ -45,8 +45,7 @@ class RevisePostsUseCase:
         self._browser.start()
         try:
             if not self._browser.login():
-                logger.error("로그인 실패 — 수정 중단")
-                return stats
+                raise LoginFailedError("Tistory 로그인 실패 — 수정 중단")
 
             for post in posts:
                 self._enricher.enrich_with_related_links(

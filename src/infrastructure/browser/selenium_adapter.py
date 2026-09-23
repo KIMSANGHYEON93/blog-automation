@@ -1,9 +1,11 @@
 """SeleniumBrowserAdapter — BrowserPort implementation using SeleniumBase."""
 from __future__ import annotations
 
+import contextlib
 import logging
 import random
 import time
+from pathlib import Path
 
 from src.domain.entities.post import Post
 from src.domain.ports.browser_port import BrowserPort
@@ -12,9 +14,14 @@ from src.domain.value_objects.credentials import Credentials
 from src.domain.value_objects.publish_result import PublishResult
 from src.domain.value_objects.site_profile import SiteProfile
 from src.infrastructure.browser.kakao_auth import kakao_login
+from src.infrastructure.browser.session_login import try_session_login
+from src.infrastructure.browser.session_store import SessionStore
 from src.infrastructure.browser.tistory_editor import publish_post, update_post
 
 logger = logging.getLogger(__name__)
+
+# .browser_data/ 아래에 둔다 — .gitignore에 이미 걸려 있다.
+SESSION_FILENAME = "tistory_session.json"
 
 
 class SeleniumBrowserAdapter(BrowserPort):
@@ -92,12 +99,32 @@ class SeleniumBrowserAdapter(BrowserPort):
             pass
 
     def login(self) -> bool:
-        return kakao_login(
+        """저장된 세션을 먼저 쓰고, 죽었을 때만 카카오 OAuth를 탄다.
+
+        매 실행이 OAuth를 다시 타면 로그인 횟수가 실행 횟수와 같아지고
+        카카오 이상탐지가 2FA를 띄운다(2026-09-23 실측: 기동 7회에 2FA 3회).
+        """
+        blog = self._credentials.tistory_blog
+        store = self._session_store()
+        if try_session_login(self._sb, blog, store.load()):
+            return True
+        store.clear()
+
+        ok = kakao_login(
             self._sb,
             self._credentials.kakao_id,
             self._credentials.kakao_pw,
             notifier=self._notifier,
         )
+        if ok:
+            # 다음 실행이 OAuth를 건너뛰도록 세션을 남긴다.
+            with contextlib.suppress(Exception):
+                store.save(self._sb.get_cookies())
+        return ok
+
+    def _session_store(self) -> SessionStore:
+        base = self._user_data_dir or "."
+        return SessionStore(Path(base) / SESSION_FILENAME)
 
     def publish(self, post: Post) -> PublishResult:
         result = publish_post(

@@ -1,0 +1,1099 @@
+{
+  "name": "Blog Automation Pipeline A — Naver",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "node-1-schedule",
+      "name": "Schedule Trigger (02:00 AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1VbyEQNuIAKpmTfk_5pTIjuLb3xlS-kdUfWflmfnFJSA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "naver_calendar",
+          "mode": "name"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "detectAutomatically"
+            }
+          }
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "상태",
+              "lookupValue": "대기"
+            }
+          ]
+        },
+        "combineFilters": "AND"
+      },
+      "id": "node-2-sheets-read",
+      "name": "Sheets Read (Status=대기)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "nhf35GDbBrsmSN2q",
+          "name": "Google Service Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://openapi.naver.com/v1/search/blog.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json['키워드'] }}"
+            },
+            {
+              "name": "display",
+              "value": "5"
+            },
+            {
+              "name": "sort",
+              "value": "sim"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "naver-blog-search",
+      "name": "Naver Blog Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        300
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "naverSearchCustomAuth01",
+          "name": "Naver Search API (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Parse SERP Data (네이버판) — 네이버 블로그 검색 결과를 프롬프트용으로 정리\n * Mode: runOnceForEachItem\n * 입력: Naver Blog Search 노드 응답 (openapi.naver.com/v1/search/blog.json)\n * 출력: 시트 행 + serp_text, top_posts, search_ok\n * 노드 이름은 'Parse SERP Data' 그대로 둔다 — URL Validation이 이 이름으로 serp_urls를 읽는다.\n */\n\nconst TOP_LIMIT = 5;\n\nfunction stripTags(value) {\n  return String(value || '')\n    .replace(/<[^>]+>/g, '')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;/g, \"'\")\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&amp;/g, '&')\n    .trim();\n}\n\nfunction summarizeNaverBlogResults(response, limit = TOP_LIMIT) {\n  const items = response && Array.isArray(response.items) ? response.items : [];\n  const topPosts = items.slice(0, limit).map((it) => ({\n    title: stripTags(it.title),\n    description: stripTags(it.description),\n    link: it.link || '',\n    postdate: it.postdate || '',\n  }));\n  const serpText = topPosts\n    .map((p, i) => `${i + 1}. ${p.title}\\n   ${p.description}`)\n    .join('\\n');\n  return { topPosts, serpText, total: Number((response && response.total) || 0) };\n}\n\nif (typeof $input === 'undefined') {\n  module.exports = { stripTags, summarizeNaverBlogResults };\n  return;\n}\n\nconst summary = summarizeNaverBlogResults($input.item.json);\nconst sheetData = $('Sheets Read (Status=대기)').item.json;\n\nreturn {\n  json: {\n    ...sheetData,\n    serp_text: summary.serpText || '(네이버 검색 결과 없음)',\n    top_posts: summary.topPosts,\n    naver_result_total: summary.total,\n    search_ok: summary.topPosts.length > 0,\n    serp_urls: [],      // 경쟁 블로그 글은 인용하지 않는다\n    official_urls: [],  // Fetch Official Docs는 건너뛴다\n  },\n};\n"
+      },
+      "id": "node-3b-parse-serp",
+      "name": "Parse SERP Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Route Prompt (네이버판) — 키워드 유형별 네이버 프롬프트 선택 + 사용자 메시지 조립\n * Mode: runOnceForEachItem\n * 노드 이름은 'Route Prompt (A/B/C)' 그대로 둔다 — Parse JSON Response·Sheets Update가 참조한다.\n * PROMPTS는 scripts/build_naver_workflow.py가 n8n/prompts/prompt_naver_*.md로 채운다.\n */\n\nconst PROMPTS = /*INJECT:PROMPTS*/ {\"E\": \"# 네이버 블로그 공통 작성 규칙\\n\\n당신은 IT·AI 도구를 업무에 쓰는 직장인 독자를 위해 네이버 블로그 글을 쓰는 작가입니다.\\n독자는 개발자가 아닐 수 있습니다. 전문 용어는 처음 나올 때 한 줄로 풀어 씁니다.\\n\\n## 문체\\n- 해요체로 씁니다(\\\"~해요\\\", \\\"~예요\\\"). 반말, 과장된 감탄사, 이모지 남발은 쓰지 않습니다\\n- 한 문단은 2~3문장, 250자 이내로 씁니다. 모바일 화면에서 한 번에 읽히는 길이입니다\\n- 문장은 짧게, 한 문장에 정보 하나만 담습니다\\n\\n## 경험을 지어내지 않습니다 (가장 중요)\\n- \\\"직접 써보니\\\", \\\"제가 해보니\\\", \\\"저희 팀은\\\" 같은 1인칭 경험을 쓰지 않습니다. 당신은 그 경험을 하지 않았습니다\\n- 대신 판단과 팁으로 씁니다: \\\"이럴 때는 ~하는 편이 안전해요\\\", \\\"처음 쓰는 분들이 자주 놓치는 부분은 ~예요\\\"\\n- 수치·가격·버전은 확인된 것만 쓰고, 바뀔 수 있는 값은 \\\"작성 기준일 기준\\\"이라고 밝힙니다\\n\\n## 키워드\\n- 제목 앞부분에 키워드를 그대로 1회 넣습니다\\n- 본문에는 키워드를 자연스럽게 3~6회만 씁니다. 한 문단에 두 번 넣지 않습니다\\n- 키워드를 나열하거나 문장을 억지로 비트는 것은 네이버가 명시한 저품질 신호입니다\\n\\n## 구성\\n- 본문은 마크다운이며 공백 포함 3,000자 이상입니다\\n- `##` 소제목을 3개 이상 둡니다. 소제목만 읽어도 글 흐름이 보이게 합니다\\n- 코드 블록은 쓰지 않는 것이 원칙이고, 꼭 필요하면 1개까지만 씁니다\\n- 외부 링크는 공식 문서(제품 공식 사이트·공식 도움말)만 3개 이하로 둡니다. 다른 블로그 링크는 넣지 않습니다\\n- 마지막 소제목은 `## 자주 묻는 질문`이고, 질문 3개를 `###`로 씁니다\\n\\n## 상위 글보다 나은 글\\n- 사용자 메시지의 \\\"네이버 검색 상위 글\\\"을 읽고, 거기에 없는 정보를 1개 이상 반드시 넣습니다\\n  (예: 흔한 실수와 해결법, 상황별 선택 기준, 비용·제한 사항, 대안 비교)\\n- 상위 글의 문장을 베끼거나 순서만 바꿔 쓰지 않습니다\\n\\n## 출력 형식\\n반드시 아래 JSON 하나만 출력합니다. JSON 밖에 다른 글을 쓰지 않습니다.\\n\\n```json\\n{\\n  \\\"title\\\": \\\"키워드로 시작하는 제목 (25~40자)\\\",\\n  \\\"meta_description\\\": \\\"검색 결과에 보일 요약 (80~120자)\\\",\\n  \\\"faq_schema\\\": [\\n    {\\\"question\\\": \\\"질문1\\\", \\\"answer\\\": \\\"답변1 (80자 이상)\\\"},\\n    {\\\"question\\\": \\\"질문2\\\", \\\"answer\\\": \\\"답변2 (80자 이상)\\\"},\\n    {\\\"question\\\": \\\"질문3\\\", \\\"answer\\\": \\\"답변3 (80자 이상)\\\"}\\n  ],\\n  \\\"references\\\": [\\\"공식 문서 URL\\\"],\\n  \\\"tags\\\": [\\\"태그 8~12개\\\"],\\n  \\\"internal_link_keywords\\\": [\\\"관련 키워드1\\\", \\\"관련 키워드2\\\", \\\"관련 키워드3\\\"],\\n  \\\"content\\\": \\\"마크다운 본문 전체\\\"\\n}\\n```\\n\\n# 유형 E: 활용법·따라하기\\n\\n이 키워드는 \\\"어떻게 하는지\\\"를 찾는 검색입니다 (예: 노션 AI 사용법, ChatGPT로 엑셀 자동화).\\n\\n## 본문 구조\\n1. 도입 (소제목 없이 2~3문단): 어떤 상황에서 이 방법이 필요한지, 이 글을 읽으면 무엇을 할 수 있는지\\n2. `## 시작하기 전에 확인할 것`: 필요한 계정·요금제·권한을 목록으로\\n3. `## 단계별로 따라하기`: `### 1단계 ...` 형식으로 4~7단계. 각 단계는 \\\"무엇을 누르는지 → 무엇이 보이는지\\\" 순서\\n4. `## 자주 막히는 부분`: 흔한 실수 2~3개와 해결법. 상위 글에 없는 정보는 주로 여기에 넣습니다\\n5. `## 정리`: 핵심 세 줄 요약\\n6. `## 자주 묻는 질문`\", \"F\": \"# 네이버 블로그 공통 작성 규칙\\n\\n당신은 IT·AI 도구를 업무에 쓰는 직장인 독자를 위해 네이버 블로그 글을 쓰는 작가입니다.\\n독자는 개발자가 아닐 수 있습니다. 전문 용어는 처음 나올 때 한 줄로 풀어 씁니다.\\n\\n## 문체\\n- 해요체로 씁니다(\\\"~해요\\\", \\\"~예요\\\"). 반말, 과장된 감탄사, 이모지 남발은 쓰지 않습니다\\n- 한 문단은 2~3문장, 250자 이내로 씁니다. 모바일 화면에서 한 번에 읽히는 길이입니다\\n- 문장은 짧게, 한 문장에 정보 하나만 담습니다\\n\\n## 경험을 지어내지 않습니다 (가장 중요)\\n- \\\"직접 써보니\\\", \\\"제가 해보니\\\", \\\"저희 팀은\\\" 같은 1인칭 경험을 쓰지 않습니다. 당신은 그 경험을 하지 않았습니다\\n- 대신 판단과 팁으로 씁니다: \\\"이럴 때는 ~하는 편이 안전해요\\\", \\\"처음 쓰는 분들이 자주 놓치는 부분은 ~예요\\\"\\n- 수치·가격·버전은 확인된 것만 쓰고, 바뀔 수 있는 값은 \\\"작성 기준일 기준\\\"이라고 밝힙니다\\n\\n## 키워드\\n- 제목 앞부분에 키워드를 그대로 1회 넣습니다\\n- 본문에는 키워드를 자연스럽게 3~6회만 씁니다. 한 문단에 두 번 넣지 않습니다\\n- 키워드를 나열하거나 문장을 억지로 비트는 것은 네이버가 명시한 저품질 신호입니다\\n\\n## 구성\\n- 본문은 마크다운이며 공백 포함 3,000자 이상입니다\\n- `##` 소제목을 3개 이상 둡니다. 소제목만 읽어도 글 흐름이 보이게 합니다\\n- 코드 블록은 쓰지 않는 것이 원칙이고, 꼭 필요하면 1개까지만 씁니다\\n- 외부 링크는 공식 문서(제품 공식 사이트·공식 도움말)만 3개 이하로 둡니다. 다른 블로그 링크는 넣지 않습니다\\n- 마지막 소제목은 `## 자주 묻는 질문`이고, 질문 3개를 `###`로 씁니다\\n\\n## 상위 글보다 나은 글\\n- 사용자 메시지의 \\\"네이버 검색 상위 글\\\"을 읽고, 거기에 없는 정보를 1개 이상 반드시 넣습니다\\n  (예: 흔한 실수와 해결법, 상황별 선택 기준, 비용·제한 사항, 대안 비교)\\n- 상위 글의 문장을 베끼거나 순서만 바꿔 쓰지 않습니다\\n\\n## 출력 형식\\n반드시 아래 JSON 하나만 출력합니다. JSON 밖에 다른 글을 쓰지 않습니다.\\n\\n```json\\n{\\n  \\\"title\\\": \\\"키워드로 시작하는 제목 (25~40자)\\\",\\n  \\\"meta_description\\\": \\\"검색 결과에 보일 요약 (80~120자)\\\",\\n  \\\"faq_schema\\\": [\\n    {\\\"question\\\": \\\"질문1\\\", \\\"answer\\\": \\\"답변1 (80자 이상)\\\"},\\n    {\\\"question\\\": \\\"질문2\\\", \\\"answer\\\": \\\"답변2 (80자 이상)\\\"},\\n    {\\\"question\\\": \\\"질문3\\\", \\\"answer\\\": \\\"답변3 (80자 이상)\\\"}\\n  ],\\n  \\\"references\\\": [\\\"공식 문서 URL\\\"],\\n  \\\"tags\\\": [\\\"태그 8~12개\\\"],\\n  \\\"internal_link_keywords\\\": [\\\"관련 키워드1\\\", \\\"관련 키워드2\\\", \\\"관련 키워드3\\\"],\\n  \\\"content\\\": \\\"마크다운 본문 전체\\\"\\n}\\n```\\n\\n# 유형 F: 도구 비교·추천\\n\\n이 키워드는 두 가지 이상을 비교하는 검색입니다 (예: Claude vs ChatGPT 업무용, 노션 AI 옵시디언 차이).\\n\\n## 본문 구조\\n1. 도입: 한 줄 결론을 먼저 씁니다 (\\\"문서 작업 위주면 A, 자동화 연동이 중요하면 B가 맞아요\\\")\\n2. `## 한눈에 비교`: 마크다운 표. 비교 항목 6행 이상 (가격, 강점, 약점, 한국어 품질, 연동, 사용 제한)\\n3. `## 이런 분께는 A가 맞아요`, `## 이런 분께는 B가 맞아요`: 상황별 추천 이유 (A, B는 실제 이름으로)\\n4. `## 고를 때 놓치기 쉬운 점`: 요금제 제한, 데이터 정책 등 상위 글에 없는 판단 기준\\n5. `## 자주 묻는 질문`\\n\\n- 한쪽을 일방적으로 깎아내리지 않습니다. 각자의 약점을 사실대로 씁니다\", \"G\": \"# 네이버 블로그 공통 작성 규칙\\n\\n당신은 IT·AI 도구를 업무에 쓰는 직장인 독자를 위해 네이버 블로그 글을 쓰는 작가입니다.\\n독자는 개발자가 아닐 수 있습니다. 전문 용어는 처음 나올 때 한 줄로 풀어 씁니다.\\n\\n## 문체\\n- 해요체로 씁니다(\\\"~해요\\\", \\\"~예요\\\"). 반말, 과장된 감탄사, 이모지 남발은 쓰지 않습니다\\n- 한 문단은 2~3문장, 250자 이내로 씁니다. 모바일 화면에서 한 번에 읽히는 길이입니다\\n- 문장은 짧게, 한 문장에 정보 하나만 담습니다\\n\\n## 경험을 지어내지 않습니다 (가장 중요)\\n- \\\"직접 써보니\\\", \\\"제가 해보니\\\", \\\"저희 팀은\\\" 같은 1인칭 경험을 쓰지 않습니다. 당신은 그 경험을 하지 않았습니다\\n- 대신 판단과 팁으로 씁니다: \\\"이럴 때는 ~하는 편이 안전해요\\\", \\\"처음 쓰는 분들이 자주 놓치는 부분은 ~예요\\\"\\n- 수치·가격·버전은 확인된 것만 쓰고, 바뀔 수 있는 값은 \\\"작성 기준일 기준\\\"이라고 밝힙니다\\n\\n## 키워드\\n- 제목 앞부분에 키워드를 그대로 1회 넣습니다\\n- 본문에는 키워드를 자연스럽게 3~6회만 씁니다. 한 문단에 두 번 넣지 않습니다\\n- 키워드를 나열하거나 문장을 억지로 비트는 것은 네이버가 명시한 저품질 신호입니다\\n\\n## 구성\\n- 본문은 마크다운이며 공백 포함 3,000자 이상입니다\\n- `##` 소제목을 3개 이상 둡니다. 소제목만 읽어도 글 흐름이 보이게 합니다\\n- 코드 블록은 쓰지 않는 것이 원칙이고, 꼭 필요하면 1개까지만 씁니다\\n- 외부 링크는 공식 문서(제품 공식 사이트·공식 도움말)만 3개 이하로 둡니다. 다른 블로그 링크는 넣지 않습니다\\n- 마지막 소제목은 `## 자주 묻는 질문`이고, 질문 3개를 `###`로 씁니다\\n\\n## 상위 글보다 나은 글\\n- 사용자 메시지의 \\\"네이버 검색 상위 글\\\"을 읽고, 거기에 없는 정보를 1개 이상 반드시 넣습니다\\n  (예: 흔한 실수와 해결법, 상황별 선택 기준, 비용·제한 사항, 대안 비교)\\n- 상위 글의 문장을 베끼거나 순서만 바꿔 쓰지 않습니다\\n\\n## 출력 형식\\n반드시 아래 JSON 하나만 출력합니다. JSON 밖에 다른 글을 쓰지 않습니다.\\n\\n```json\\n{\\n  \\\"title\\\": \\\"키워드로 시작하는 제목 (25~40자)\\\",\\n  \\\"meta_description\\\": \\\"검색 결과에 보일 요약 (80~120자)\\\",\\n  \\\"faq_schema\\\": [\\n    {\\\"question\\\": \\\"질문1\\\", \\\"answer\\\": \\\"답변1 (80자 이상)\\\"},\\n    {\\\"question\\\": \\\"질문2\\\", \\\"answer\\\": \\\"답변2 (80자 이상)\\\"},\\n    {\\\"question\\\": \\\"질문3\\\", \\\"answer\\\": \\\"답변3 (80자 이상)\\\"}\\n  ],\\n  \\\"references\\\": [\\\"공식 문서 URL\\\"],\\n  \\\"tags\\\": [\\\"태그 8~12개\\\"],\\n  \\\"internal_link_keywords\\\": [\\\"관련 키워드1\\\", \\\"관련 키워드2\\\", \\\"관련 키워드3\\\"],\\n  \\\"content\\\": \\\"마크다운 본문 전체\\\"\\n}\\n```\\n\\n# 유형 G: 개념 쉽게 설명\\n\\n이 키워드는 용어의 뜻을 찾는 검색입니다 (예: MCP란, RAG 쉽게).\\n\\n## 본문 구조\\n1. 도입: 일상 비유 하나로 시작합니다 (\\\"RAG는 오픈북 시험과 비슷해요\\\")\\n2. `## ○○란 무엇인가요` (○○는 실제 용어): 한 문장 정의 → 풀어 쓴 설명\\n3. `## 어떻게 작동하나요`: 3~5단계 흐름. 필요하면 목록으로\\n4. `## 실무에서는 이렇게 쓰여요`: 직장인이 체감할 사례 2~3개\\n5. `## 흔한 오해`: 헷갈리는 개념과의 차이. 사용자 메시지에 \\\"내부 용어 정의\\\"가 있으면 그 정의와 혼동 포인트를 반드시 반영합니다\\n6. `## 자주 묻는 질문`\"} /*END:PROMPTS*/;\n\nconst JSON_SAFETY_NOTE = `\n\n## 중요: JSON 형식 규칙\n- 반드시 유효한 JSON을 출력하세요.\n- content 필드의 줄바꿈은 반드시 \\\\n으로 이스케이프하세요.\n- 문자열 내 큰따옴표는 반드시 \\\\\"으로 이스케이프하세요.\n- 문자열 내 백슬래시는 반드시 \\\\\\\\로 이스케이프하세요.\n`;\n\nfunction termNames(row) {\n  return [row['용어'], ...String(row['별칭'] || '').split(',')]\n    .map((s) => String(s || '').trim().toLowerCase())\n    .filter((s) => s.length > 1);\n}\n\nfunction matchBrainTerms(keyword, rows, limit = 3) {\n  const kw = String(keyword || '').toLowerCase();\n  return (rows || [])\n    .filter((r) => termNames(r).some((n) => kw.includes(n) || n.includes(kw)))\n    .slice(0, limit);\n}\n\n// 부분 일치로 유형을 정하면 'AI' 같은 짧은 용어가 대부분의 키워드를 G로 끌고 간다\nfunction isExactBrainTerm(keyword, rows) {\n  const kw = String(keyword || '').trim().toLowerCase();\n  return (rows || []).some((r) => termNames(r).includes(kw));\n}\n\nfunction choosePromptType(keyword, category, exactBrainTerm) {\n  const kw = String(keyword || '').toLowerCase();\n  if (/vs|비교|차이/.test(kw) || String(category || '').includes('비교')) return 'F';\n  if (exactBrainTerm || /(란|이란|뜻|개념|쉽게)(\\s|$)/.test(kw)) return 'G';\n  return 'E';\n}\n\nfunction formatTopPosts(topPosts) {\n  if (!topPosts || topPosts.length === 0) return '(네이버 검색 결과 없음)';\n  return topPosts.map((p, i) => `${i + 1}. ${p.title}\\n   ${p.description}`).join('\\n');\n}\n\nfunction buildUserMessage({ keyword, yearMonth, topPosts, brainCards }) {\n  const brainSection = brainCards && brainCards.length\n    ? '\\n\\n## 내부 용어 정의 (이 정의를 우선 적용하고, 혼동 포인트를 본문에서 짚을 것)\\n'\n      + brainCards.map((r) => `### ${r['용어']}\\n- 정의: ${r['한줄정의']}\\n- 혼동 포인트: ${r['혼동포인트'] || '-'}`).join('\\n\\n')\n    : '';\n  return `키워드: ${keyword}\\n작성 기준일: ${yearMonth}${brainSection}`\n    + `\\n\\n## 네이버 검색 상위 글 (이 글들에 없는 정보를 1개 이상 넣을 것, 문장 베끼기 금지)\\n`\n    + formatTopPosts(topPosts);\n}\n\nif (typeof $input === 'undefined') {\n  module.exports = { PROMPTS, matchBrainTerms, isExactBrainTerm, choosePromptType, buildUserMessage };\n  return;\n}\n\nconst input = $input.item.json;\nconst keyword = input['키워드'] || '';\nconst brainRows = $('Sheets Read (Brain Terms)').all().map((i) => i.json);\nconst promptType = choosePromptType(keyword, input['콘텐츠유형'], isExactBrainTerm(keyword, brainRows));\nconst today = new Date();\n\nreturn {\n  json: {\n    keyword,\n    category: input['콘텐츠유형'] || '',\n    row_index: input['__row_index'] || input['row_number'] || 0,\n    prompt_type: promptType,\n    system_prompt: PROMPTS[promptType] + JSON_SAFETY_NOTE,\n    user_message: buildUserMessage({\n      keyword,\n      yearMonth: `${today.getFullYear()}년 ${today.getMonth() + 1}월`,\n      topPosts: input.top_posts || [],\n      brainCards: matchBrainTerms(keyword, brainRows),\n    }),\n  },\n};\n"
+      },
+      "id": "node-4-route-prompt",
+      "name": "Route Prompt (A/B/C)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Build LLM Request — provider별 URL/headers/body 생성\n * 입력: system_prompt, user_message, _llm_purpose(optional)\n * 출력: _llm_url, _llm_headers, _llm_body, _llm_provider + 원본 데이터 패스스루\n */\n\nconst provider = $env.LLM_PROVIDER || 'gemini';\nconst systemPrompt = $input.item.json.system_prompt;\nconst userMessage = $input.item.json.user_message;\nconst purpose = $input.item.json._llm_purpose || 'content_gen';\n\nconst PROVIDERS = {\n  gemini: {\n    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`,\n    // API 키는 n8n Credential(Header Auth, x-goog-api-key)이 주입한다 —\n    // URL/헤더에 넣으면 실행 기록에 평문으로 남는다\n    headers: { 'content-type': 'application/json' },\n    body: (sys, user, opts) => {\n      const payload = {\n        contents: [{ role: 'user', parts: [{ text: user }] }],\n        systemInstruction: { parts: [{ text: sys }] },\n        generationConfig: { maxOutputTokens: opts.maxTokens, temperature: opts.temperature },\n      };\n      // Search Grounding: 콘텐츠 생성 시 Google 검색으로 실시간 팩트 기반 응답\n      if (opts.useSearchGrounding) {\n        payload.tools = [{ google_search: {} }];\n      }\n      return payload;\n    },\n  },\n  claude: {\n    url: 'https://api.anthropic.com/v1/messages',\n    // API 키는 n8n Credential(Header Auth, x-api-key)이 주입한다.\n    // LLM_PROVIDER=claude로 바꿀 때는 LLM Request 노드 2개의 자격증명을\n    // 'Claude API Key (Header)'로 함께 바꿔야 한다.\n    headers: {\n      'anthropic-version': '2023-06-01',\n      'content-type': 'application/json',\n    },\n    body: (sys, user, opts) => ({\n      model: opts.model || 'claude-sonnet-4-5-20250514',\n      max_tokens: opts.maxTokens,\n      temperature: opts.temperature,\n      system: sys,\n      messages: [{ role: 'user', content: user }],\n    }),\n  },\n};\n\nconst config = PROVIDERS[provider];\nif (!config) throw new Error(`지원하지 않는 LLM provider: ${provider}`);\n\nconst opts = purpose === 'verification'\n  ? { maxTokens: 4096, temperature: 0, model: 'claude-haiku-4-5-20251001' }\n  : { maxTokens: 32768, temperature: 0.7, useSearchGrounding: true };\n\nreturn {\n  json: {\n    _llm_url: config.url,\n    _llm_headers: config.headers,\n    _llm_body: config.body(systemPrompt, userMessage, opts),\n    _llm_provider: provider,\n    ...Object.fromEntries(\n      Object.entries($input.item.json).filter(([k]) => !k.startsWith('_llm'))\n    ),\n  }\n};\n"
+      },
+      "id": "node-build-llm-content",
+      "name": "Build LLM Request (Content Gen)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json._llm_url }}",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify($json._llm_headers) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json._llm_body) }}",
+        "options": {
+          "timeout": 300000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "node-5-llm-content",
+      "name": "LLM Request (Content Gen)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1960,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 15000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "geminiHeaderAuth01",
+          "name": "Gemini API Key (Header)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Normalize LLM Response — provider별 응답에서 텍스트 추출\n * Gemini: candidates[0].content.parts[0].text\n * Claude: content[0].text\n */\n\nconst provider = $input.item.json._llm_provider\n  || $env.LLM_PROVIDER\n  || 'gemini';\n\nlet text;\nconst data = $input.item.json;\n\nif (provider === 'gemini') {\n  const parts = data.candidates?.[0]?.content?.parts || [];\n  // 추론 모델 + Search Grounding 응답은 텍스트가 여러 part로 분할될 수 있음\n  text = parts.filter(p => !p.thought && typeof p.text === 'string').map(p => p.text).join('');\n  if (!text) {\n    throw new Error(`Gemini 빈 응답 (finishReason: ${data.candidates?.[0]?.finishReason || 'unknown'})`);\n  }\n} else if (provider === 'claude') {\n  text = data.content[0].text;\n} else {\n  throw new Error(`지원하지 않는 provider 응답: ${provider}`);\n}\n\nreturn { json: { text, _llm_provider: provider } };\n"
+      },
+      "id": "node-normalize-content",
+      "name": "Normalize Response (Content Gen)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2140,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Node 6: LLM 응답 JSON 파싱 + 필수 필드 검증\n * Mode: runOnceForEachItem\n * 입력: 정규화된 LLM 응답 (text)\n * 출력: 파싱된 JSON 또는 에러\n *\n * LLM이 생성한 JSON의 일반적 문제를 자동 복구:\n * - 문자열 내 이스케이프되지 않은 \" (YAML, 코드블록 등)\n * - 제어 문자 (raw newline/tab)\n * - 유효하지 않은 이스케이프 시퀀스 (\\g, \\e 등)\n */\n\nconst raw = $input.item.json.text;\n\n// 알려진 최상위 JSON 필드 목록 (구조적 키 판별에 사용)\nconst TOP_LEVEL_KEYS = new Set([\n  'title', 'url_slug', 'content', 'meta_description', 'faq_schema',\n  'references', 'internal_link_keywords', 'tags', '_warning',\n]);\n\n// === Step 1: JSON 블록 추출 ===\nlet jsonStr;\nconst fenceStart = raw.indexOf('```json');\nif (fenceStart !== -1) {\n  const contentStart = raw.indexOf('\\n', fenceStart);\n  const fenceEnd = raw.lastIndexOf('```');\n  if (contentStart !== -1 && fenceEnd > fenceStart + 7) {\n    jsonStr = raw.substring(contentStart + 1, fenceEnd).trim();\n  }\n}\nif (!jsonStr) {\n  const match = raw.match(/(\\{[\\s\\S]*\\})/);\n  if (!match) {\n    throw new Error(\"JSON 추출 실패: \" + raw.substring(0, 200));\n  }\n  jsonStr = match[1];\n}\n\n// === Step 2: Lenient JSON repair ===\n// 구조적 파싱으로 이스케이프되지 않은 \" 와 제어 문자를 자동 복구\nfunction repairJson(str) {\n  const VALID_ESCAPES = '\"\\\\\\/bfnrtu';\n  let result = '';\n  let i = 0;\n\n  function skipWS() {\n    while (i < str.length && /\\s/.test(str[i])) { result += str[i++]; }\n  }\n\n  function parseValue() {\n    skipWS();\n    if (i >= str.length) return;\n    if (str[i] === '\"') parseString();\n    else if (str[i] === '{') parseObject();\n    else if (str[i] === '[') parseArray();\n    else parseLiteral();\n  }\n\n  function parseString() {\n    result += str[i++]; // opening \"\n\n    while (i < str.length) {\n      const ch = str[i];\n\n      // 이스케이프 시퀀스\n      if (ch === '\\\\' && i + 1 < str.length) {\n        const next = str[i + 1];\n        if (VALID_ESCAPES.includes(next)) {\n          result += ch + next;\n        } else {\n          // 유효하지 않은 이스케이프 → 백슬래시 이중 이스케이프\n          result += '\\\\\\\\' + next;\n        }\n        i += 2;\n        continue;\n      }\n\n      // 큰따옴표: 구조적 종료인지 content 내 인용부호인지 판단\n      if (ch === '\"') {\n        // 다음 비공백 문자로 판단\n        let peek = i + 1;\n        while (peek < str.length && /[\\s\\n\\r\\t]/.test(str[peek])) peek++;\n\n        if (peek >= str.length || ',:]}'.indexOf(str[peek]) !== -1) {\n          // 구조적 종료: 뒤에 , ] } : 또는 EOF\n          result += '\"';\n          i++;\n          return;\n        } else if (str[peek] === '\"') {\n          // 다음도 \" → 다음 \"...\" 사이가 유효한 JSON 키인지 검증\n          let j = peek + 1;\n          let candidateKey = '';\n          while (j < str.length && str[j] !== '\"' && str[j] !== ':') {\n            candidateKey += str[j];\n            j++;\n          }\n          // 조건 강화: (1) \" 로 닫혀야 하고 (2) 그 뒤에 : 이 있고\n          // (3) 키가 유효한 JSON 키 패턴 (짧고, 알파벳/언더스코어)\n          // (4) 알려진 최상위 필드명이어야 구조적 종료로 판단\n          if (j < str.length && str[j] === '\"') {\n            let k = j + 1;\n            while (k < str.length && /[\\s]/.test(str[k])) k++;\n            if (k < str.length && str[k] === ':'\n                && candidateKey.length > 0 && candidateKey.length < 30\n                && /^[a-zA-Z_][\\w_]*$/.test(candidateKey)\n                && TOP_LEVEL_KEYS.has(candidateKey)) {\n              // \"value\" \"known_key\": → 쉼표 누락이지만 구조적 종료\n              result += '\"';\n              i++;\n              return;\n            }\n          }\n          // 유효한 키가 아님 → content 내 인용부호\n          result += '\\\\\"';\n          i++;\n          continue;\n        } else {\n          // 뒤에 일반 문자 → content 내 이스케이프되지 않은 인용부호\n          result += '\\\\\"';\n          i++;\n          continue;\n        }\n      }\n\n      // 제어 문자\n      const code = ch.charCodeAt(0);\n      if (code <= 0x1f) {\n        if (code === 0x0a) result += '\\\\n';\n        else if (code === 0x0d) result += '\\\\r';\n        else if (code === 0x09) result += '\\\\t';\n        i++;\n        continue;\n      }\n\n      result += ch;\n      i++;\n    }\n  }\n\n  function parseObject() {\n    result += str[i++]; // {\n    skipWS();\n    let first = true;\n    while (i < str.length && str[i] !== '}') {\n      if (!first) {\n        if (str[i] === ',') result += str[i++];\n        // 쉼표 누락: \"}\" 아닌 다른 문자가 오면 쉼표 삽입\n        else {\n          skipWS();\n          if (i < str.length && str[i] === '\"') result += ',';\n        }\n      }\n      first = false;\n      skipWS();\n      if (i >= str.length || str[i] === '}') break;\n      parseString(); // key\n      skipWS();\n      if (i < str.length && str[i] === ':') result += str[i++];\n      parseValue();   // value\n      skipWS();\n    }\n    if (i < str.length && str[i] === '}') result += str[i++];\n  }\n\n  function parseArray() {\n    result += str[i++]; // [\n    skipWS();\n    let first = true;\n    while (i < str.length && str[i] !== ']') {\n      if (!first) {\n        if (str[i] === ',') result += str[i++];\n        else {\n          skipWS();\n          if (i < str.length && str[i] !== ']') result += ',';\n        }\n      }\n      first = false;\n      skipWS();\n      if (i >= str.length || str[i] === ']') break;\n      parseValue();\n      skipWS();\n    }\n    if (i < str.length && str[i] === ']') result += str[i++];\n  }\n\n  function parseLiteral() {\n    // number, boolean, null\n    while (i < str.length && /[^\\s,\\]}\\[]/.test(str[i])) {\n      result += str[i++];\n    }\n  }\n\n  parseValue();\n  return result;\n}\n\n// === Step 2.5: 필드 경계 기반 추출 (3차 폴백) ===\n// 최상위 키 위치를 정규식으로 찾아 값을 개별 추출 → 안전하게 이스케이프\nfunction extractByFieldBoundary(str) {\n  // 최상위 키의 시작 위치 찾기: \"key\" 다음에 : 이 오는 패턴\n  // 들여쓰기 기반 필터: 최상위 키는 보통 2~4칸 들여쓰기 또는 줄 시작\n  const keyPattern = /(?:^|[\\n{,])\\s*\"(title|content|meta_description|faq_schema|references|internal_link_keywords)\"\\s*:/g;\n  const seen = new Set();\n  const positions = [];\n  let m;\n  while ((m = keyPattern.exec(str)) !== null) {\n    // 각 키의 첫 번째 매치만 사용 (중복 방지)\n    if (seen.has(m[1])) continue;\n    seen.add(m[1]);\n    // 실제 키 시작 위치 보정 (prefix 문자 제외)\n    const keyStart = str.indexOf('\"' + m[1] + '\"', m.index);\n    const fullMatch = '\"' + m[1] + '\"';\n    let vs = keyStart + fullMatch.length;\n    while (vs < str.length && /[\\s:]/.test(str[vs])) vs++;\n    positions.push({ key: m[1], start: keyStart, valueStart: vs });\n  }\n  if (positions.length === 0) {\n    throw new Error(\"필드 경계를 찾을 수 없음\");\n  }\n  // 키 위치 순서로 정렬\n  positions.sort((a, b) => a.start - b.start);\n\n  const obj = {};\n  for (let pi = 0; pi < positions.length; pi++) {\n    const pos = positions[pi];\n    // 값 영역: 현재 valueStart ~ 다음 키의 start (또는 문자열 끝)\n    const valueEnd = pi + 1 < positions.length ? positions[pi + 1].start : str.length;\n    let rawValue = str.substring(pos.valueStart, valueEnd).trim();\n\n    // 후행 쉼표 제거\n    if (rawValue.endsWith(',')) rawValue = rawValue.slice(0, -1).trim();\n    // 마지막 필드일 때 닫는 } 제거\n    if (pi === positions.length - 1 && rawValue.endsWith('}')) {\n      rawValue = rawValue.slice(0, -1).trim();\n      if (rawValue.endsWith(',')) rawValue = rawValue.slice(0, -1).trim();\n    }\n\n    // 배열/객체 값은 직접 파싱 시도\n    if (rawValue.startsWith('[') || rawValue.startsWith('{')) {\n      try {\n        obj[pos.key] = JSON.parse(rawValue);\n        continue;\n      } catch (_) {\n        // 배열/객체 파싱 실패 → 문자열 repair 시도\n        try {\n          obj[pos.key] = JSON.parse(repairJson(rawValue));\n          continue;\n        } catch (__) {\n          // 배열 필드는 빈 배열로 초기화 (문자열로 저장 방지)\n          if (['faq_schema', 'references', 'internal_link_keywords'].includes(pos.key)) {\n            obj[pos.key] = [];\n            continue;\n          }\n          // 그 외 → 문자열로 저장\n        }\n      }\n    }\n\n    // 문자열 값: 앞뒤 \" 제거 후 내부 \" 이스케이프\n    if (rawValue.startsWith('\"')) rawValue = rawValue.slice(1);\n    if (rawValue.endsWith('\"')) rawValue = rawValue.slice(0, -1);\n    // 이미 이스케이프된 \\\" 보존, 나머지 \" 이스케이프\n    rawValue = rawValue.replace(/\\\\\"/g, '<<ESC_Q>>');\n    rawValue = rawValue.replace(/\"/g, '\\\\\"');\n    rawValue = rawValue.replace(/<<ESC_Q>>/g, '\\\\\"');\n    // 제어 문자 이스케이프\n    rawValue = rawValue.replace(/[\\x00-\\x1f]/g, (c) => {\n      if (c === '\\n') return '\\\\n';\n      if (c === '\\r') return '\\\\r';\n      if (c === '\\t') return '\\\\t';\n      return '';\n    });\n\n    try {\n      obj[pos.key] = JSON.parse('\"' + rawValue + '\"');\n    } catch (_) {\n      // 최후 수단: JSON.parse 없이 이스케이프만 직접 되돌린다.\n      // 그대로 두면 본문에 리터럴 \\n 이 남아 마크다운 변환기가 문단·헤딩을\n      // 인식하지 못하고 한 덩어리로 렌더링된다(2026-09-22 발행글 539·540).\n      obj[pos.key] = rawValue\n        .replace(/\\\\u([0-9a-fA-F]{4})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)))\n        .replace(/\\\\n/g, '\\n')\n        .replace(/\\\\r/g, '\\r')\n        .replace(/\\\\t/g, '\\t')\n        .replace(/\\\\\"/g, '\"')\n        .replace(/\\\\\\\\/g, '\\\\');\n    }\n  }\n\n  return obj;\n}\n\n// === Step 3: 파싱 ===\nlet parsed;\n\n// 1차: 그대로 파싱\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e1) {\n  // 2차: lenient repair 후 파싱\n  try {\n    const repaired = repairJson(jsonStr);\n    parsed = JSON.parse(repaired);\n  } catch (e2) {\n    // 3차: 필드 경계 추출 (content 필드의 unescaped quote 대응)\n    try {\n      parsed = extractByFieldBoundary(jsonStr);\n    } catch (e3) {\n      throw new Error(\"JSON 파싱 실패: \" + e1.message\n        + \" | repair 후: \" + e2.message\n        + \" | boundary 후: \" + e3.message);\n    }\n  }\n}\n\n// === Step 4: 필수 필드 검증 ===\nconst required = [\"title\", \"content\", \"meta_description\", \"faq_schema\",\n                  \"references\", \"internal_link_keywords\"];\nconst missing = required.filter(f => !parsed[f]);\nif (missing.length > 0) {\n  throw new Error(\"필수 필드 누락: \" + missing.join(\", \"));\n}\n\n// meta_description 길이 검증 (120~155자)\nconst metaLen = parsed.meta_description.length;\nif (metaLen < 120 || metaLen > 155) {\n  parsed._warning = `meta_description 길이: ${metaLen}자 (권장 120~155자)`;\n}\n\n// faq_schema 형식 검증\nif (!Array.isArray(parsed.faq_schema) || parsed.faq_schema.length === 0) {\n  throw new Error(\"faq_schema가 비어있거나 배열이 아닙니다\");\n}\nconst FAQ_PLACEHOLDER = /참조|참고하세요|확인하세요|문서를 보세요|홈페이지를 방문/;\nfor (const faq of parsed.faq_schema) {\n  if (!faq.question || !faq.answer) {\n    throw new Error(\"faq_schema 항목에 question/answer 누락\");\n  }\n  if (faq.answer.length < 80) {\n    throw new Error(`FAQ 답변 길이 부족: ${faq.answer.length}자 (최소 80자)`);\n  }\n  if (FAQ_PLACEHOLDER.test(faq.answer) && faq.answer.length < 120) {\n    throw new Error(`FAQ 답변이 플레이스홀더: \"${faq.answer.slice(0, 50)}...\"`);\n  }\n}\n\n// references 플레이스홀더 필터링\nif (Array.isArray(parsed.references)) {\n  parsed.references = parsed.references.filter(ref => {\n    if (typeof ref !== 'string') return false;\n    if (ref.length < 10) return false;\n    if (/^참조|^참고|^확인|^검색/.test(ref) && !ref.startsWith('http')) return false;\n    return true;\n  });\n}\n\n// 본문 길이 검증 (프롬프트 유형별 최소 글자 수)\nconst promptType = $('Route Prompt (A/B/C)').item.json.prompt_type || 'A';\nconst LENGTH_RULES = {\n  'A': { min: 1500 },\n  'B': { min: 2000 },\n  'C': { min: 2000 }\n};\nconst rule = LENGTH_RULES[promptType] || LENGTH_RULES['A'];\nif (parsed.content.length < rule.min) {\n  throw new Error(`본문 길이 부족: ${parsed.content.length}자 (최소 ${rule.min}자, 유형: ${promptType})`);\n}\n\nreturn { json: parsed };\n"
+      },
+      "id": "node-6-parse-json",
+      "name": "Parse JSON Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Validate Structure (네이버판) — 네이버 규칙을 코드로 검사\n * Mode: runOnceForEachItem\n * 입력: Parse JSON Response 출력 (title, content, tags)\n * 출력: 입력 + structure_validation { passed, issues, stats }\n * 여기서 실패하면 Parse Verification Result가 LLM 점수와 무관하게 검수필요로 보낸다.\n */\n\nconst LIMITS = {\n  minLength: 3000,\n  minH2: 3,\n  minKeywordCount: 1,\n  maxKeywordCount: 6,\n  maxExternalLinks: 3,\n  maxParagraphChars: 300,\n  maxCodeBlocks: 1,\n  minTags: 5,\n  maxTags: 15,\n};\n\n// 제목·표·목록·인용·코드는 문단 길이 검사에서 뺀다\nconst NON_PARAGRAPH = /^(#|\\||-|\\*|>|```|\\d+\\.\\s)/;\n\nfunction countOccurrences(text, word) {\n  const needle = String(word || '').trim().toLowerCase();\n  if (!needle) return 0;\n  return String(text || '').toLowerCase().split(needle).length - 1;\n}\n\nfunction longParagraphs(content, maxChars) {\n  return String(content || '')\n    .split(/\\n\\s*\\n/)\n    .map((block) => block.trim())\n    .filter((block) => block && !NON_PARAGRAPH.test(block))\n    .filter((block) => block.length > maxChars);\n}\n\nfunction titleHasKeyword(title, keyword) {\n  const squash = (s) => String(s || '').replace(/\\s+/g, '').toLowerCase();\n  const t = squash(title);\n  if (t.includes(squash(keyword))) return true;\n  const tokens = String(keyword || '').toLowerCase().split(/\\s+/).filter(Boolean);\n  return tokens.length > 0 && tokens.every((tok) => t.includes(tok));\n}\n\nfunction validateNaverStructure({ title, content, keyword, tags }) {\n  const text = String(content || '');\n  const issues = [];\n  const h2 = (text.match(/^## /gm) || []).length;\n  const keywordCount = countOccurrences(text, keyword);\n  const externalLinks = (text.match(/\\]\\(https?:\\/\\/[^)]+\\)/g) || []).length;\n  const codeBlocks = Math.floor((text.match(/^```/gm) || []).length / 2);\n  const longOnes = longParagraphs(text, LIMITS.maxParagraphChars);\n  const tagCount = Array.isArray(tags) ? tags.length : 0;\n\n  if (text.length < LIMITS.minLength) issues.push(`본문 길이 부족: ${text.length}자 (최소 ${LIMITS.minLength}자)`);\n  if (h2 < LIMITS.minH2) issues.push(`소제목(H2) 부족: ${h2}개 (최소 ${LIMITS.minH2}개)`);\n  if (!titleHasKeyword(title, keyword)) issues.push('제목에 키워드 없음');\n  if (keywordCount < LIMITS.minKeywordCount) issues.push('본문에 키워드 없음');\n  if (keywordCount > LIMITS.maxKeywordCount) issues.push(`키워드 반복 과다: ${keywordCount}회 (최대 ${LIMITS.maxKeywordCount}회)`);\n  if (externalLinks > LIMITS.maxExternalLinks) issues.push(`외부 링크 과다: ${externalLinks}개 (최대 ${LIMITS.maxExternalLinks}개)`);\n  if (codeBlocks > LIMITS.maxCodeBlocks) issues.push(`코드 블록 과다: ${codeBlocks}개 (최대 ${LIMITS.maxCodeBlocks}개)`);\n  if (longOnes.length > 0) issues.push(`긴 문단 ${longOnes.length}개 (문단당 최대 ${LIMITS.maxParagraphChars}자)`);\n  if (tagCount < LIMITS.minTags || tagCount > LIMITS.maxTags) issues.push(`태그 수 ${tagCount}개 (${LIMITS.minTags}~${LIMITS.maxTags}개)`);\n\n  return {\n    passed: issues.length === 0,\n    issues,\n    stats: {\n      length: text.length, h2, keyword_count: keywordCount, external_links: externalLinks,\n      code_blocks: codeBlocks, long_paragraphs: longOnes.length, tags: tagCount,\n    },\n  };\n}\n\nif (typeof $input === 'undefined') {\n  module.exports = { LIMITS, countOccurrences, longParagraphs, titleHasKeyword, validateNaverStructure };\n  return;\n}\n\nconst item = $input.item.json;\nreturn {\n  json: {\n    ...item,\n    structure_validation: validateNaverStructure({\n      title: item.title,\n      content: item.content,\n      keyword: $('Route Prompt (A/B/C)').item.json.keyword || '',\n      tags: item.tags,\n    }),\n  },\n};\n"
+      },
+      "id": "node-6b-validate-structure",
+      "name": "Validate Structure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Node 7a: URL 검증 — HTTP HEAD + SERP 교차 대조 + 죽은 URL 자동 제거\n * Mode: runOnceForEachItem\n *\n * 주의: serp_urls는 Normalize Response/Parse JSON에서 소실되므로\n *       $('Parse SERP Data') 노드에서 직접 참조한다.\n */\n\nconst helpers = this.helpers;\nconst item = $input.item.json;\nconst content = item.content || '';\nconst references = item.references || [];\n\n// serp_urls는 파이프라인 중간에서 소실 → Parse SERP Data 노드에서 직접 참조\nlet serpUrls = [];\ntry {\n  serpUrls = $('Parse SERP Data').item.json.serp_urls || [];\n} catch { /* 노드 미존재 시 빈 배열 */ }\n\n// URL 추출 (trailing punctuation 제거)\nconst urlRegex = /https?:\\/\\/[^\\s\\)\\]\"'<>]+/g;\nconst rawUrls = content.match(urlRegex) || [];\nconst contentUrls = rawUrls.map(u => u.replace(/[.,;:!?)]+$/, ''));\n\n// 모든 고유 URL 수집 (content + references)\nconst allUrls = [...new Set([\n  ...contentUrls,\n  ...references.filter(r => r.startsWith('http')),\n])];\n\nconst issues = [];\nconst deadUrls = [];\nconst serpMatched = [];\nconst serpUnmatched = [];\n\n// SERP 도메인 추출 (교차 대조용)\nconst serpDomains = new Set();\nfor (const url of serpUrls) {\n  try { serpDomains.add(new URL(url).hostname); } catch {}\n}\n\n/**\n * HTTP 검증 — try/catch 패턴 (axios 기반)\n * 성공(2xx) = 반환값 존재, 실패(4xx/5xx/타임아웃) = 예외 발생\n */\nasync function checkUrl(url) {\n  // 형식 검증 (HTTP 스킵)\n  if (url.includes('...') || url.includes(' ')) {\n    return { url, status: 'broken_format' };\n  }\n  if (url.includes('contoso.com') || url.includes('example.com')) {\n    return { url, status: 'placeholder' };\n  }\n\n  // HEAD 시도\n  try {\n    await helpers.httpRequest({\n      method: 'HEAD',\n      url: url,\n      timeout: 5000,\n    });\n    return { url, status: 'ok' };\n  } catch {\n    // HEAD 실패 → GET 폴백 (일부 서버 HEAD 거부)\n    try {\n      await helpers.httpRequest({\n        method: 'GET',\n        url: url,\n        timeout: 5000,\n        maxContentLength: 1024,\n      });\n      return { url, status: 'ok' };\n    } catch {\n      return { url, status: 'dead' };\n    }\n  }\n}\n\n// 병렬 검증 (배치 5개)\nconst results = [];\nfor (let i = 0; i < allUrls.length; i += 5) {\n  const batch = allUrls.slice(i, i + 5);\n  const batchResults = await Promise.all(batch.map(checkUrl));\n  results.push(...batchResults);\n}\n\n// 결과 분류\nfor (const r of results) {\n  if (r.status === 'placeholder') continue;\n\n  if (r.status === 'broken_format' || r.status === 'dead') {\n    issues.push(`접근 불가: ${r.url}`);\n    deadUrls.push(r.url);\n  }\n\n  // SERP 교차 대조\n  try {\n    const domain = new URL(r.url).hostname;\n    if (serpDomains.has(domain)) {\n      serpMatched.push(r.url);\n    } else {\n      serpUnmatched.push(r.url);\n    }\n  } catch {}\n}\n\n// 죽은 URL 제거: [텍스트](deadUrl) → 텍스트\nlet cleanedContent = content;\nfor (const deadUrl of deadUrls) {\n  const escaped = deadUrl.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n  cleanedContent = cleanedContent.replace(\n    new RegExp(`\\\\[([^\\\\]]+)\\\\]\\\\(${escaped}\\\\)`, 'g'),\n    '$1'\n  );\n}\n\n// 죽은 URL을 references에서도 제거\nconst cleanedReferences = references.filter(ref => {\n  if (!ref.startsWith('http')) return true;\n  return !deadUrls.includes(ref);\n});\n\nconst passed = deadUrls.length === 0;\n\nreturn {\n  json: {\n    ...item,\n    content: cleanedContent,\n    references: cleanedReferences,\n    url_validation: {\n      passed,\n      total_urls: allUrls.length,\n      reachable: results.filter(r => r.status === 'ok').length,\n      dead: deadUrls.length,\n      serp_matched: serpMatched.length,\n      serp_unmatched: serpUnmatched.length,\n      issues,\n    }\n  }\n};\n"
+      },
+      "id": "node-7a-url-validate",
+      "name": "URL Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Node 7b: 코드 블록 기초 포맷 검사\n * 언어 태그 존재 여부, 닫히지 않은 블록 감지\n */\n\nconst content = $input.item.json.content;\n\nconst issues = [];\n\n// 1. 코드 블록 추출 (열기/닫기 쌍)\nconst openBlocks = (content.match(/```/g) || []).length;\nif (openBlocks % 2 !== 0) {\n  issues.push(\"닫히지 않은 코드 블록 존재\");\n}\n\n// 2. 언어 태그 없는 코드 블록 감지\nconst codeBlockRegex = /```(\\w*)\\n/g;\nlet match;\nlet blockCount = 0;\nlet noTagCount = 0;\n\nwhile ((match = codeBlockRegex.exec(content)) !== null) {\n  blockCount++;\n  if (!match[1]) {\n    noTagCount++;\n  }\n}\n\nif (noTagCount > 0) {\n  issues.push(`언어 태그 없는 코드 블록: ${noTagCount}/${blockCount}건`);\n}\n\n// 3. 허용 언어 태그 검증\nconst allowedLangs = [\n  \"powershell\", \"bash\", \"cmd\", \"python\", \"json\", \"xml\", \"yaml\",\n  \"csharp\", \"javascript\", \"html\", \"sql\", \"text\", \"plaintext\",\n  \"shell\", \"ps1\", \"bat\",\n];\nconst langRegex = /```(\\w+)/g;\nlet langMatch;\nwhile ((langMatch = langRegex.exec(content)) !== null) {\n  const lang = langMatch[1].toLowerCase();\n  if (!allowedLangs.includes(lang)) {\n    issues.push(`비표준 언어 태그: ${langMatch[1]}`);\n  }\n}\n\nconst passed = issues.length === 0;\n\nreturn {\n  json: {\n    ...$input.item.json,\n    code_lint: {\n      passed,\n      block_count: blockCount,\n      issues,\n    }\n  }\n};\n"
+      },
+      "id": "node-7b-code-lint",
+      "name": "Code Block Lint",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Build Verify Request (네이버판) — 검증 프롬프트 + 상위 글 + 본문\n * Mode: runOnceForEachItem\n * VERIFY_PROMPT는 scripts/build_naver_workflow.py가 n8n/prompts/prompt_naver_h_verification.md로 채운다.\n */\n\nconst VERIFY_PROMPT = /*INJECT:VERIFY_PROMPT*/ \"# 네이버 블로그 글 품질 검증\\n\\n당신은 네이버 블로그 글의 품질을 검증합니다. 아래 기준으로 평가하고 JSON 하나만 출력합니다.\\n\\n## 평가 항목\\n- is_accurate: 사실 오류가 없는가 (버전, 가격, 기능 설명)\\n- is_logical: 흐름이 자연스럽고 소제목과 내용이 맞는가\\n- is_complete: 검색한 사람이 궁금해할 내용을 빠짐없이 다뤘는가\\n- is_useful: 읽고 나서 바로 써먹을 수 있는가\\n- is_in_depth: 뻔한 설명을 넘어 판단 기준과 주의점이 있는가\\n- no_fabricated_experience: \\\"직접 써보니\\\", \\\"제가 해보니\\\" 같은 지어낸 1인칭 경험이 없으면 true\\n- natural_keyword_use: 키워드가 억지로 반복되거나 문장이 어색하게 비틀리지 않았으면 true\\n- has_unique_info: 함께 준 \\\"네이버 검색 상위 글\\\"에 없는 정보가 1개 이상 있으면 true\\n- mobile_readable: 문단이 짧고(2~3문장) 소제목·목록으로 훑어보기 쉬우면 true\\n\\n## 점수\\nquality_score는 0~100이며 70점 이상이면 발행 가능한 수준입니다.\\n평가 항목 중 하나라도 false면 quality_score는 69점 이하로 줍니다.\\n\\n## 출력 형식\\nJSON 외 텍스트를 쓰지 않습니다. reason은 한국어 100자 이내입니다.\\n\\n{\\\"is_accurate\\\": true, \\\"is_logical\\\": true, \\\"is_complete\\\": true, \\\"is_useful\\\": true, \\\"is_in_depth\\\": true, \\\"no_fabricated_experience\\\": true, \\\"natural_keyword_use\\\": true, \\\"has_unique_info\\\": true, \\\"mobile_readable\\\": true, \\\"quality_score\\\": 85, \\\"reason\\\": \\\"사유\\\"}\" /*END:VERIFY_PROMPT*/;\n\nfunction buildVerifyMessage({ keyword, title, content, topPosts }) {\n  const tops = (topPosts || []).map((p, i) => `${i + 1}. ${p.title} — ${p.description}`).join('\\n');\n  return `키워드: ${keyword}\\n\\n## 네이버 검색 상위 글\\n${tops || '(없음)'}`\n    + `\\n\\n## 검증할 글\\n제목: ${title}\\n본문:\\n${content}`;\n}\n\nif (typeof $input === 'undefined') {\n  module.exports = { VERIFY_PROMPT, buildVerifyMessage };\n  return;\n}\n\nconst item = $input.item.json;\nreturn {\n  json: {\n    ...item,\n    system_prompt: VERIFY_PROMPT,\n    user_message: buildVerifyMessage({\n      keyword: $('Route Prompt (A/B/C)').item.json.keyword || '',\n      title: item.title || '',\n      content: item.content || '',\n      topPosts: $('Parse SERP Data').item.json.top_posts || [],\n    }),\n    _llm_purpose: 'verification',\n  },\n};\n"
+      },
+      "id": "node-build-verify-request",
+      "name": "Build Verify Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Build LLM Request — provider별 URL/headers/body 생성\n * 입력: system_prompt, user_message, _llm_purpose(optional)\n * 출력: _llm_url, _llm_headers, _llm_body, _llm_provider + 원본 데이터 패스스루\n */\n\nconst provider = $env.LLM_PROVIDER || 'gemini';\nconst systemPrompt = $input.item.json.system_prompt;\nconst userMessage = $input.item.json.user_message;\nconst purpose = $input.item.json._llm_purpose || 'content_gen';\n\nconst PROVIDERS = {\n  gemini: {\n    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`,\n    // API 키는 n8n Credential(Header Auth, x-goog-api-key)이 주입한다 —\n    // URL/헤더에 넣으면 실행 기록에 평문으로 남는다\n    headers: { 'content-type': 'application/json' },\n    body: (sys, user, opts) => {\n      const payload = {\n        contents: [{ role: 'user', parts: [{ text: user }] }],\n        systemInstruction: { parts: [{ text: sys }] },\n        generationConfig: { maxOutputTokens: opts.maxTokens, temperature: opts.temperature },\n      };\n      // Search Grounding: 콘텐츠 생성 시 Google 검색으로 실시간 팩트 기반 응답\n      if (opts.useSearchGrounding) {\n        payload.tools = [{ google_search: {} }];\n      }\n      return payload;\n    },\n  },\n  claude: {\n    url: 'https://api.anthropic.com/v1/messages',\n    // API 키는 n8n Credential(Header Auth, x-api-key)이 주입한다.\n    // LLM_PROVIDER=claude로 바꿀 때는 LLM Request 노드 2개의 자격증명을\n    // 'Claude API Key (Header)'로 함께 바꿔야 한다.\n    headers: {\n      'anthropic-version': '2023-06-01',\n      'content-type': 'application/json',\n    },\n    body: (sys, user, opts) => ({\n      model: opts.model || 'claude-sonnet-4-5-20250514',\n      max_tokens: opts.maxTokens,\n      temperature: opts.temperature,\n      system: sys,\n      messages: [{ role: 'user', content: user }],\n    }),\n  },\n};\n\nconst config = PROVIDERS[provider];\nif (!config) throw new Error(`지원하지 않는 LLM provider: ${provider}`);\n\nconst opts = purpose === 'verification'\n  ? { maxTokens: 4096, temperature: 0, model: 'claude-haiku-4-5-20251001' }\n  : { maxTokens: 32768, temperature: 0.7, useSearchGrounding: true };\n\nreturn {\n  json: {\n    _llm_url: config.url,\n    _llm_headers: config.headers,\n    _llm_body: config.body(systemPrompt, userMessage, opts),\n    _llm_provider: provider,\n    ...Object.fromEntries(\n      Object.entries($input.item.json).filter(([k]) => !k.startsWith('_llm'))\n    ),\n  }\n};\n"
+      },
+      "id": "node-build-llm-verify",
+      "name": "Build LLM Request (Verify)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json._llm_url }}",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify($json._llm_headers) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json._llm_body) }}",
+        "options": {
+          "timeout": 300000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "node-7c-llm-verify",
+      "name": "LLM Request (Verify)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3440,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 15000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "geminiHeaderAuth01",
+          "name": "Gemini API Key (Header)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Normalize LLM Response (Verify) — provider별 응답에서 텍스트 추출\n * Gemini: candidates[0].content.parts[0].text\n * Claude: content[0].text\n */\n\nconst provider = $input.item.json._llm_provider\n  || $env.LLM_PROVIDER\n  || 'gemini';\n\nlet text;\nconst data = $input.item.json;\n\nif (provider === 'gemini') {\n  const parts = data.candidates?.[0]?.content?.parts || [];\n  // 추론 모델 + Search Grounding 응답은 텍스트가 여러 part로 분할될 수 있음\n  text = parts.filter(p => !p.thought && typeof p.text === 'string').map(p => p.text).join('');\n  if (!text) {\n    throw new Error(`Gemini 빈 응답 (finishReason: ${data.candidates?.[0]?.finishReason || 'unknown'})`);\n  }\n} else if (provider === 'claude') {\n  text = data.content[0].text;\n} else {\n  throw new Error(`지원하지 않는 provider 응답: ${provider}`);\n}\n\nreturn { json: { text, _llm_provider: provider } };\n"
+      },
+      "id": "node-normalize-verify",
+      "name": "Normalize Response (Verify)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3620,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Parse Verification Result (네이버판) — LLM 판정 + 구조 검사 + 검색 결과 유무를 합쳐 통과 여부 결정\n * Mode: runOnceForEachItem\n * 입력: Normalize Response (Verify) 출력 { text } — 앞 노드 필드는 넘어오지 않으므로 $('노드')로 읽는다\n * 출력: verification { passed, quality_score, reason, llm_reason, 항목별 boolean }\n * 네이버 4개 항목은 LLM이 빠뜨리면 false로 본다(기존 티스토리 판정은 true로 봄 — 네이버는 엄격하게).\n */\n\nconst BASE_CHECKS = ['is_accurate', 'is_logical', 'is_complete', 'is_useful', 'is_in_depth'];\nconst NAVER_CHECKS = ['no_fabricated_experience', 'natural_keyword_use', 'has_unique_info', 'mobile_readable'];\nconst MIN_QUALITY_SCORE = 70;\n\n// JSON 문자열 정리 (제어 문자 + 유효하지 않은 이스케이프 복구)\nfunction sanitizeJsonStrings(str) {\n  const VALID_ESCAPES = '\"\\\\/bfnrtu';\n  let result = '';\n  let inString = false;\n  for (let i = 0; i < str.length; i++) {\n    const ch = str[i];\n    if (inString) {\n      if (ch === '\\\\' && i + 1 < str.length) {\n        const next = str[i + 1];\n        result += VALID_ESCAPES.includes(next) ? ch + next : '\\\\\\\\' + next;\n        i++;\n        continue;\n      }\n      if (ch === '\"') {\n        inString = false;\n        result += ch;\n        continue;\n      }\n      const code = ch.charCodeAt(0);\n      if (code <= 0x1f) {\n        if (code === 0x0a) result += '\\\\n';\n        else if (code === 0x0d) result += '\\\\r';\n        else if (code === 0x09) result += '\\\\t';\n        continue;\n      }\n      result += ch;\n    } else {\n      if (ch === '\"') inString = true;\n      result += ch;\n    }\n  }\n  return result;\n}\n\nfunction parseLlmJson(raw) {\n  const match = String(raw || '').match(/\\{[\\s\\S]*\\}/);\n  if (!match) throw new Error('JSON 없음');\n  const cleaned = sanitizeJsonStrings(match[0]).replace(/,\\s*([}\\]])/g, '$1');\n  return JSON.parse(cleaned);\n}\n\nfunction judgeNaver(result, { structurePassed, structureIssues, searchOk }) {\n  const reasons = [];\n  if (!searchOk) reasons.push('네이버 검색 결과 0건');\n  if (!structurePassed) reasons.push(`구조 검사 실패: ${(structureIssues || []).join(', ')}`);\n  const failed = [...BASE_CHECKS, ...NAVER_CHECKS].filter((key) => result[key] !== true);\n  if (failed.length) reasons.push(`검증 미통과: ${failed.join(', ')}`);\n  const score = typeof result.quality_score === 'number' ? result.quality_score : 0;\n  if (score < MIN_QUALITY_SCORE) reasons.push(`품질 점수 ${score}점 (최소 ${MIN_QUALITY_SCORE})`);\n\n  const checks = Object.fromEntries([...BASE_CHECKS, ...NAVER_CHECKS].map((k) => [k, result[k] === true]));\n  return {\n    passed: reasons.length === 0,\n    quality_score: score,\n    reason: reasons.length ? reasons.join(' / ').slice(0, 300) : (result.reason || ''),\n    llm_reason: result.reason || '',\n    ...checks,\n  };\n}\n\nif (typeof $input === 'undefined') {\n  module.exports = { parseLlmJson, judgeNaver, BASE_CHECKS, NAVER_CHECKS };\n  return;\n}\n\nlet result;\ntry {\n  result = parseLlmJson($input.item.json.text);\n} catch (e) {\n  result = { quality_score: 0, reason: `LLM 응답 파싱 실패: ${e.message}` };\n}\nconst structure = $('Validate Structure').item.json.structure_validation\n  || { passed: false, issues: ['구조 검사 결과 없음'] };\n\nreturn {\n  json: {\n    ...$input.item.json,\n    verification: judgeNaver(result, {\n      structurePassed: structure.passed === true,\n      structureIssues: structure.issues || [],\n      searchOk: $('Parse SERP Data').item.json.search_ok === true,\n    }),\n  },\n};\n"
+      },
+      "id": "node-8-parse-verify",
+      "name": "Parse Verification Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.verification.passed }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-9-if-passed",
+      "name": "Verification Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3980,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1VbyEQNuIAKpmTfk_5pTIjuLb3xlS-kdUfWflmfnFJSA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "naver_calendar",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "키워드": "={{ $('Sheets Read (Status=대기)').item.json['키워드'] }}",
+            "상태": "발행대기",
+            "제목": "={{ $('Parse JSON Response').item.json.title }}",
+            "메타설명": "={{ $('Parse JSON Response').item.json.meta_description }}",
+            "FAQ스키마": "={{ JSON.stringify($('Parse JSON Response').item.json.faq_schema) }}",
+            "참고자료": "={{ JSON.stringify($('URL Validation').item.json.references) }}",
+            "본문마크다운": "={{ $('URL Validation').item.json.content.substring(0, 49000) }}",
+            "URL검증": "={{ $('URL Validation').item.json.url_validation.reachable + '/' + $('URL Validation').item.json.url_validation.total_urls + ' (dead:' + $('URL Validation').item.json.url_validation.dead + ')' }}",
+            "프롬프트유형": "={{ $('Route Prompt (A/B/C)').item.json.prompt_type || 'A' }}",
+            "Haiku검증": "={{ JSON.stringify($('Parse Verification Result').item.json.verification) }}",
+            "내부링크키워드": "={{ JSON.stringify($('Parse JSON Response').item.json.internal_link_keywords) }}",
+            "태그": "={{ ($('Parse JSON Response').item.json.tags || []).join(', ') }}",
+            "생성일시": "={{ new Date().toISOString().slice(0,19).replace('T',' ') }}",
+            "URL슬러그": "={{ $('Parse JSON Response').item.json.url_slug || '' }}"
+          },
+          "matchingColumns": [
+            "키워드"
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-10a-sheets-pass",
+      "name": "Sheets Update (발행대기)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        4200,
+        200
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "nhf35GDbBrsmSN2q",
+          "name": "Google Service Account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1VbyEQNuIAKpmTfk_5pTIjuLb3xlS-kdUfWflmfnFJSA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "naver_calendar",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "키워드": "={{ $('Sheets Read (Status=대기)').item.json['키워드'] }}",
+            "상태": "검수필요",
+            "에러메시지": "={{ $('Parse Verification Result').item.json.verification.reason || '검증 실패' }}",
+            "Haiku검증": "={{ JSON.stringify($('Parse Verification Result').item.json.verification) }}",
+            "생성일시": "={{ new Date().toISOString().slice(0,19).replace('T',' ') }}"
+          },
+          "matchingColumns": [
+            "키워드"
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-10b-sheets-fail",
+      "name": "Sheets Update (검수필요)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        4200,
+        400
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "nhf35GDbBrsmSN2q",
+          "name": "Google Service Account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "node-0-manual",
+      "name": "Manual Trigger (Test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        60,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1VbyEQNuIAKpmTfk_5pTIjuLb3xlS-kdUfWflmfnFJSA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "detectAutomatically"
+            }
+          }
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "상태",
+              "lookupValue": "발행완료"
+            },
+            {
+              "lookupColumn": "상태",
+              "lookupValue": "발행대기"
+            }
+          ]
+        },
+        "combineFilters": "OR"
+      },
+      "id": "node-dup-1-sheets-published",
+      "name": "Sheets Read (Published Keywords)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "nhf35GDbBrsmSN2q",
+          "name": "Google Service Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "/**\n * Check Duplicate (네이버판) — 티스토리·네이버 두 탭의 발행 키워드와 모두 비교\n * Mode: runOnceForAllItems\n * 키워드 출처는 달라도 분야가 같아 주제가 겹칠 수 있다(설계 문서 3.4).\n */\n\nconst OVERLAP_THRESHOLD = 0.7;\n\nfunction keywordOverlap(kwA, kwB) {\n  const tokensA = new Set(kwA.toLowerCase().split(/\\s+/).filter((t) => t.length > 0));\n  const tokensB = new Set(kwB.toLowerCase().split(/\\s+/).filter((t) => t.length > 0));\n  // 단일 토큰 키워드: 정확 일치만 판정\n  if (tokensA.size < 2 || tokensB.size < 2) {\n    return kwA.toLowerCase().trim() === kwB.toLowerCase().trim() ? 1.0 : 0;\n  }\n  const intersection = [...tokensA].filter((t) => tokensB.has(t));\n  const smaller = Math.min(tokensA.size, tokensB.size);\n  return smaller > 0 ? intersection.length / smaller : 0;\n}\n\nfunction findDuplicate(keyword, existingKeywords, threshold = OVERLAP_THRESHOLD) {\n  let maxOverlap = 0;\n  let duplicateOf = '';\n  for (const existing of existingKeywords) {\n    const overlap = keywordOverlap(keyword, existing);\n    if (overlap > maxOverlap) {\n      maxOverlap = overlap;\n      duplicateOf = existing;\n    }\n  }\n  const isDuplicate = maxOverlap >= threshold;\n  return {\n    is_duplicate: isDuplicate,\n    duplicate_of: isDuplicate ? duplicateOf : '',\n    max_overlap: Math.round(maxOverlap * 100) / 100,\n    threshold,\n  };\n}\n\nif (typeof $input === 'undefined') {\n  module.exports = { keywordOverlap, findDuplicate };\n  return;\n}\n\nconst keywordsOf = (nodeName) => $(nodeName).all()\n  .map((item) => item.json['키워드'] || '')\n  .filter((kw) => kw.length > 0);\nconst existing = [\n  ...keywordsOf('Sheets Read (Published Keywords)'),  // 티스토리 탭\n  ...keywordsOf('Sheets Read (Naver Published)'),     // 네이버 탭\n];\n\nreturn $input.all().map((item) => ({\n  json: { ...item.json, duplicate_check: findDuplicate(item.json['키워드'] || '', existing) },\n}));\n"
+      },
+      "id": "node-dup-2-check",
+      "name": "Check Duplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "dup-check-condition",
+              "leftValue": "={{ $json.duplicate_check.is_duplicate }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-dup-3-if",
+      "name": "IF Not Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1VbyEQNuIAKpmTfk_5pTIjuLb3xlS-kdUfWflmfnFJSA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "naver_calendar",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "키워드": "={{ $json[\"키워드\"] }}",
+            "상태": "중복스킵",
+            "에러메시지": "={{ \"중복 키워드: \" + $json.duplicate_check.duplicate_of + \" (유사도: \" + ($json.duplicate_check.max_overlap * 100) + \"%)\" }}",
+            "생성일시": "={{ new Date().toISOString().slice(0,19).replace(\"T\",\" \") }}"
+          },
+          "matchingColumns": [
+            "키워드"
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-dup-4-sheets-skip",
+      "name": "Sheets Update (중복스킵)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1120,
+        500
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "nhf35GDbBrsmSN2q",
+          "name": "Google Service Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Published Keywords 데이터는 $(\"Sheets Read (Published Keywords)\").all()로 접근 가능\n// Sheets Read (대기)가 1번만 실행되도록 단일 트리거 아이템 반환\nreturn [{ json: { _trigger: true } }];"
+      },
+      "id": "node-dup-0-reduce",
+      "name": "Reduce to Trigger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        570,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Fetch Official Docs — 공식문서 본문 크롤링\n * Mode: runOnceForEachItem\n * 입력: Parse SERP Data 출력 (official_urls 포함)\n * 출력: official_docs_text 필드 추가\n *\n * Firecrawl API 키가 있으면 /v1/scrape로 마크다운 추출,\n * 없으면 직접 GET + HTML 텍스트 추출 (fallback)\n */\n\nconst FIRECRAWL_KEY = $env.FIRECRAWL_API_KEY || '';\nconst officialUrls = $input.item.json.official_urls || [];\nconst MAX_DOCS = 3;\nconst MAX_CHARS_PER_DOC = 3000;\n\n/**\n * HTML에서 본문 텍스트 추출 (fallback용)\n * <main>, <article>, <div role=\"main\"> 중 첫 매칭 태그의 텍스트 추출\n */\nfunction extractMainText(html) {\n  if (typeof html !== 'string') return '';\n\n  // main/article/div[role=main] 태그 내용 추출 시도\n  const patterns = [\n    /<main[^>]*>([\\s\\S]*?)<\\/main>/i,\n    /<article[^>]*>([\\s\\S]*?)<\\/article>/i,\n    /<div[^>]*role\\s*=\\s*[\"']main[\"'][^>]*>([\\s\\S]*?)<\\/div>/i,\n  ];\n\n  let bodyText = '';\n  for (const pattern of patterns) {\n    const match = html.match(pattern);\n    if (match && match[1]) {\n      bodyText = match[1];\n      break;\n    }\n  }\n\n  // 매칭 실패 시 <body> 전체 사용\n  if (!bodyText) {\n    const bodyMatch = html.match(/<body[^>]*>([\\s\\S]*?)<\\/body>/i);\n    bodyText = bodyMatch ? bodyMatch[1] : html;\n  }\n\n  // HTML 태그 제거 + 정리\n  return bodyText\n    .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n    .replace(/<nav[^>]*>[\\s\\S]*?<\\/nav>/gi, '')\n    .replace(/<footer[^>]*>[\\s\\S]*?<\\/footer>/gi, '')\n    .replace(/<header[^>]*>[\\s\\S]*?<\\/header>/gi, '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;/g, \"'\")\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nconst docs = [];\n\nfor (const entry of officialUrls.slice(0, MAX_DOCS)) {\n  try {\n    let content = '';\n\n    if (FIRECRAWL_KEY) {\n      // Firecrawl API v1/scrape\n      const resp = await this.helpers.httpRequest({\n        method: 'POST',\n        url: 'https://api.firecrawl.dev/v1/scrape',\n        headers: {\n          'Authorization': `Bearer ${FIRECRAWL_KEY}`,\n          'Content-Type': 'application/json',\n        },\n        body: JSON.stringify({\n          url: entry.url,\n          formats: ['markdown'],\n          onlyMainContent: true,\n        }),\n        returnFullResponse: false,\n        timeout: 15000,\n      });\n\n      const parsed = typeof resp === 'string' ? JSON.parse(resp) : resp;\n      content = (parsed.data?.markdown || '').slice(0, MAX_CHARS_PER_DOC);\n    } else {\n      // Fallback: 직접 GET + 텍스트 추출\n      const html = await this.helpers.httpRequest({\n        method: 'GET',\n        url: entry.url,\n        timeout: 10000,\n        encoding: 'utf-8',\n        returnFullResponse: false,\n        headers: {\n          'User-Agent': 'Mozilla/5.0 (compatible; BlogBot/1.0)',\n          'Accept': 'text/html',\n        },\n      });\n      content = extractMainText(html).slice(0, MAX_CHARS_PER_DOC);\n    }\n\n    if (content.length > 200) {\n      docs.push(`### ${entry.title}\\nURL: ${entry.url}\\n\\n${content}`);\n    }\n  } catch (e) {\n    // 크롤링 실패 시 skip (SERP snippet은 이미 있으므로 치명적이지 않음)\n  }\n}\n\nconst officialDocsText = docs.length > 0\n  ? docs.join('\\n\\n---\\n\\n')\n  : '';\n\nreturn {\n  json: {\n    ...$input.item.json,\n    official_docs_text: officialDocsText,\n  }\n};\n"
+      },
+      "id": "node-fetch-official-docs",
+      "name": "Fetch Official Docs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1555,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1VbyEQNuIAKpmTfk_5pTIjuLb3xlS-kdUfWflmfnFJSA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "AI브레인용어",
+          "mode": "name"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "detectAutomatically"
+            }
+          }
+        }
+      },
+      "id": "node-brain-terms-read",
+      "name": "Sheets Read (Brain Terms)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        460,
+        520
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "nhf35GDbBrsmSN2q",
+          "name": "Google Service Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 용어 행 N건을 1건으로 축약 — 뒤 노드가 N번 실행되지 않게 한다.\n// 용어 데이터는 Route Prompt에서 $('Sheets Read (Brain Terms)')로 참조한다.\nreturn [{ json: { brain_terms_loaded: $input.all().length } }];"
+      },
+      "id": "node-brain-reduce",
+      "name": "Reduce Brain Terms",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1VbyEQNuIAKpmTfk_5pTIjuLb3xlS-kdUfWflmfnFJSA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "naver_calendar",
+          "mode": "name"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "detectAutomatically"
+            }
+          }
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "상태",
+              "lookupValue": "발행완료"
+            },
+            {
+              "lookupColumn": "상태",
+              "lookupValue": "발행대기"
+            }
+          ]
+        },
+        "combineFilters": "OR"
+      },
+      "id": "naver-published-read",
+      "name": "Sheets Read (Naver Published)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        460,
+        740
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "nhf35GDbBrsmSN2q",
+          "name": "Google Service Account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 네이버 발행 키워드 N건을 1건으로 축약\n// 키워드는 Check Duplicate에서 $('Sheets Read (Naver Published)')로 참조\nreturn [{ json: { naver_published_loaded: $input.all().length } }];"
+      },
+      "id": "reduce-naver-published",
+      "name": "Reduce Naver Published",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        570,
+        740
+      ]
+    }
+  ],
+  "connections": {
+    "Sheets Read (Status=대기)": {
+      "main": [
+        [
+          {
+            "node": "Check Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse SERP Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Official Docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Prompt (A/B/C)": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Request (Content Gen)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LLM Request (Content Gen)": {
+      "main": [
+        [
+          {
+            "node": "LLM Request (Content Gen)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Request (Content Gen)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Response (Content Gen)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Response (Content Gen)": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON Response": {
+      "main": [
+        [
+          {
+            "node": "Validate Structure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Structure": {
+      "main": [
+        [
+          {
+            "node": "URL Validation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code Block Lint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "URL Validation": {
+      "main": [
+        [
+          {
+            "node": "Build Verify Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Block Lint": {
+      "main": [
+        [
+          {
+            "node": "Build Verify Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Verify Request": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Request (Verify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LLM Request (Verify)": {
+      "main": [
+        [
+          {
+            "node": "LLM Request (Verify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Request (Verify)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Response (Verify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Response (Verify)": {
+      "main": [
+        [
+          {
+            "node": "Parse Verification Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Verification Result": {
+      "main": [
+        [
+          {
+            "node": "Verification Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verification Passed?": {
+      "main": [
+        [
+          {
+            "node": "Sheets Update (발행대기)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sheets Update (검수필요)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (Test)": {
+      "main": [
+        [
+          {
+            "node": "Sheets Read (Published Keywords)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheets Read (Published Keywords)": {
+      "main": [
+        [
+          {
+            "node": "Reduce to Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Duplicate": {
+      "main": [
+        [
+          {
+            "node": "IF Not Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Not Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Naver Blog Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sheets Update (중복스킵)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reduce to Trigger": {
+      "main": [
+        [
+          {
+            "node": "Sheets Read (Naver Published)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Official Docs": {
+      "main": [
+        [
+          {
+            "node": "Route Prompt (A/B/C)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheets Read (Brain Terms)": {
+      "main": [
+        [
+          {
+            "node": "Reduce Brain Terms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reduce Brain Terms": {
+      "main": [
+        [
+          {
+            "node": "Sheets Read (Status=대기)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Naver Blog Search": {
+      "main": [
+        [
+          {
+            "node": "Parse SERP Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheets Read (Naver Published)": {
+      "main": [
+        [
+          {
+            "node": "Reduce Naver Published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reduce Naver Published": {
+      "main": [
+        [
+          {
+            "node": "Sheets Read (Brain Terms)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger (02:00 AM)": {
+      "main": [
+        [
+          {
+            "node": "Sheets Read (Published Keywords)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul"
+  },
+  "pinData": {},
+  "meta": {},
+  "active": false,
+  "tags": []
+}

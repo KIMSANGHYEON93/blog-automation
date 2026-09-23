@@ -53,10 +53,12 @@ def parse_sheet_datetime(raw: str) -> datetime | None:
 
 
 class GoogleSheetsPostRepository(PostRepository):
-    def __init__(self, creds_path: str, sheet_name: str):
+    def __init__(self, creds_path: str, sheet_name: str, worksheet: str = ""):
         creds = GoogleCredentials.from_service_account_file(creds_path, scopes=SCOPES)
         client = gspread.authorize(creds, http_client=BackOffHTTPClient)
-        self._sheet = client.open(sheet_name).sheet1
+        spreadsheet = client.open(sheet_name)
+        # 빈 값이면 첫 탭(티스토리). 네이버 글은 같은 파일의 naver_calendar 탭에 둔다.
+        self._sheet = spreadsheet.worksheet(worksheet) if worksheet else spreadsheet.sheet1
         self._header_row = 1  # 1행은 헤더
 
     @staticmethod

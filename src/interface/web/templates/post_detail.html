@@ -43,4 +43,13 @@
     </ul>
   {% endif %}
 </section>
+
+<section class="card">
+  <h2>본문 ({{ "{:,}".format(post.body_length) }}자, 마크다운 원문)</h2>
+  {% if post.body_markdown %}
+  <pre class="body">{{ post.body_markdown }}</pre>
+  {% else %}
+  <p class="sub">본문이 없습니다.</p>
+  {% endif %}
+</section>
 {% endblock %}

@@ -30,6 +30,7 @@ class PostSummary:
     error_message: str
     meta_description: str
     blockers: tuple[str, ...]
+    body_markdown: str = ""
 
     @property
     def can_publish(self) -> bool:
@@ -58,6 +59,7 @@ def summarize(post: Post) -> PostSummary:
         error_message=post.error_message,
         meta_description=content.meta_description if content else "",
         blockers=tuple(publish_blockers(post)),
+        body_markdown=(content.body_markdown or "") if content else "",
     )
 
 

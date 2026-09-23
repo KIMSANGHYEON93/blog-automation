@@ -276,3 +276,26 @@ def test_brand_label이_화면에_표시된다():
     app.config["TESTING"] = True
     html = app.test_client().get("/login").get_data(as_text=True)
     assert re.search(r"<title>[^<]*네이버 블로그 관리자[^<]*</title>", html)
+
+
+def test_상세_화면에_본문이_이스케이프되어_보인다():
+    post = _post(2, "MCP란")
+    post.content = PostContent(
+        title="MCP란?", body_markdown="## 소제목\n\n본문 <img src=x onerror=alert(1)>",
+    )
+    app = create_app(
+        authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
+        list_posts=ListPostsUseCase(InMemoryPostRepository([post])),
+        job_runner=PublishJobRunner(
+            publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
+        ),
+        secret_key="test-secret-key-0123456789",
+    )
+    app.config["TESTING"] = True
+    client = app.test_client()
+    html = client.get("/login").get_data(as_text=True)
+    token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+    client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
+    html = client.get("/posts/2").get_data(as_text=True)
+    assert re.search(r'<pre class="body">## 소제목\n\n본문 &lt;img', html)
+    assert "<img src=x" not in html

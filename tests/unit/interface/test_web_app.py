@@ -275,4 +275,4 @@ def test_brand_label이_화면에_표시된다():
     )
     app.config["TESTING"] = True
     html = app.test_client().get("/login").get_data(as_text=True)
-    assert "네이버 블로그 관리자" in html
+    assert re.search(r"<title>[^<]*네이버 블로그 관리자[^<]*</title>", html)

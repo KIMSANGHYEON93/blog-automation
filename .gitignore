@@ -14,10 +14,10 @@ screenshots/
 legacy/
 logs/
 credentials.json
-.browser_data/
+.browser_data
 .DS_Store
 .claude/worktrees/
 .python-version
 .gstack/
 .playwright-mcp/
-.browser_data_naver/
+.browser_data_naver

@@ -13,6 +13,8 @@ import logging
 import os
 import random
 import time
+from datetime import datetime
+from pathlib import Path
 
 from src.domain.entities.post import Post
 from src.domain.ports.browser_port import BrowserPort
@@ -34,7 +36,8 @@ DRAFT_ONLY_MESSAGE = "임시저장만 완료(draft_only) — 네이버 글쓰기
 class NaverBrowserAdapter(BrowserPort):
     def __init__(self, blog_id: str, profile_dir: str = DEFAULT_PROFILE_DIR,
                  headless: bool = False, draft_only: bool = True,
-                 min_delay: int = 300, max_delay: int = 900):
+                 min_delay: int = 300, max_delay: int = 900,
+                 screenshot_dir: str = "logs/naver"):
         # headless 기본 False: 네이버는 헤드리스 탐지가 강하다(참고 저장소 공통 권고)
         self._blog_id = blog_id
         self._profile_dir = os.path.abspath(profile_dir)
@@ -42,6 +45,7 @@ class NaverBrowserAdapter(BrowserPort):
         self._draft_only = draft_only
         self._min_delay = min_delay
         self._max_delay = max_delay
+        self._screenshot_dir = Path(screenshot_dir)
         self._sb = None
         self._sb_context = None
 
@@ -81,6 +85,7 @@ class NaverBrowserAdapter(BrowserPort):
             result = self._write(post)
         except editor.NaverEditorError as e:
             logger.error(f"네이버 발행 실패 [{post.keyword}]: {e}")
+            self._save_failure_screenshot(post)
             return PublishResult.fail(str(e))
         self._pause()
         return result
@@ -100,6 +105,19 @@ class NaverBrowserAdapter(BrowserPort):
             return PublishResult.fail(DRAFT_ONLY_MESSAGE)
         url = editor.publish(self._sb, normalize_tags(content.tag_list()))
         return PublishResult.ok(url=url, entry_id=parse_log_no(url))
+
+    def _save_failure_screenshot(self, post: Post) -> None:
+        if self._sb is None:
+            return
+        try:
+            self._screenshot_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            path = self._screenshot_dir / f"{stamp}_row{post.row_index}.png"
+            self._sb.save_screenshot(str(path))
+            logger.info(f"실패 스크린샷: {path}")
+        except Exception as e:
+            # 진단용이라 실패해도 발행 결과를 바꾸지 않는다
+            logger.warning(f"실패 스크린샷 저장 못함: {e}")
 
     def _pause(self) -> None:
         delay = random.randint(self._min_delay, self._max_delay)

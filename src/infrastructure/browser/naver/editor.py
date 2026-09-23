@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 EDITOR_TIMEOUT = 20
 PUBLISH_URL_TIMEOUT = 30
 
+# 발행 확인을 누른 뒤 URL을 못 받으면 실제로는 발행됐을 수 있다 — 재시도하면 중복 발행
+PUBLISH_UNCONFIRMED = "발행 여부 수동 확인 필요"
+
 # 합성 paste 이벤트. SmartEditor는 clipboardData의 text/html을 읽어 컴포넌트로 바꾼다.
 _PASTE_JS = """
 const [html, text] = arguments;
@@ -210,7 +213,10 @@ def _wait_published_url(sb) -> str:
         if parse_log_no(url):
             return url
         time.sleep(1)
-    raise NaverEditorError(f"발행 후 글 URL을 확인하지 못함 (현재: {sb.get_current_url()})")
+    raise NaverEditorError(
+        f"발행 후 글 URL을 확인하지 못함 — {PUBLISH_UNCONFIRMED} "
+        f"(현재: {sb.get_current_url()})"
+    )
 
 
 def _first_visible(sb, selectors: list[str], timeout: float = 0) -> str | None:

@@ -74,3 +74,46 @@ def test_write_url_uses_redirect_write_entry():
 
 def test_update_is_not_supported(calls):
     assert not NaverBrowserAdapter("myblog").update(_post()).success
+
+
+class _FakeSb:
+    def __init__(self):
+        self.screenshots: list[str] = []
+
+    def save_screenshot(self, path: str) -> None:
+        self.screenshots.append(path)
+
+
+def test_실패하면_스크린샷을_남긴다(calls, monkeypatch, tmp_path):
+    def broken(sb, html, plain):
+        raise editor.NaverEditorError("본문 붙여넣기가 반영되지 않음")
+
+    monkeypatch.setattr(editor, "paste_body", broken)
+    adapter = NaverBrowserAdapter("myblog", draft_only=False, screenshot_dir=str(tmp_path))
+    fake = _FakeSb()
+    adapter._sb = fake
+    adapter.publish(_post())
+    assert len(fake.screenshots) == 1
+    assert fake.screenshots[0].startswith(str(tmp_path))
+    assert "row2" in fake.screenshots[0]
+
+
+def test_브라우저가_없어도_스크린샷_단계에서_죽지_않는다(calls, monkeypatch, tmp_path):
+    def broken(sb, html, plain):
+        raise editor.NaverEditorError("실패")
+
+    monkeypatch.setattr(editor, "paste_body", broken)
+    adapter = NaverBrowserAdapter("myblog", draft_only=False, screenshot_dir=str(tmp_path))
+    assert not adapter.publish(_post()).success  # _sb None — 예외 없이 실패 결과
+
+
+def test_발행_URL_미확인은_수동_확인_필요로_표시(calls, monkeypatch):
+    def unconfirmed(sb, tags):
+        raise editor.NaverEditorError(
+            f"발행 후 글 URL을 확인하지 못함 — {editor.PUBLISH_UNCONFIRMED}"
+        )
+
+    monkeypatch.setattr(editor, "publish", unconfirmed)
+    result = NaverBrowserAdapter("myblog", draft_only=False).publish(_post())
+    assert not result.success
+    assert editor.PUBLISH_UNCONFIRMED in result.error

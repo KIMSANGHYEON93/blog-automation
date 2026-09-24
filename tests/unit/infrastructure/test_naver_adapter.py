@@ -15,7 +15,9 @@ def calls(monkeypatch):
     log: list[tuple] = []
     monkeypatch.setattr(editor, "open_editor", lambda sb, blog: log.append(("open", blog)))
     monkeypatch.setattr(editor, "fill_title", lambda sb, t: log.append(("title", t)))
-    monkeypatch.setattr(editor, "paste_body", lambda sb, h, p: log.append(("body", h)))
+    monkeypatch.setattr(editor, "focus_body", lambda sb: log.append(("focus",)))
+    monkeypatch.setattr(editor, "paste_html", lambda sb, h, p: log.append(("body", h)))
+    monkeypatch.setattr(editor, "paste_image", lambda sb, data: log.append(("image", data)) or True)
     monkeypatch.setattr(editor, "save_draft", lambda sb: log.append(("draft",)))
 
     def fake_publish(sb, tags):
@@ -53,7 +55,7 @@ def test_editor_error_becomes_failed_result(calls, monkeypatch):
     def broken(sb, html, plain):
         raise editor.NaverEditorError("본문 붙여넣기가 반영되지 않음")
 
-    monkeypatch.setattr(editor, "paste_body", broken)
+    monkeypatch.setattr(editor, "paste_html", broken)
     result = NaverBrowserAdapter("myblog", draft_only=False).publish(_post())
     assert not result.success
     assert "붙여넣기" in result.error
@@ -88,7 +90,7 @@ def test_실패하면_스크린샷을_남긴다(calls, monkeypatch, tmp_path):
     def broken(sb, html, plain):
         raise editor.NaverEditorError("본문 붙여넣기가 반영되지 않음")
 
-    monkeypatch.setattr(editor, "paste_body", broken)
+    monkeypatch.setattr(editor, "paste_html", broken)
     adapter = NaverBrowserAdapter("myblog", draft_only=False, screenshot_dir=str(tmp_path))
     fake = _FakeSb()
     adapter._sb = fake
@@ -102,7 +104,7 @@ def test_브라우저가_없어도_스크린샷_단계에서_죽지_않는다(ca
     def broken(sb, html, plain):
         raise editor.NaverEditorError("실패")
 
-    monkeypatch.setattr(editor, "paste_body", broken)
+    monkeypatch.setattr(editor, "paste_html", broken)
     adapter = NaverBrowserAdapter("myblog", draft_only=False, screenshot_dir=str(tmp_path))
     assert not adapter.publish(_post()).success  # _sb None — 예외 없이 실패 결과
 
@@ -144,16 +146,17 @@ def _paste_with(monkeypatch, sb):
     editor.paste_body(sb, "<p>본문</p>", "본문")
 
 
-def test_표_없는_본문은_컴포넌트가_늘지_않아도_문단이_늘면_성공(monkeypatch):
+def test_표_없는_본문은_컴포넌트가_늘지_않아도_글자가_늘면_성공(monkeypatch):
     # 2026-09-23 실측: 텍스트만 있는 본문은 기존 텍스트 컴포넌트 하나에 들어가 .se-component 2→2
+    # 2026-09-24 실측: 빈 문단에 한 줄을 붙이면 문단 수도 2→2 — 글자 수로 판정한다
     sb = _EditorSb(
-        before={".se-component": 2, ".se-text-paragraph": 2},
-        after={".se-component": 2, ".se-text-paragraph": 48},
+        before={".se-component": 2, ".se-text-paragraph": 0},
+        after={".se-component": 2, ".se-text-paragraph": 12},
     )
     _paste_with(monkeypatch, sb)  # 예외 없음
 
 
-def test_문단이_그대로면_붙여넣기_실패(monkeypatch):
+def test_글자가_그대로면_붙여넣기_실패(monkeypatch):
     sb = _EditorSb(
         before={".se-component": 2, ".se-text-paragraph": 2},
         after={".se-component": 2, ".se-text-paragraph": 2},
@@ -173,3 +176,42 @@ def test_발행_확인_뒤_일반_예외도_수동_확인_필요로_바꾼다(mo
     monkeypatch.setattr(editor, "_wait_published_url", driver_died)
     with pytest.raises(editor.NaverEditorError, match=editor.PUBLISH_UNCONFIRMED):
         editor.publish(object(), [])
+
+
+def _sectioned_post(n_headings: int) -> Post:
+    body = "도입 문장.\n\n" + "\n\n".join(f"## 소제목{i}\n\n본문{i}." for i in range(n_headings))
+    return _post(body=body)
+
+
+def test_사진은_도입부_대표와_소제목마다_최대_5장(calls):
+    prompts: list[str] = []
+
+    def image_fn(prompt):
+        prompts.append(prompt)
+        return b"jpg"
+
+    adapter = NaverBrowserAdapter("myblog", draft_only=False, image_fn=image_fn)
+    assert adapter.publish(_sectioned_post(6)).success
+    kinds = [c[0] for c in calls if c[0] in ("image", "body")]
+    assert kinds[:3] == ["image", "body", "body"]  # 대표 사진 → 도입부 → 첫 소제목
+    assert kinds.count("image") == 5
+    assert "키워드" in prompts[0]
+    assert "소제목0" in prompts[1]
+
+
+def test_사진은_소제목_바로_아래(calls):
+    adapter = NaverBrowserAdapter("myblog", draft_only=False, image_fn=lambda p: b"jpg")
+    adapter.publish(_sectioned_post(1))
+    order = [c for c in calls if c[0] in ("image", "body")]
+    assert "소제목0" in order[2][1] and order[3][0] == "image" and "본문0" in order[4][1]
+
+
+def test_사진_생성이_실패해도_발행한다(calls):
+    adapter = NaverBrowserAdapter("myblog", draft_only=False, image_fn=lambda p: None)
+    assert adapter.publish(_sectioned_post(2)).success
+    assert not any(c[0] == "image" for c in calls)
+
+
+def test_사진_함수가_없으면_사진_없이(calls):
+    assert NaverBrowserAdapter("myblog", draft_only=False).publish(_sectioned_post(2)).success
+    assert not any(c[0] == "image" for c in calls)

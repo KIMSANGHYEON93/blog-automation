@@ -41,6 +41,16 @@ BODY = [
 # 개수가 그대로다(2026-09-23 실측 2→2, 본문은 정상 입력됨).
 BODY_PARAGRAPHS = ".se-text-paragraph"
 
+# 업로드가 끝난 사진. 붙여넣는 즉시 '전송중' 빈 사진 칸이 먼저 생기므로 칸 수로 판정하면
+# 업로드 도중 다음 글을 붙여넣어 '파일 전송 오류'가 난다(2026-09-24 실측).
+UPLOADED_IMAGES = ".se-component.se-image img[src*='pstatic.net']"
+
+# '파일 전송 오류' 창 — 떠 있으면 이후 붙여넣기가 막힌다
+UPLOAD_ERROR_CLOSE = [
+    "button.se-popup-button-confirm",
+    "//div[contains(@class, 'se-popup')]//button[contains(normalize-space(), '확인')]",
+]
+
 SAVE_DRAFT = [
     "button[class^='save_btn__']",
     "button[class*='save_btn']",

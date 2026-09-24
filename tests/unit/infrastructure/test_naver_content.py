@@ -10,10 +10,24 @@ from src.infrastructure.browser.naver.content import (
 
 
 class TestBuildNaverHtml:
-    def test_converts_markdown_headings_and_paragraphs(self):
+    def test_소제목은_인용구_박스로(self):
         html = build_naver_html("## 소제목\n\n본문 문단")
-        assert "<h2" in html
-        assert "본문 문단" in html
+        assert "<h2" not in html
+        assert "<blockquote><p>소제목</p></blockquote>" in html
+
+    def test_문장마다_가운데_정렬_한_줄_문단_사이_빈_줄(self):
+        html = build_naver_html("첫 문장이에요. 둘째 문장인가요? 셋째!\n\n다음 문단이에요.")
+        center = '<p style="text-align:center">'
+        assert f"{center}첫 문장이에요.</p>{center}둘째 문장인가요?</p>{center}셋째!</p>" in html
+        assert f"셋째!</p><p><br/></p>{center}다음 문단이에요.</p>" in html
+
+    def test_목록_안의_문장은_그대로(self):
+        html = build_naver_html("- 가. 나.\n- 다")
+        assert "text-align:center" not in html
+
+    def test_문장_안_굵게는_유지(self):
+        html = build_naver_html("이건 **중요**해요. 끝이에요.")
+        assert "<strong>중요</strong>해요.</p>" in html
 
     def test_drops_toc_because_anchor_links_break_in_smart_editor(self):
         md = "## 첫째\n\n가\n\n## 둘째\n\n나"
@@ -68,3 +82,20 @@ class TestParseBlogId:
 
 def test_post_url():
     assert post_url("myblog", "123") == "https://blog.naver.com/myblog/123"
+
+
+class TestSplitSections:
+    def test_도입부와_소제목별로_나눈다(self):
+        from src.infrastructure.browser.naver.content import split_sections
+
+        md = "도입 문장.\n\n## 첫째\n\n가 문단.\n\n## 둘째\n\n나 문단."
+        assert split_sections(md) == [
+            ("", "도입 문장."),
+            ("첫째", "가 문단."),
+            ("둘째", "나 문단."),
+        ]
+
+    def test_도입부가_없으면_빈_도입부를_만들지_않는다(self):
+        from src.infrastructure.browser.naver.content import split_sections
+
+        assert split_sections("## 첫째\n\n가.") == [("첫째", "가.")]

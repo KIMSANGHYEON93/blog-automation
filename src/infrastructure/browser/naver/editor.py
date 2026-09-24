@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import base64
 import logging
 import time
 
@@ -37,6 +38,26 @@ target.dispatchEvent(new ClipboardEvent('paste', {
 """
 
 _COUNT_JS = "return document.querySelectorAll(arguments[0]).length;"
+_TEXT_LEN_JS = (
+    "return [...document.querySelectorAll(arguments[0])]"
+    ".reduce((n, p) => n + p.innerText.trim().length, 0);"
+)
+
+# 이미지 파일 paste — 에디터가 네이버 서버에 올리고 사진 컴포넌트를 만든다.
+_PASTE_FILE_JS = """
+const [b64, name] = arguments;
+const bin = atob(b64);
+const bytes = new Uint8Array(bin.length);
+for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+const data = new DataTransfer();
+data.items.add(new File([bytes], name, {type: 'image/jpeg'}));
+const target = document.activeElement || document.body;
+target.dispatchEvent(new ClipboardEvent('paste', {
+  clipboardData: data, bubbles: true, cancelable: true,
+}));
+"""
+
+IMAGE_UPLOAD_TIMEOUT = 45
 
 
 class NaverEditorError(RuntimeError):
@@ -98,20 +119,56 @@ def fill_title(sb, title: str) -> None:
 
 
 def paste_body(sb, html: str, plain_text: str) -> None:
+    focus_body(sb)
+    paste_html(sb, html, plain_text)
+
+
+def focus_body(sb) -> None:
+    """본문 입력란에 커서를 둔다. 이후 붙여넣기는 커서 뒤에 이어진다(다시 클릭하면 위치가 바뀜)."""
     target = _first_visible(sb, sel.BODY)
     if not target:
         raise NaverEditorError("본문 입력란을 찾지 못함 — selectors.BODY 확인")
-    before = sb.execute_script(_COUNT_JS, sel.BODY_PARAGRAPHS)
     sb.click(target)
     time.sleep(0.5)
+
+
+def paste_image(sb, data: bytes) -> bool:
+    """이미지 파일을 커서 위치에 붙여넣는다. 네이버가 자기 서버에 올린다(2026-09-24 실측).
+
+    HTML의 <img>(외부 URL·data URI)는 에디터가 버린다 — 파일로 붙여넣어야 한다.
+    실패해도 발행을 막지 않도록 예외 대신 False를 돌려준다.
+    """
+    before = sb.execute_script(_COUNT_JS, sel.UPLOADED_IMAGES)
+    name = f"image_{int(time.time() * 1000)}.jpg"
+    _dispatch_in_input_buffer(sb, _PASTE_FILE_JS, base64.b64encode(data).decode(), name)
+    started = time.time()
+    while time.time() - started < IMAGE_UPLOAD_TIMEOUT:
+        time.sleep(1)
+        if sb.execute_script(_COUNT_JS, sel.UPLOADED_IMAGES) > before:
+            logger.info(f"사진 업로드 완료 ({time.time() - started:.0f}초)")
+            return True
+        error_button = _first_visible(sb, sel.UPLOAD_ERROR_CLOSE)
+        if error_button:
+            logger.warning("사진 '파일 전송 오류' — 사진 없이 계속")
+            sb.click(error_button)
+            time.sleep(1)
+            return False
+    logger.warning(f"사진 업로드가 {IMAGE_UPLOAD_TIMEOUT}초 안에 끝나지 않음 — 사진 없이 계속")
+    return False
+
+
+def paste_html(sb, html: str, plain_text: str) -> None:
+    # 문단 수가 아니라 글자 수 변화로 판정: 빈 문단에 한 줄을 붙이면 문단 수가 그대로고,
+    # 빈 본문의 안내 문구('글감과 함께…')가 글자 수에 잡혔다가 사라져 줄 수도 있다(2026-09-24 실측)
+    before = sb.execute_script(_TEXT_LEN_JS, sel.BODY_PARAGRAPHS)
     _dispatch_paste_in_input_buffer(sb, html, plain_text)
     time.sleep(2)
-    after = sb.execute_script(_COUNT_JS, sel.BODY_PARAGRAPHS)
-    if after <= before:
+    after = sb.execute_script(_TEXT_LEN_JS, sel.BODY_PARAGRAPHS)
+    if after == before:
         raise NaverEditorError(
-            f"본문 붙여넣기가 반영되지 않음 (문단 {before} → {after})"
+            f"본문 붙여넣기가 반영되지 않음 (글자 {before} → {after})"
         )
-    logger.info(f"본문 붙여넣기 완료: 문단 {before} → {after}")
+    logger.info(f"본문 붙여넣기 완료: 글자 {before} → {after}")
 
 
 def save_draft(sb) -> None:
@@ -152,13 +209,17 @@ def _accept_alert(sb) -> None:
 
 
 def _dispatch_paste_in_input_buffer(sb, html: str, plain_text: str) -> None:
+    _dispatch_in_input_buffer(sb, _PASTE_JS, html, plain_text)
+
+
+def _dispatch_in_input_buffer(sb, script: str, *args) -> None:
     """에디터 바깥 문서에 보낸 paste는 무시된다. 숨은 입력 iframe 안에서 보내야 한다."""
     frames = sb.driver.find_elements("css selector", sel.INPUT_BUFFER_FRAME)
     if not frames:
         raise NaverEditorError("입력 버퍼 iframe을 찾지 못함 — selectors.INPUT_BUFFER_FRAME 확인")
     sb.driver.switch_to.frame(frames[0])
     try:
-        sb.execute_script(_PASTE_JS, html, plain_text)
+        sb.execute_script(script, *args)
     finally:
         sb.driver.switch_to.parent_frame()
 

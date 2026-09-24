@@ -24,7 +24,12 @@ from src.infrastructure.browser.naver.content import (
     build_naver_html,
     normalize_tags,
     parse_log_no,
+    split_sections,
 )
+from src.infrastructure.browser.naver.images import ImageFn, image_prompt
+
+# 대표 1장 + 소제목마다 1장, 상한
+MAX_IMAGES = 5
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +42,7 @@ class NaverBrowserAdapter(BrowserPort):
     def __init__(self, blog_id: str, profile_dir: str = DEFAULT_PROFILE_DIR,
                  headless: bool = False, draft_only: bool = True,
                  min_delay: int = 300, max_delay: int = 900,
-                 screenshot_dir: str = "logs/naver"):
+                 screenshot_dir: str = "logs/naver", image_fn: ImageFn | None = None):
         # headless 기본 False: 네이버는 헤드리스 탐지가 강하다(참고 저장소 공통 권고)
         self._blog_id = blog_id
         self._profile_dir = os.path.abspath(profile_dir)
@@ -46,6 +51,7 @@ class NaverBrowserAdapter(BrowserPort):
         self._min_delay = min_delay
         self._max_delay = max_delay
         self._screenshot_dir = Path(screenshot_dir)
+        self._image_fn = image_fn
         self._sb = None
         self._sb_context = None
 
@@ -99,12 +105,30 @@ class NaverBrowserAdapter(BrowserPort):
         markdown = content.body_markdown or ""
         editor.open_editor(self._sb, self._blog_id)
         editor.fill_title(self._sb, content.title_or_fallback(post.keyword))
-        editor.paste_body(self._sb, build_naver_html(markdown), markdown)
+        self._paste_sections(post.keyword, markdown)
         if self._draft_only:
             editor.save_draft(self._sb)
             return PublishResult.fail(DRAFT_ONLY_MESSAGE)
         url = editor.publish(self._sb, normalize_tags(content.tag_list()))
         return PublishResult.ok(url=url, entry_id=parse_log_no(url))
+
+    def _paste_sections(self, keyword: str, markdown: str) -> None:
+        """대표 사진 → 도입부 → (소제목 → 사진 → 본문)… 순서로 커서 뒤에 이어 붙인다."""
+        editor.focus_body(self._sb)
+        images_left = MAX_IMAGES
+        for heading, body in split_sections(markdown):
+            if heading:
+                editor.paste_html(self._sb, build_naver_html(f"## {heading}"), heading)
+            if images_left and self._insert_image(keyword, heading):
+                images_left -= 1
+            if body:
+                editor.paste_html(self._sb, build_naver_html(body), body)
+
+    def _insert_image(self, keyword: str, heading: str) -> bool:
+        if self._image_fn is None:
+            return False
+        data = self._image_fn(image_prompt(keyword, heading))
+        return data is not None and editor.paste_image(self._sb, data)
 
     def _save_failure_screenshot(self, post: Post) -> None:
         if self._sb is None:

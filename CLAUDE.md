@@ -75,6 +75,8 @@ python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 �
 - **워크플로우 JSON은 손으로 고치지 않는다**: 노드 코드는 `n8n/code_nodes/naver/*.js`, 프롬프트는 `n8n/prompts/prompt_naver_*.md`가 원본이고 `python scripts/build_naver_workflow.py`가 `workflow_complete.json`을 복사해 넣는다. 원본을 고친 뒤 스크립트를 돌려 n8n에 다시 가져올 것. `make test-n8n`이 최신 여부를 검사한다
 - 로그인은 사람이 한다: `python scripts/naver_blog.py login`('로그인 상태 유지' 체크), 세션은 `.browser_data_naver/`. `NAVER_BLOG_ID`는 로그인 아이디가 아니라 블로그 주소(`sangpedia`)
 - SmartEditor 실측(2026-09-23): 진입은 `?Redirect=Write`(`/postwrite`는 홈으로 튕길 때가 있음), 제목·본문 입력은 숨은 `input_buffer*` iframe으로 간다. 셀렉터는 `naver/selectors.py` 한 곳
+- 본문 양식(`content.build_naver_html`): 소제목(H2) → 인용구 박스, 문단 → 한 문장 한 줄 가운데 정렬 + 문단 사이 빈 줄. 발행 시 변환하므로 n8n·프롬프트와 무관
+- 사진(`naver/images.py`): 대표 1장 + 소제목 아래 1장씩, 성공 5장까지. Pollinations 생성 → **Pillow로 재인코딩**(원본 일부를 네이버가 '파일 전송 오류'로 거부, 2026-09-24 실측) → 입력 버퍼 iframe에 **파일 paste**. HTML `<img>`(URL·data URI)는 에디터가 버린다. 판정은 `pstatic.net` 사진이 생길 때까지 — 빈 '전송중' 칸을 성공으로 보고 다음 글을 붙이면 업로드가 끊긴다. 사진 실패는 발행을 막지 않는다
 - 발행 확인 뒤 URL을 못 받거나 브라우저 오류가 나면 사유에 "발행 여부 수동 확인 필요"가 남는다 — 네이버에서 직접 확인 전에는 다시 발행하지 말 것(중복 발행)
 - 네이버 수동 발행도 `.pipeline_b.lock`을 잡는다. 락을 나누면 안 된다: `run_pipeline_b.sh`의 Chrome 정리(`pkill -f ...browser_data`)가 `.browser_data_naver`에도 걸려 발행 중인 네이버 브라우저를 죽인다. 대신 자동 실행 시각(08:30·09:00·10:00·14:00·14:30) 전후에 네이버 발행을 하면 그 자동 실행이 `[SKIP]`으로 건너뛰어진다
 - 상위 글 수집은 SerpAPI 네이버 엔진(`engine=naver`, `web_results`)으로 한다. 네이버 검색 API는 발급이 막혀(2026-09-23) 쓰지 않는다. 티스토리와 같은 `SERPAPI_KEY`·월 250회 한도를 나눠 쓴다(네이버는 하루 1건 → 월 약 30회). SerpAPI는 블로그 전용 검색(`where=blog`)을 지원하지 않아 블로그·카페·웹 문서가 섞여 온다

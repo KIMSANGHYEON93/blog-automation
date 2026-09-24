@@ -19,8 +19,12 @@ BLOG_HOST = "https://blog.naver.com"
 
 _LOG_NO_PATH = re.compile(r"^/[^/]+/(\d{6,})/?$")
 
-# ponytail: 문장 끝(. ? !) 뒤 공백으로 자른다 — 태그 속성 안의 ". "는 잘못 자를 수 있음
-_SENTENCE_END = re.compile(r"(?<=[.?!])\s+")
+# ponytail: 문장 끝(. ? !) 뒤 공백으로 자른다 — 태그 속성 안의 ". "는 잘못 자를 수 있음.
+# 숫자 뒤 마침표('1.', 'Q1.')에서는 자르지 않는다 — 번호만 윗줄에 남는다
+_SENTENCE_END = re.compile(r"(?<=[.?!])(?<!\d\.)\s+")
+# 문장 바로 아래 붙은 목록 줄 — 빈 줄이 없으면 마크다운이 목록이 아니라 문단으로 합친다
+_LIST_ITEM = r"[ \t]*(?:\d+\.|[-*+])\s"
+_LIST_AFTER_TEXT = re.compile(rf"^(?!{_LIST_ITEM})(.*\S.*)\n(?={_LIST_ITEM})", re.M)
 _H2_LINE = re.compile(r"^##\s+(.+?)\s*$")
 _CENTER = '<p style="text-align:center">'
 _BLANK_LINE = "<p><br/></p>"
@@ -35,6 +39,7 @@ def build_naver_html(markdown: str) -> str:
     """
     if not markdown or not markdown.strip():
         return ""
+    markdown = _LIST_AFTER_TEXT.sub(r"\1\n\n", markdown)
     soup = BeautifulSoup(convert_markdown_to_html(markdown), "html.parser")
     for toc in soup.select(".toc-container"):
         toc.decompose()

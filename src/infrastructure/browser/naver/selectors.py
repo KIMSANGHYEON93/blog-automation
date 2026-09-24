@@ -63,6 +63,12 @@ PUBLISH_OPEN = [
     "//button[normalize-space()='발행']",
 ]
 
+# 발행 레이어의 카테고리 선택 상자(2026-09-24 실측: selectbox_button__해시, 목록도 selectbox 안)
+CATEGORY_BUTTON = ["button[class*='selectbox_button']"]
+# 항목은 <label for="7_TechNova">. 하위 카테고리는 숨은 '하위 카테고리' 글자가 붙어
+# 글자 비교로는 안 잡힌다
+CATEGORY_OPTION = "label[for$='_{name}']"
+
 TAG_INPUT = [
     "input[placeholder*='태그']",
     "input[class*='tag_input']",

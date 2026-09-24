@@ -102,3 +102,10 @@ def test_주입된_코드가_문법상_유효하다(wf, tmp_path):
         path.write_text(_node(wf, name)["parameters"]["jsCode"], encoding="utf-8")
         result = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
         assert result.returncode == 0, f"{name}: {result.stderr}"
+
+
+def test_LLM이_고른_카테고리를_시트에_쓴다(wf):
+    columns = _node(wf, "Sheets Update (발행대기)")["parameters"]["columns"]["value"]
+    assert "Parse JSON Response" in columns["카테고리"]
+    assert "category" in columns["카테고리"]
+    assert "TechNova" in columns["카테고리"]  # 비어 있으면 기본값

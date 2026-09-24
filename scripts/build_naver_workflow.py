@@ -26,6 +26,7 @@ CODE_DIR = N8N_DIR / "code_nodes" / "naver"
 PROMPT_DIR = N8N_DIR / "prompts"
 
 NAVER_TAB = "naver_calendar"
+DEFAULT_CATEGORY = "TechNova"  # 네이버 블로그(sangpedia)의 IT 카테고리
 WORKFLOW_NAME = "Blog Automation Pipeline A — Naver"
 OLD_TRIGGER = "Schedule Trigger (01:00 AM)"
 NEW_TRIGGER = "Schedule Trigger (02:00 AM)"
@@ -146,6 +147,10 @@ def _drop_image_injection(wf: dict) -> None:
     wf["connections"]["Parse JSON Response"] = {"main": [[_link("Validate Structure")]]}
     target = _node(wf, "Sheets Update (발행대기)")["parameters"]["columns"]["value"]
     target.pop("썸네일URL", None)
+    # 네이버 블로그 카테고리는 LLM이 프롬프트 목록에서 고른다. 발행 때 이 값으로 선택한다
+    target["카테고리"] = (
+        "={{ $('Parse JSON Response').item.json.category || '" + DEFAULT_CATEGORY + "' }}"
+    )
 
 
 def _add_naver_published_read(wf: dict) -> None:

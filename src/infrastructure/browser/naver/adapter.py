@@ -109,7 +109,7 @@ class NaverBrowserAdapter(BrowserPort):
         if self._draft_only:
             editor.save_draft(self._sb)
             return PublishResult.fail(DRAFT_ONLY_MESSAGE)
-        url = editor.publish(self._sb, normalize_tags(content.tag_list()))
+        url = editor.publish(self._sb, normalize_tags(content.tag_list()), post.category)
         return PublishResult.ok(url=url, entry_id=parse_log_no(url))
 
     def _paste_sections(self, keyword: str, markdown: str) -> None:

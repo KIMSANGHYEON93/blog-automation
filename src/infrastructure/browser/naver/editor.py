@@ -176,10 +176,12 @@ def save_draft(sb) -> None:
     time.sleep(2)
 
 
-def publish(sb, tags: list[str]) -> str:
-    """발행 레이어를 열어 태그를 넣고 확정한다. 발행된 글 URL을 반환."""
+def publish(sb, tags: list[str], category: str = "") -> str:
+    """발행 레이어를 열어 카테고리·태그를 넣고 확정한다. 발행된 글 URL을 반환."""
     _click_first(sb, sel.PUBLISH_OPEN, "발행 버튼")
     time.sleep(1.5)
+    if category:
+        _select_category(sb, category)
     if tags:
         _fill_tags(sb, tags)
     _click_first(sb, sel.PUBLISH_CONFIRM, "발행 확인 버튼")
@@ -268,8 +270,28 @@ def _fill_tags(sb, tags: list[str]) -> None:
         logger.warning("태그 입력란을 찾지 못해 태그 없이 발행 — selectors.TAG_INPUT 확인")
         return
     for tag in tags:
-        sb.type(target, tag + "\n")
+        # sb.type은 입력란을 지운 뒤 쓴다 — 마지막 태그만 남았다(2026-09-23 실측)
+        sb.add_text(target, tag + "\n")
         time.sleep(0.3)
+
+
+def _select_category(sb, name: str) -> bool:
+    """카테고리 목록에서 이름이 같은 항목을 고른다. 없으면 기본 카테고리로 두고 경고만 남긴다."""
+    button = _first_visible(sb, sel.CATEGORY_BUTTON, timeout=3)
+    if not button:
+        logger.warning("카테고리 선택 상자를 찾지 못함 — 기본 카테고리로 발행")
+        return False
+    sb.click(button)
+    time.sleep(1)
+    option = sel.CATEGORY_OPTION.format(name=name)
+    if sb.is_element_visible(option):
+        sb.click(option)
+        time.sleep(0.5)
+        logger.info(f"카테고리 선택: {name}")
+        return True
+    logger.warning(f"카테고리 '{name}'이(가) 블로그에 없음 — 기본 카테고리로 발행")
+    sb.click(button)  # 열린 목록 닫기
+    return False
 
 
 def _wait_published_url(sb) -> str:

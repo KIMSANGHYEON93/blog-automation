@@ -99,3 +99,16 @@ class TestSplitSections:
         from src.infrastructure.browser.naver.content import split_sections
 
         assert split_sections("## 첫째\n\n가.") == [("첫째", "가.")]
+
+
+class TestNumberedSteps:
+    def test_문장_바로_아래_번호_목록도_목록으로(self):
+        # 2026-09-24 실측: 빈 줄 없이 붙은 '1.'이 문단으로 합쳐져 번호만 윗줄에 남았다
+        html = build_naver_html("설명이에요.\n1. 첫째 단계예요.\n2. 둘째 단계예요.")
+        assert "<ol>" in html
+        assert "첫째 단계예요.</li>" in html
+        assert "1.</p>" not in html
+
+    def test_번호_뒤에서는_문장을_자르지_않는다(self):
+        html = build_naver_html("Q1. 요금은 얼마인가요? 버전 3.5 기준이에요.")
+        assert '<p style="text-align:center">Q1. 요금은 얼마인가요?</p>' in html

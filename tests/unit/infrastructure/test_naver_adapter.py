@@ -20,8 +20,9 @@ def calls(monkeypatch):
     monkeypatch.setattr(editor, "paste_image", lambda sb, data: log.append(("image", data)) or True)
     monkeypatch.setattr(editor, "save_draft", lambda sb: log.append(("draft",)))
 
-    def fake_publish(sb, tags):
+    def fake_publish(sb, tags, category=""):
         log.append(("publish", tags))
+        log.append(("category", category))
         return PUBLISHED
 
     monkeypatch.setattr(editor, "publish", fake_publish)
@@ -110,7 +111,7 @@ def test_브라우저가_없어도_스크린샷_단계에서_죽지_않는다(ca
 
 
 def test_발행_URL_미확인은_수동_확인_필요로_표시(calls, monkeypatch):
-    def unconfirmed(sb, tags):
+    def unconfirmed(sb, tags, category=""):
         raise editor.NaverEditorError(
             f"발행 후 글 URL을 확인하지 못함 — {editor.PUBLISH_UNCONFIRMED}"
         )
@@ -215,3 +216,55 @@ def test_사진_생성이_실패해도_발행한다(calls):
 def test_사진_함수가_없으면_사진_없이(calls):
     assert NaverBrowserAdapter("myblog", draft_only=False).publish(_sectioned_post(2)).success
     assert not any(c[0] == "image" for c in calls)
+
+
+class _LayerSb:
+    """발행 레이어 가짜 — 보이는 셀렉터와 클릭·입력 기록."""
+
+    def __init__(self, visible):
+        self.visible, self.log = set(visible), []
+
+    def is_element_visible(self, selector):
+        return selector in self.visible
+
+    def click(self, selector):
+        self.log.append(("click", selector))
+
+    def add_text(self, selector, text):
+        self.log.append(("add_text", text))
+
+    def type(self, selector, text):
+        self.log.append(("type", text))
+
+
+def test_태그는_지우지_않고_이어_쓴다(monkeypatch):
+    # sb.type은 입력란을 지운 뒤 쓴다 — 마지막 태그만 남았다(2026-09-23 실측)
+    monkeypatch.setattr(editor.time, "sleep", lambda s: None)
+    sb = _LayerSb({editor.sel.TAG_INPUT[0]})
+    editor._fill_tags(sb, ["가", "나", "다"])
+    assert [e for e in sb.log if e[0] == "add_text"] == [
+        ("add_text", "가\n"), ("add_text", "나\n"), ("add_text", "다\n"),
+    ]
+    assert not any(e[0] == "type" for e in sb.log)
+
+
+def test_카테고리는_목록에서_이름이_같은_항목을_고른다(monkeypatch):
+    monkeypatch.setattr(editor.time, "sleep", lambda s: None)
+    option = editor.sel.CATEGORY_OPTION.format(name="TechNova")
+    sb = _LayerSb({editor.sel.CATEGORY_BUTTON[0], option})
+    assert editor._select_category(sb, "TechNova") is True
+    assert sb.log == [("click", editor.sel.CATEGORY_BUTTON[0]), ("click", option)]
+
+
+def test_없는_카테고리면_기본값으로_두고_목록을_닫는다(monkeypatch):
+    monkeypatch.setattr(editor.time, "sleep", lambda s: None)
+    sb = _LayerSb({editor.sel.CATEGORY_BUTTON[0]})
+    assert editor._select_category(sb, "없는카테고리") is False
+    assert sb.log == [("click", editor.sel.CATEGORY_BUTTON[0])] * 2
+
+
+def test_발행에_시트_카테고리를_넘긴다(calls):
+    post = _post()
+    post.category = "TechNova"
+    NaverBrowserAdapter("myblog", draft_only=False).publish(post)
+    assert ("category", "TechNova") in calls

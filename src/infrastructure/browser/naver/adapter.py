@@ -128,7 +128,12 @@ class NaverBrowserAdapter(BrowserPort):
         if self._image_fn is None:
             return False
         data = self._image_fn(image_prompt(keyword, heading))
-        return data is not None and editor.paste_image(self._sb, data)
+        if data is None:
+            return False
+        # 업로드 확인이 시간 안에 안 돼도 늦게 올라갈 수 있다(2026-09-26 실측: 6장이 됨) —
+        # 붙인 사진은 확인 여부와 상관없이 한 장으로 센다
+        editor.paste_image(self._sb, data)
+        return True
 
     def _save_failure_screenshot(self, post: Post) -> None:
         if self._sb is None:

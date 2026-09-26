@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 
+from src.application.use_cases.edit_post import EDITABLE_STATUSES
 from src.application.use_cases.publish_selected_post import publish_blockers
 from src.domain.entities.post import Post
 from src.domain.ports.post_repository import PostRepository
@@ -31,10 +32,19 @@ class PostSummary:
     meta_description: str
     blockers: tuple[str, ...]
     body_markdown: str = ""
+    tags: str = ""
 
     @property
     def can_publish(self) -> bool:
         return not self.blockers
+
+    @property
+    def can_edit(self) -> bool:
+        return self.status in EDITABLE_STATUSES
+
+    @property
+    def can_restore(self) -> bool:
+        return self.status in (PostStatus.FAILED, PostStatus.HOLD)
 
 
 @dataclass(frozen=True)
@@ -60,6 +70,7 @@ def summarize(post: Post) -> PostSummary:
         meta_description=content.meta_description if content else "",
         blockers=tuple(publish_blockers(post)),
         body_markdown=(content.body_markdown or "") if content else "",
+        tags=content.tags if content else "",
     )
 
 

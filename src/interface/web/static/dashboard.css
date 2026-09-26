@@ -140,6 +140,14 @@ th:last-child, td:last-child { padding-right: 20px; }
 .meta dd { margin: 0; word-break: break-word; }
 .meta dt:last-of-type, .meta dd:last-of-type { border-bottom: 0; }
 .error-text { color: var(--err); }
+.edit label { display: block; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
+.edit textarea {
+  width: 100%; margin-top: 4px; padding: 10px 12px; resize: vertical;
+  font: 13px/1.7 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; color: var(--text);
+  background: var(--card); border: .5px solid var(--control); border-radius: 8px;
+}
+.edit textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+.restore { margin-top: 12px; }
 .body {
   margin: 0; max-height: 70vh; overflow: auto; padding: 14px 16px;
   background: var(--fill); border-radius: 8px;

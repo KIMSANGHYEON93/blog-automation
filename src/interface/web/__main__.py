@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
 
 from src.application.services.internal_link_enricher import InternalLinkEnricher
+from src.application.use_cases.edit_post import EditPostUseCase
 from src.application.use_cases.list_posts import ListPostsUseCase
 from src.application.use_cases.publish_selected_post import (
     ManualPublishResult,
@@ -118,6 +119,7 @@ def _serve(platform: str) -> int:
         authenticator=AdminAuthenticator(settings.admin_user, settings.admin_password_hash),
         list_posts=ListPostsUseCase(repo),
         job_runner=PublishJobRunner(publish=_build_publisher(config, repo, profile)),
+        edit_post=EditPostUseCase(repo),
         secret_key=settings.secret_key,
         secure_cookies=settings.secure_cookies,
         allowed_hosts=settings.allowed_hosts,

@@ -22,7 +22,9 @@ from flask import (
     url_for,
 )
 
+from src.application.use_cases.edit_post import EditPostUseCase, PostNotEditableError
 from src.application.use_cases.list_posts import PostPage, PostQuery, PostSummary
+from src.domain.exceptions import InvalidStatusTransitionError
 from src.domain.value_objects.post_status import PostStatus
 from src.interface.web.auth import AdminAuthenticator, LoginThrottle
 from src.interface.web.jobs import JobState, PublishJobRunner
@@ -59,6 +61,7 @@ def create_app(
     session_hours: int = 8,
     allowed_hosts: frozenset[str] | None = None,
     brand_label: str = "블로그 관리자",
+    edit_post: EditPostUseCase | None = None,
 ) -> Flask:
     if len(secret_key) < 16:
         raise ValueError("secret_key는 16자 이상이어야 합니다")
@@ -69,12 +72,15 @@ def create_app(
         SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=secure_cookies,
         PERMANENT_SESSION_LIFETIME=timedelta(hours=session_hours),
-        MAX_CONTENT_LENGTH=64 * 1024,
+        # 본문 편집 폼: 한글은 URL 인코딩 시 글자당 9바이트 — 3만 자 본문도 들어가게
+        MAX_CONTENT_LENGTH=512 * 1024,
     )
     login_throttle = throttle or LoginThrottle()
     _register_guards(app, allowed_hosts, brand_label)
     _register_auth_routes(app, authenticator, login_throttle)
     _register_dashboard_routes(app, list_posts, job_runner)
+    if edit_post is not None:
+        _register_edit_routes(app, edit_post)
     return app
 
 
@@ -95,6 +101,7 @@ def _register_guards(
 ) -> None:
     app.jinja_env.globals["csrf_token"] = _csrf_token
     app.jinja_env.globals["brand_label"] = brand_label
+    app.jinja_env.globals["editing_enabled"] = False
     app.jinja_env.filters["safe_url"] = safe_url
 
     @app.get("/favicon.ico")
@@ -196,3 +203,41 @@ def _register_dashboard_routes(app: Flask, reader: PostReader, runner: PublishJo
             "job.html", job=job, running=job.state == JobState.RUNNING,
             refresh_seconds=JOB_REFRESH_SECONDS,
         )
+
+
+# 편집 폼 입력 상한 — 필수 여부와 최대 글자 수
+EDIT_FIELDS = {"title": (True, 150), "body": (True, 30000), "tags": (False, 500),
+               "category": (False, 50)}
+
+
+def _edit_form() -> dict[str, str] | None:
+    values = {name: request.form.get(name, "").strip() for name in EDIT_FIELDS}
+    for name, (required, limit) in EDIT_FIELDS.items():
+        if (required and not values[name]) or len(values[name]) > limit:
+            return None
+    return values
+
+
+def _register_edit_routes(app: Flask, editor: EditPostUseCase) -> None:
+    app.jinja_env.globals["editing_enabled"] = True
+
+    @app.post("/posts/<int:row_index>/edit")
+    def edit_post(row_index: int):  # type: ignore[no-untyped-def]
+        values = _edit_form()
+        if values is None:
+            abort(400, description="제목과 본문은 필수이고, 글자 수 상한을 넘을 수 없습니다")
+        try:
+            editor.edit(row_index, **values)
+        except PostNotEditableError:
+            abort(409, description="발행됐거나 발행 중인 글은 고칠 수 없습니다")
+        flash("저장했습니다. 발행 전에 본문을 다시 확인하세요.", "success")
+        return redirect(url_for("post_detail", row_index=row_index))
+
+    @app.post("/posts/<int:row_index>/restore")
+    def restore_post(row_index: int):  # type: ignore[no-untyped-def]
+        try:
+            editor.restore(row_index)
+        except (PostNotEditableError, InvalidStatusTransitionError):
+            abort(409, description="발행실패·보류 글만 되돌릴 수 있습니다")
+        flash("발행대기로 되돌렸습니다.", "success")
+        return redirect(url_for("post_detail", row_index=row_index))

@@ -82,6 +82,13 @@ class Post:
         if reason:
             self.error_message = reason[:200]
 
+    def release_hold(self) -> None:
+        """HOLD → PENDING. 관리자가 보류 사유를 확인하고 발행 후보로 되돌릴 때."""
+        if self.status != PostStatus.HOLD:
+            raise InvalidStatusTransitionError(self.status, PostStatus.PENDING)
+        self.status = PostStatus.PENDING
+        self.error_message = ""
+
     def is_publishable(self) -> bool:
         """True only when PENDING + quality body + sufficient length + quality_score."""
         return (

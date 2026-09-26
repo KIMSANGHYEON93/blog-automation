@@ -251,3 +251,16 @@ class TestInternalLinkKeywords:
         )
         assert post.internal_link_keywords == ["LDAP", "OAuth", "SAML"]
         assert len(post.internal_link_keywords) == 3
+
+
+def test_보류_해제는_발행대기로():
+    post = Post(row_index=2, keyword="k", status=PostStatus.HOLD, error_message="중복")
+    post.release_hold()
+    assert post.status == PostStatus.PENDING
+    assert post.error_message == ""
+
+
+def test_보류가_아니면_해제할_수_없다():
+    post = Post(row_index=2, keyword="k", status=PostStatus.PENDING)
+    with pytest.raises(InvalidStatusTransitionError):
+        post.release_hold()

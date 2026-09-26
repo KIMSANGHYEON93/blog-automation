@@ -26,6 +26,9 @@ class InMemoryPostRepository(PostRepository):
                 return
         self._posts.append(post)
 
+    def save_content(self, post: Post) -> None:
+        self.save(post)
+
     def find_stuck(self) -> list[Post]:
         return [p for p in self._posts
                 if p.status == PostStatus.PUBLISHING]

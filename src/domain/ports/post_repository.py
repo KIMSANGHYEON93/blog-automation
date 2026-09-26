@@ -61,6 +61,11 @@ class PostRepository(ABC):
         ...
 
     @abstractmethod
+    def save_content(self, post: Post) -> None:
+        """관리자가 고친 제목·본문·태그·카테고리를 저장. 상태는 save()가 담당."""
+        ...
+
+    @abstractmethod
     def save_category(self, row_index: int, category: str) -> None:
         """카테고리 값을 저장."""
         ...

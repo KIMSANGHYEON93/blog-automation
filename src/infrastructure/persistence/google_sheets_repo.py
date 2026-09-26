@@ -246,6 +246,18 @@ class GoogleSheetsPostRepository(PostRepository):
         self._sheet.update_cells(cells)
         logger.debug(f"시트 업데이트: row={row}, status={post.status.value}")
 
+    def save_content(self, post: Post) -> None:
+        content = post.content
+        values = {
+            COL["title"]: content.title if content else "",
+            COL["content"]: content.body_markdown if content else "",
+            COL["tags"]: content.tags if content else "",
+            COL["category"]: post.category,
+        }
+        cells = [Cell(row=post.row_index, col=col, value=v or "") for col, v in values.items()]
+        self._sheet.update_cells(cells)
+        logger.info(f"본문 수정 저장: row={post.row_index}")
+
     def save_cwv_record(
         self, row_index: int,
         lcp: float, cls_score: float,

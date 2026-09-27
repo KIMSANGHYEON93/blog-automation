@@ -37,6 +37,10 @@ class TermKeywordResult:
     error: str = ""
 
 
+def existing_keywords(repos: list[PostRepository]) -> list[str]:
+    return [p.keyword for repo in repos for p in repo.find_all() if p.keyword]
+
+
 class GenerateKeywordsFromTermsUseCase:
     def __init__(
         self,
@@ -44,8 +48,11 @@ class GenerateKeywordsFromTermsUseCase:
         term_port: BrainTermPort,
         top_n: int = DEFAULT_TOP_N,
         blocked_keywords: set[str] | None = None,
+        other_repos: list[PostRepository] | None = None,
     ):
         self._repo = repo
+        # 등록은 repo에만 하지만 중복은 다른 탭(예: 네이버 대시보드의 티스토리 탭)과도 본다
+        self._other_repos = other_repos or []
         self._term_port = term_port
         self._top_n = top_n
         self._blocked = blocked_keywords if blocked_keywords is not None else B2C_BLOCKLIST
@@ -61,7 +68,7 @@ class GenerateKeywordsFromTermsUseCase:
             logger.info("볼트 용어 없음")
             return TermKeywordResult(success=True)
 
-        existing = [p.keyword for p in self._repo.find_all() if p.keyword]
+        existing = existing_keywords([self._repo, *self._other_repos])
 
         # 볼트는 가나다순이라 마이너 용어가 앞에 온다. 검색 수요 대용 지표로
         # 다시 세워야 top_n이 의미 있는 상위를 자른다.

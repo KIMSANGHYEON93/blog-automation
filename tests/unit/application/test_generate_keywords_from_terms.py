@@ -40,6 +40,15 @@ def make_use_case(terms, repo=None, **kw):
     )
 
 
+def test_다른_탭에_있는_키워드도_중복으로_뺀다():
+    # 네이버 대시보드는 티스토리 탭과도 겹치면 안 된다(n8n Check Duplicate도 두 탭을 본다)
+    from src.domain.entities.post import Post
+
+    tistory = InMemoryPostRepository([Post(row_index=2, keyword="MCP란")])
+    uc = make_use_case([term("MCP"), term("RAG")], other_repos=[tistory])
+    assert [s.keyword for s in uc.execute().suggestions] == ["RAG란"]
+
+
 class TestBasicGeneration:
     def test_정의형_키워드를_만든다(self):
         result = make_use_case([term("MCP")]).execute()

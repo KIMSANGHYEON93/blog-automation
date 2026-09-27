@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import logging
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -44,6 +45,15 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/interface/cli.py → 프로젝트 루트
 LOG_FILE = str(PROJECT_ROOT / "logs" / "blog-publisher.log")
+
+
+def retry_hint(argv: list[str]) -> str:
+    """실패 알림 끝에 붙일 텔레그램 재실행 명령 (scripts/telegram_retry_bot.py가 받는다)."""
+    if not argv:
+        return "\n다시 실행: /retry_publish"
+    if argv == ["--revise"]:
+        return "\n다시 실행: /retry_revise"
+    return ""
 
 
 def _parse_args() -> argparse.Namespace:
@@ -639,7 +649,8 @@ def main() -> None:
         logger.exception(f"Pipeline B 크래시: {e}")
         with contextlib.suppress(Exception):
             _build_notification().send(
-                f"Pipeline B 크래시: {type(e).__name__}: {e}", level="ERROR",
+                f"Pipeline B 크래시: {type(e).__name__}: {e}{retry_hint(sys.argv[1:])}",
+                level="ERROR",
             )
         raise
 

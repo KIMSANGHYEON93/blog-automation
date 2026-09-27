@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 텔레그램 재실행 봇 상시 실행. 설치:
+     cp scripts/com.blog-automation.telegram-bot.plist ~/Library/LaunchAgents/
+     launchctl load ~/Library/LaunchAgents/com.blog-automation.telegram-bot.plist -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.blog-automation.telegram-bot</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/kimsanghyeon/.pyenv/versions/3.11.11/bin/python3</string>
+		<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/scripts/telegram_retry_bot.py</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<key>StandardErrorPath</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/logs/telegram_bot.err</string>
+	<key>StandardOutPath</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/logs/telegram_bot.log</string>
+</dict>
+</plist>

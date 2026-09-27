@@ -61,6 +61,24 @@ def build_naver_html(markdown: str) -> str:
     return str(soup).strip()
 
 
+def layout_blocks(markdown: str, max_images: int) -> list[tuple[str, str]]:
+    """붙여넣는 순서: 대표 사진 → 도입부 → (소제목 → 사진 → 본문)…
+
+    ('image', 소제목) / ('text', 마크다운). 발행과 미리보기가 같은 순서를 쓰게 한 곳에 둔다.
+    """
+    blocks: list[tuple[str, str]] = []
+    images_left = max_images
+    for heading, body in split_sections(markdown):
+        if heading:
+            blocks.append(("text", f"## {heading}"))
+        if images_left:
+            blocks.append(("image", heading))
+            images_left -= 1
+        if body:
+            blocks.append(("text", body))
+    return blocks
+
+
 def split_sections(markdown: str) -> list[tuple[str, str]]:
     """본문을 (소제목, 그 아래 마크다운) 목록으로 나눈다. 도입부는 소제목이 빈 문자열.
 

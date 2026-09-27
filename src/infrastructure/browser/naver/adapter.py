@@ -22,9 +22,9 @@ from src.domain.value_objects.publish_result import PublishResult
 from src.infrastructure.browser.naver import editor
 from src.infrastructure.browser.naver.content import (
     build_naver_html,
+    layout_blocks,
     normalize_tags,
     parse_log_no,
-    split_sections,
 )
 from src.infrastructure.browser.naver.images import ImageFn, image_prompt
 
@@ -52,6 +52,7 @@ class NaverBrowserAdapter(BrowserPort):
         self._max_delay = max_delay
         self._screenshot_dir = Path(screenshot_dir)
         self._image_fn = image_fn
+        self.images_uploaded = 0  # 마지막 글에서 업로드가 확인된 사진 수(임시저장 시험 보고용)
         self._sb = None
         self._sb_context = None
 
@@ -115,25 +116,23 @@ class NaverBrowserAdapter(BrowserPort):
     def _paste_sections(self, keyword: str, markdown: str) -> None:
         """대표 사진 → 도입부 → (소제목 → 사진 → 본문)… 순서로 커서 뒤에 이어 붙인다."""
         editor.focus_body(self._sb)
-        images_left = MAX_IMAGES
-        for heading, body in split_sections(markdown):
-            if heading:
-                editor.paste_html(self._sb, build_naver_html(f"## {heading}"), heading)
-            if images_left and self._insert_image(keyword, heading):
-                images_left -= 1
-            if body:
-                editor.paste_html(self._sb, build_naver_html(body), body)
+        self.images_uploaded = 0
+        for kind, value in layout_blocks(markdown, MAX_IMAGES):
+            if kind == "text":
+                editor.paste_html(self._sb, build_naver_html(value), value)
+            elif self._insert_image(keyword, value):
+                self.images_uploaded += 1
 
     def _insert_image(self, keyword: str, heading: str) -> bool:
+        """사진 자리 하나를 채운다. 생성에 실패하면 그 자리는 비운다.
+
+        자리 수(상한)는 layout_blocks가 정한다 — 확인이 늦은 사진 때문에 자리를 더 만들지 않는다
+        (2026-09-26 실측: 늦게 올라간 사진 때문에 6장이 됨).
+        """
         if self._image_fn is None:
             return False
         data = self._image_fn(image_prompt(keyword, heading))
-        if data is None:
-            return False
-        # 업로드 확인이 시간 안에 안 돼도 늦게 올라갈 수 있다(2026-09-26 실측: 6장이 됨) —
-        # 붙인 사진은 확인 여부와 상관없이 한 장으로 센다
-        editor.paste_image(self._sb, data)
-        return True
+        return data is not None and editor.paste_image(self._sb, data)
 
     def _save_failure_screenshot(self, post: Post) -> None:
         if self._sb is None:

@@ -22,12 +22,15 @@ from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.application.use_cases.edit_post import EditPostUseCase
 from src.application.use_cases.list_posts import ListPostsUseCase
 from src.application.use_cases.publish_selected_post import (
+    ManualPublishOutcome,
     ManualPublishResult,
     PublishSelectedPostUseCase,
 )
 from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.quota_manager import QuotaManager
 from src.domain.value_objects.site_profile import SiteProfile
+from src.infrastructure.browser.naver.adapter import DRAFT_ONLY_MESSAGE, MAX_IMAGES
+from src.infrastructure.browser.naver.preview import build_preview_html
 from src.infrastructure.browser.tistory_editor import set_site_profile
 from src.infrastructure.config import Config
 from src.infrastructure.locking.directory_lock import DirectoryPipelineLock
@@ -98,6 +101,41 @@ def _build_publisher(  # type: ignore[no-untyped-def]
     return publish
 
 
+def _build_drafter(  # type: ignore[no-untyped-def]
+    config: Config, repo: GoogleSheetsPostRepository, profile: PlatformProfile,
+):
+    """임시저장 시험: 실제 에디터에 붙여 임시저장까지만. 시트 상태는 바꾸지 않는다."""
+
+    def draft(row_index: int) -> ManualPublishResult:
+        post = next((p for p in repo.find_all() if p.row_index == row_index), None)
+        if post is None or post.content is None or not post.content.has_body():
+            return ManualPublishResult.rejected(row_index, "본문이 없어 시험할 수 없습니다")
+        lock = DirectoryPipelineLock(LOCK_DIR)
+        if not lock.acquire():
+            return ManualPublishResult.rejected(row_index, "다른 작업(자동 발행 등)이 실행 중")
+        browser = make_browser(profile, config, PROJECT_ROOT, None, None, draft_only=True)
+        try:
+            browser.start()
+            if not browser.login():
+                return ManualPublishResult.failed(
+                    row_index, "네이버 로그인 실패 — scripts/naver_blog.py login 으로 다시 로그인",
+                )
+            result = browser.publish(post)
+        finally:
+            browser.stop()
+            lock.release()
+        if result.error != DRAFT_ONLY_MESSAGE:
+            return ManualPublishResult.failed(row_index, f"임시저장 시험 실패: {result.error}")
+        uploaded = getattr(browser, "images_uploaded", 0)
+        return ManualPublishResult(
+            ManualPublishOutcome.DRAFTED, row_index,
+            f"임시저장 완료 — 사진 {uploaded}/{MAX_IMAGES}장 업로드 확인. "
+            "네이버 글쓰기 > 임시저장에서 확인하세요",
+        )
+
+    return draft
+
+
 def _serve(platform: str) -> int:
     try:
         settings = DashboardSettings.from_env(os.environ)
@@ -118,8 +156,15 @@ def _serve(platform: str) -> int:
     app = create_app(
         authenticator=AdminAuthenticator(settings.admin_user, settings.admin_password_hash),
         list_posts=ListPostsUseCase(repo),
-        job_runner=PublishJobRunner(publish=_build_publisher(config, repo, profile)),
+        job_runner=PublishJobRunner(
+            publish=_build_publisher(config, repo, profile),
+            draft=_build_drafter(config, repo, profile) if profile.name == "naver" else None,
+        ),
         edit_post=EditPostUseCase(repo),
+        preview=(
+            (lambda post: build_preview_html(post.keyword, post.body_markdown))
+            if profile.name == "naver" else None
+        ),
         secret_key=settings.secret_key,
         secure_cookies=settings.secure_cookies,
         allowed_hosts=settings.allowed_hosts,

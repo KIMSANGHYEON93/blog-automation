@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}미리보기 · {{ post.keyword }} · {{ brand_label }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('post_detail', row_index=post.row_index) }}">← {{ post.row_index }}행 게시물</a></p>
+<section class="card">
+  <p class="sub">에디터에 붙일 순서 그대로입니다. 회색 상자는 발행할 때 생성해 넣는 사진 자리예요.</p>
+  <article class="preview">
+    <h1>{{ post.title }}</h1>
+    {{ body_html|safe }}
+  </article>
+</section>
+{% endblock %}

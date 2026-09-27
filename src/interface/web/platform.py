@@ -45,13 +45,14 @@ def make_browser(
     project_root: Path,
     notifier: NotificationPort | None,
     site_profile: SiteProfile | None,
+    draft_only: bool = False,
 ) -> BrowserPort:
-    """1건 수동 발행용 브라우저 — 다음 발행 대기 없음."""
+    """1건 수동 발행용 브라우저 — 다음 발행 대기 없음. draft_only는 임시저장 시험(네이버)."""
     if profile.name == "naver":
         return NaverBrowserAdapter(
             config.naver_blog_id,
             profile_dir=str(project_root / DEFAULT_PROFILE_DIR),
-            draft_only=False,  # 대시보드 발행 = 사람이 승인한 공개 발행
+            draft_only=draft_only,  # 기본 False: 대시보드 발행 = 사람이 승인한 공개 발행
             min_delay=0,
             max_delay=0,
             screenshot_dir=str(project_root / "logs" / "naver"),

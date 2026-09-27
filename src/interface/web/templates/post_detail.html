@@ -42,6 +42,18 @@
       {% for reason in post.blockers %}<li>{{ reason }}</li>{% endfor %}
     </ul>
   {% endif %}
+  {% if preview_enabled or (draft_enabled and post.body_length) %}
+  <div class="checks">
+    {% if preview_enabled %}<a href="{{ url_for('preview_post', row_index=post.row_index) }}">미리보기</a>{% endif %}
+    {% if draft_enabled and post.body_length and not active_job %}
+    <form method="post" action="{{ url_for('draft_post', row_index=post.row_index) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">임시저장 시험</button>
+    </form>
+    <span class="sub">실제 에디터에 붙여 임시저장까지만 합니다(공개·시트 변경 없음).</span>
+    {% endif %}
+  </div>
+  {% endif %}
   {% if editing_enabled and post.can_restore %}
   <form method="post" action="{{ url_for('restore_post', row_index=post.row_index) }}" class="restore">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

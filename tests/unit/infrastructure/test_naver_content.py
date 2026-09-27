@@ -112,3 +112,21 @@ class TestNumberedSteps:
     def test_번호_뒤에서는_문장을_자르지_않는다(self):
         html = build_naver_html("Q1. 요금은 얼마인가요? 버전 3.5 기준이에요.")
         assert '<p style="text-align:center">Q1. 요금은 얼마인가요?</p>' in html
+
+
+class TestLayoutBlocks:
+    def test_대표_사진_도입부_소제목_사진_본문_순서(self):
+        from src.infrastructure.browser.naver.content import layout_blocks
+
+        md = "도입.\n\n## 첫째\n\n가.\n\n## 둘째\n\n나."
+        assert layout_blocks(md, max_images=5) == [
+            ("image", ""), ("text", "도입."),
+            ("text", "## 첫째"), ("image", "첫째"), ("text", "가."),
+            ("text", "## 둘째"), ("image", "둘째"), ("text", "나."),
+        ]
+
+    def test_사진은_상한까지만(self):
+        from src.infrastructure.browser.naver.content import layout_blocks
+
+        md = "도입.\n\n" + "\n\n".join(f"## h{i}\n\n본문{i}." for i in range(6))
+        assert sum(1 for kind, _ in layout_blocks(md, max_images=5) if kind == "image") == 5

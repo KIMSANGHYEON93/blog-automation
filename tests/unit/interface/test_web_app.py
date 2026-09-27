@@ -378,3 +378,69 @@ class TestEditPost:
         assert 'action="/posts/2/restore"' not in h.client.get("/posts/2").get_data(as_text=True)
         resp = h.client.post("/posts/2/restore", data={"csrf_token": h.csrf("/posts/2")})
         assert resp.status_code == 409
+
+
+class TestPreviewAndDraft:
+    def _app(self, draft_calls):
+        repo = InMemoryPostRepository([_post(2, "MCP란")])
+
+        def draft(row):
+            draft_calls.append(row)
+            return ManualPublishResult(ManualPublishOutcome.DRAFTED, row, "임시저장 완료")
+
+        runner = PublishJobRunner(
+            publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
+            draft=draft,
+        )
+        app = create_app(
+            authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
+            list_posts=ListPostsUseCase(repo),
+            job_runner=runner,
+            secret_key="test-secret-key-0123456789",
+            preview=lambda post: f'<div class="photo">사진</div><p class="c">{post.keyword}</p>',
+        )
+        app.config["TESTING"] = True
+        client = app.test_client()
+        html = client.get("/login").get_data(as_text=True)
+        token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+        client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
+        return client, runner
+
+    def _token(self, client, path):
+        html = client.get(path).get_data(as_text=True)
+        return re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+
+    def test_상세에_미리보기_링크와_임시저장_시험_버튼(self):
+        client, _ = self._app([])
+        html = client.get("/posts/2").get_data(as_text=True)
+        assert 'href="/posts/2/preview"' in html
+        assert 'action="/posts/2/draft"' in html
+
+    def test_미리보기는_변환된_HTML을_보여준다(self):
+        client, _ = self._app([])
+        html = client.get("/posts/2/preview").get_data(as_text=True)
+        assert '<div class="photo">사진</div><p class="c">MCP란</p>' in html
+
+    def test_임시저장_시험은_작업으로_돌고_결과를_보여준다(self):
+        calls: list[int] = []
+        client, runner = self._app(calls)
+        resp = client.post("/posts/2/draft", data={"csrf_token": self._token(client, "/posts/2")})
+        job_id = resp.headers["Location"].rsplit("/", 1)[-1]
+        runner.wait(job_id, timeout=5)
+        html = client.get(f"/jobs/{job_id}").get_data(as_text=True)
+        assert calls == [2]
+        assert "임시저장 완료" in html and "notice-success" in html
+        assert "임시저장 시험" in html
+
+    def test_CSRF_없는_임시저장_시험은_거부(self):
+        calls: list[int] = []
+        client, _ = self._app(calls)
+        assert client.post("/posts/2/draft").status_code == 400
+        assert calls == []
+
+
+def test_미리보기와_시험이_없는_앱에는_버튼도_없다(h):
+    h.login()
+    html = h.client.get("/posts/2").get_data(as_text=True)
+    assert "/preview" not in html and "/draft" not in html
+    assert h.client.get("/posts/2/preview").status_code == 404

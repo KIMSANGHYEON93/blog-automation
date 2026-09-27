@@ -29,6 +29,7 @@ class ManualPublishOutcome(Enum):
     PUBLISHED = "published"
     FAILED = "failed"
     REJECTED = "rejected"
+    DRAFTED = "drafted"  # 임시저장 시험만 함 — 시트 상태는 바뀌지 않는다
 
 
 @dataclass(frozen=True)

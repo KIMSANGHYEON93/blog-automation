@@ -8,7 +8,7 @@ from __future__ import annotations
 import hmac
 import secrets
 from datetime import timedelta
-from typing import Protocol
+from typing import Callable, Protocol
 from urllib.parse import urlsplit
 
 from flask import (
@@ -62,6 +62,7 @@ def create_app(
     allowed_hosts: frozenset[str] | None = None,
     brand_label: str = "블로그 관리자",
     edit_post: EditPostUseCase | None = None,
+    preview: Callable[[PostSummary], str] | None = None,
 ) -> Flask:
     if len(secret_key) < 16:
         raise ValueError("secret_key는 16자 이상이어야 합니다")
@@ -81,6 +82,7 @@ def create_app(
     _register_dashboard_routes(app, list_posts, job_runner)
     if edit_post is not None:
         _register_edit_routes(app, edit_post)
+    _register_check_routes(app, list_posts, job_runner, preview)
     return app
 
 
@@ -102,6 +104,8 @@ def _register_guards(
     app.jinja_env.globals["csrf_token"] = _csrf_token
     app.jinja_env.globals["brand_label"] = brand_label
     app.jinja_env.globals["editing_enabled"] = False
+    app.jinja_env.globals["preview_enabled"] = False
+    app.jinja_env.globals["draft_enabled"] = False
     app.jinja_env.filters["safe_url"] = safe_url
 
     @app.get("/favicon.ico")
@@ -203,6 +207,35 @@ def _register_dashboard_routes(app: Flask, reader: PostReader, runner: PublishJo
             "job.html", job=job, running=job.state == JobState.RUNNING,
             refresh_seconds=JOB_REFRESH_SECONDS,
         )
+
+
+def _register_check_routes(
+    app: Flask,
+    reader: PostReader,
+    runner: PublishJobRunner,
+    preview: Callable[[PostSummary], str] | None,
+) -> None:
+    """발행 전 점검: 미리보기(변환 HTML)와 임시저장 시험(실제 에디터, 시트 변경 없음)."""
+    app.jinja_env.globals["preview_enabled"] = preview is not None
+    app.jinja_env.globals["draft_enabled"] = runner.draft_enabled
+
+    @app.get("/posts/<int:row_index>/preview")
+    def preview_post(row_index: int):  # type: ignore[no-untyped-def]
+        post = reader.get(row_index)
+        if preview is None or post is None:
+            abort(404)
+        # preview는 허용 태그만 남긴 HTML을 돌려준다(naver/preview.py) — 그래서 safe로 렌더
+        return render_template("preview.html", post=post, body_html=preview(post))
+
+    @app.post("/posts/<int:row_index>/draft")
+    def draft_post(row_index: int):  # type: ignore[no-untyped-def]
+        if not runner.draft_enabled or reader.get(row_index) is None:
+            abort(404)
+        job_id = runner.submit(row_index, draft=True)
+        if job_id is None:
+            flash("이미 진행 중인 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")
+            return redirect(url_for("post_detail", row_index=row_index))
+        return redirect(url_for("job_status", job_id=job_id))
 
 
 # 편집 폼 입력 상한 — 필수 여부와 최대 글자 수

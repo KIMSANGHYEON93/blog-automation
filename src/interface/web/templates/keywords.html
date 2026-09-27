@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}키워드 · {{ brand_label }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('index') }}">← 목록</a></p>
+<section class="card">
+  <h1>키워드 등록</h1>
+  <p class="sub">등록하면 '대기'로 들어가고, n8n이 다음 실행 때 글을 만듭니다. 티스토리·네이버 두 탭과 겹치면 등록하지 않습니다.</p>
+  <form method="post" action="{{ url_for('register_keyword') }}" class="search">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="keyword" placeholder="예: 감마 AI PPT 만들기" maxlength="{{ max_length }}" required>
+    <button type="submit" class="primary">등록</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>추천 ({{ suggestions|length }}건) — AI-Brain 용어에서, 두 탭과 겹치지 않는 것만</h2>
+  {% if suggestions %}
+  <table>
+    <tbody>
+      {% for keyword in suggestions %}
+      <tr>
+        <td class="kw">{{ keyword }}</td>
+        <td class="num">
+          <form method="post" action="{{ url_for('register_keyword') }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="keyword" value="{{ keyword }}">
+            <button type="submit">등록</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="sub">추천할 키워드가 없습니다.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -20,12 +20,16 @@ from werkzeug.security import generate_password_hash
 
 from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.application.use_cases.edit_post import EditPostUseCase
+from src.application.use_cases.generate_keywords_from_terms import (
+    GenerateKeywordsFromTermsUseCase,
+)
 from src.application.use_cases.list_posts import ListPostsUseCase
 from src.application.use_cases.publish_selected_post import (
     ManualPublishOutcome,
     ManualPublishResult,
     PublishSelectedPostUseCase,
 )
+from src.application.use_cases.register_keyword import RegisterKeywordUseCase
 from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.quota_manager import QuotaManager
 from src.domain.value_objects.site_profile import SiteProfile
@@ -37,6 +41,7 @@ from src.infrastructure.locking.directory_lock import DirectoryPipelineLock
 from src.infrastructure.logging_setup import setup_logging
 from src.infrastructure.persistence.google_sheets_repo import GoogleSheetsPostRepository
 from src.infrastructure.persistence.json_site_profile import JsonSiteProfileAdapter
+from src.infrastructure.persistence.sheets_brain_term_adapter import SheetsBrainTermAdapter
 from src.interface.cli import _build_notification as build_notification
 from src.interface.web.app import create_app
 from src.interface.web.auth import AdminAuthenticator
@@ -136,6 +141,38 @@ def _build_drafter(  # type: ignore[no-untyped-def]
     return draft
 
 
+class _KeywordDesk:
+    """대시보드 키워드 화면: AI-Brain 용어 추천 + 직접 등록. 중복은 두 탭 모두와 본다."""
+
+    def __init__(
+        self, suggester: GenerateKeywordsFromTermsUseCase, register: RegisterKeywordUseCase,
+    ):
+        self._suggester = suggester
+        self._register = register
+
+    def suggest(self) -> list[str]:
+        result = self._suggester.execute()
+        return [s.keyword for s in result.suggestions] if result.success else []
+
+    def register(self, keyword: str) -> int:
+        return self._register.register(keyword)
+
+
+def _build_keyword_desk(
+    config: Config, repo: GoogleSheetsPostRepository, profile: PlatformProfile,
+) -> _KeywordDesk:
+    # 다른 블로그 탭 — 네이버 대시보드면 티스토리(sheet1), 티스토리면 네이버 탭
+    other_tab = "" if profile.name == "naver" else config.naver_sheet_tab
+    other = GoogleSheetsPostRepository(
+        creds_path=config.google_creds, sheet_name=config.sheet_name, worksheet=other_tab,
+    )
+    terms = SheetsBrainTermAdapter(creds_path=config.google_creds, sheet_name=config.sheet_name)
+    return _KeywordDesk(
+        GenerateKeywordsFromTermsUseCase(repo=repo, term_port=terms, top_n=15, other_repos=[other]),
+        RegisterKeywordUseCase(repo, other_repos=[other]),
+    )
+
+
 def _serve(platform: str) -> int:
     try:
         settings = DashboardSettings.from_env(os.environ)
@@ -165,6 +202,7 @@ def _serve(platform: str) -> int:
             (lambda post: build_preview_html(post.keyword, post.body_markdown))
             if profile.name == "naver" else None
         ),
+        keywords=_build_keyword_desk(config, repo, profile),
         secret_key=settings.secret_key,
         secure_cookies=settings.secure_cookies,
         allowed_hosts=settings.allowed_hosts,

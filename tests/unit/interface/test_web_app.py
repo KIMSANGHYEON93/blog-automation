@@ -439,6 +439,78 @@ class TestPreviewAndDraft:
         assert calls == []
 
 
+class _FakeDesk:
+    def __init__(self):
+        self.registered: list[str] = []
+
+    def suggest(self):
+        return ["RAG란", "<b>XSS</b>란"]
+
+    def register(self, keyword):
+        from src.application.use_cases.register_keyword import DuplicateKeywordError
+
+        if keyword == "MCP란":
+            raise DuplicateKeywordError(keyword, "MCP란")
+        self.registered.append(keyword)
+        return 7
+
+
+class TestKeywords:
+    def _client(self):
+        desk = _FakeDesk()
+        app = create_app(
+            authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
+            list_posts=ListPostsUseCase(InMemoryPostRepository([])),
+            job_runner=PublishJobRunner(
+                publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
+            ),
+            secret_key="test-secret-key-0123456789",
+            keywords=desk,
+        )
+        app.config["TESTING"] = True
+        client = app.test_client()
+        html = client.get("/login").get_data(as_text=True)
+        token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+        client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
+        return client, desk
+
+    def _post(self, client, keyword):
+        html = client.get("/keywords").get_data(as_text=True)
+        token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+        return client.post("/keywords", data={"keyword": keyword, "csrf_token": token})
+
+    def test_추천_목록과_등록_버튼(self):
+        client, _ = self._client()
+        html = client.get("/keywords").get_data(as_text=True)
+        assert 'value="RAG란"' in html
+        assert "<b>XSS</b>" not in html and "&lt;b&gt;XSS" in html
+        assert 'href="/keywords"' in client.get("/").get_data(as_text=True)
+
+    def test_등록하면_행_번호를_알려준다(self):
+        client, desk = self._client()
+        resp = self._post(client, "  감마 AI PPT 만들기 ")
+        assert resp.status_code == 302
+        assert desk.registered == ["감마 AI PPT 만들기"]
+        assert "7행" in client.get("/keywords").get_data(as_text=True)
+
+    def test_중복이면_겹친_키워드를_보여주고_등록하지_않는다(self):
+        client, desk = self._client()
+        self._post(client, "MCP란")
+        assert desk.registered == []
+        assert "이미 있는" in client.get("/keywords").get_data(as_text=True)
+
+    @pytest.mark.parametrize("keyword", ["", "   ", "가" * 61])
+    def test_빈_값이나_너무_긴_키워드는_거부(self, keyword):
+        client, desk = self._client()
+        assert self._post(client, keyword).status_code == 400
+        assert desk.registered == []
+
+    def test_CSRF_없는_등록은_거부(self):
+        client, desk = self._client()
+        assert client.post("/keywords", data={"keyword": "x"}).status_code == 400
+        assert desk.registered == []
+
+
 def test_미리보기와_시험이_없는_앱에는_버튼도_없다(h):
     h.login()
     html = h.client.get("/posts/2").get_data(as_text=True)

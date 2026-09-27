@@ -24,6 +24,7 @@ from flask import (
 
 from src.application.use_cases.edit_post import EditPostUseCase, PostNotEditableError
 from src.application.use_cases.list_posts import PostPage, PostQuery, PostSummary
+from src.application.use_cases.register_keyword import DuplicateKeywordError
 from src.domain.exceptions import InvalidStatusTransitionError
 from src.domain.value_objects.post_status import PostStatus
 from src.interface.web.auth import AdminAuthenticator, LoginThrottle
@@ -50,6 +51,17 @@ class PostReader(Protocol):
     def get(self, row_index: int) -> PostSummary | None: ...
 
 
+class KeywordDesk(Protocol):
+    """키워드 추천(두 탭과 중복 제외)과 등록. 등록은 중복이면 DuplicateKeywordError."""
+
+    def suggest(self) -> list[str]: ...
+
+    def register(self, keyword: str) -> int: ...
+
+
+KEYWORD_MAX_LENGTH = 60
+
+
 def create_app(
     *,
     authenticator: AdminAuthenticator,
@@ -63,6 +75,7 @@ def create_app(
     brand_label: str = "블로그 관리자",
     edit_post: EditPostUseCase | None = None,
     preview: Callable[[PostSummary], str] | None = None,
+    keywords: KeywordDesk | None = None,
 ) -> Flask:
     if len(secret_key) < 16:
         raise ValueError("secret_key는 16자 이상이어야 합니다")
@@ -83,6 +96,8 @@ def create_app(
     if edit_post is not None:
         _register_edit_routes(app, edit_post)
     _register_check_routes(app, list_posts, job_runner, preview)
+    if keywords is not None:
+        _register_keyword_routes(app, keywords)
     return app
 
 
@@ -106,6 +121,7 @@ def _register_guards(
     app.jinja_env.globals["editing_enabled"] = False
     app.jinja_env.globals["preview_enabled"] = False
     app.jinja_env.globals["draft_enabled"] = False
+    app.jinja_env.globals["keywords_enabled"] = False
     app.jinja_env.filters["safe_url"] = safe_url
 
     @app.get("/favicon.ico")
@@ -236,6 +252,32 @@ def _register_check_routes(
             flash("이미 진행 중인 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")
             return redirect(url_for("post_detail", row_index=row_index))
         return redirect(url_for("job_status", job_id=job_id))
+
+
+def _register_keyword_routes(app: Flask, desk: KeywordDesk) -> None:
+    app.jinja_env.globals["keywords_enabled"] = True
+
+    @app.get("/keywords")
+    def keywords():  # type: ignore[no-untyped-def]
+        return render_template(
+            "keywords.html", suggestions=desk.suggest(), max_length=KEYWORD_MAX_LENGTH,
+        )
+
+    @app.post("/keywords")
+    def register_keyword():  # type: ignore[no-untyped-def]
+        keyword = request.form.get("keyword", "").strip()
+        if not keyword or len(keyword) > KEYWORD_MAX_LENGTH:
+            abort(400, description=f"키워드는 1~{KEYWORD_MAX_LENGTH}자여야 합니다")
+        try:
+            row = desk.register(keyword)
+        except DuplicateKeywordError as e:
+            flash(f"등록하지 않았습니다 — {e}", "error")
+        else:
+            flash(
+                f"{row}행에 '{keyword}'을(를) '대기'로 등록했습니다. "
+                "생성은 n8n 02:00 실행 때 됩니다.", "success",
+            )
+        return redirect(url_for("keywords"))
 
 
 # 편집 폼 입력 상한 — 필수 여부와 최대 글자 수

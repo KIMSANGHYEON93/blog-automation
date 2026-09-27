@@ -13,6 +13,7 @@
     <a class="brand" href="{{ url_for('index') }}">{{ brand_label }}</a>
     {% if session.get('admin') %}
     <nav>
+      {% if keywords_enabled %}<a href="{{ url_for('keywords') }}">키워드</a>{% endif %}
       <span class="who">{{ session['admin'] }}</span>
       <form method="post" action="{{ url_for('logout') }}" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

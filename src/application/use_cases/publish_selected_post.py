@@ -30,6 +30,7 @@ class ManualPublishOutcome(Enum):
     FAILED = "failed"
     REJECTED = "rejected"
     DRAFTED = "drafted"  # 임시저장 시험만 함 — 시트 상태는 바뀌지 않는다
+    GENERATED = "generated"  # 대시보드 '지금 생성'(n8n 실행) 성공
 
 
 @dataclass(frozen=True)

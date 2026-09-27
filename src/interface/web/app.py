@@ -60,6 +60,7 @@ class KeywordDesk(Protocol):
 
 
 KEYWORD_MAX_LENGTH = 60
+JOB_LABELS = {"publish": "수동 발행", "draft": "임시저장 시험", "generate": "글 생성"}
 
 
 def create_app(
@@ -122,6 +123,8 @@ def _register_guards(
     app.jinja_env.globals["preview_enabled"] = False
     app.jinja_env.globals["draft_enabled"] = False
     app.jinja_env.globals["keywords_enabled"] = False
+    app.jinja_env.globals["generate_enabled"] = False
+    app.jinja_env.globals["job_labels"] = JOB_LABELS
     app.jinja_env.filters["safe_url"] = safe_url
 
     @app.get("/favicon.ico")
@@ -233,7 +236,18 @@ def _register_check_routes(
 ) -> None:
     """발행 전 점검: 미리보기(변환 HTML)와 임시저장 시험(실제 에디터, 시트 변경 없음)."""
     app.jinja_env.globals["preview_enabled"] = preview is not None
-    app.jinja_env.globals["draft_enabled"] = runner.draft_enabled
+    app.jinja_env.globals["draft_enabled"] = runner.enabled("draft")
+    app.jinja_env.globals["generate_enabled"] = runner.enabled("generate")
+
+    @app.post("/generate")
+    def generate_posts():  # type: ignore[no-untyped-def]
+        if not runner.enabled("generate"):
+            abort(404)
+        job_id = runner.submit(0, kind="generate")
+        if job_id is None:
+            flash("이미 진행 중인 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")
+            return redirect(url_for("index"))
+        return redirect(url_for("job_status", job_id=job_id))
 
     @app.get("/posts/<int:row_index>/preview")
     def preview_post(row_index: int):  # type: ignore[no-untyped-def]
@@ -245,9 +259,9 @@ def _register_check_routes(
 
     @app.post("/posts/<int:row_index>/draft")
     def draft_post(row_index: int):  # type: ignore[no-untyped-def]
-        if not runner.draft_enabled or reader.get(row_index) is None:
+        if not runner.enabled("draft") or reader.get(row_index) is None:
             abort(404)
-        job_id = runner.submit(row_index, draft=True)
+        job_id = runner.submit(row_index, kind="draft")
         if job_id is None:
             flash("이미 진행 중인 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")
             return redirect(url_for("post_detail", row_index=row_index))

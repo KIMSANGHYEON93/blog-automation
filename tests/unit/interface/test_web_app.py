@@ -511,6 +511,62 @@ class TestKeywords:
         assert desk.registered == []
 
 
+class TestGenerate:
+    def _client(self, calls):
+        def generate(row):
+            calls.append(row)
+            return ManualPublishResult(
+                ManualPublishOutcome.GENERATED, row, "생성 완료 — 발행대기 3건 (+2)",
+            )
+
+        runner = PublishJobRunner(
+            publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
+            generate=generate,
+        )
+        app = create_app(
+            authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
+            list_posts=ListPostsUseCase(InMemoryPostRepository([])),
+            job_runner=runner,
+            secret_key="test-secret-key-0123456789",
+        )
+        app.config["TESTING"] = True
+        client = app.test_client()
+        html = client.get("/login").get_data(as_text=True)
+        token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+        client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
+        return client, runner
+
+    def test_목록에_지금_생성_버튼(self):
+        client, _ = self._client([])
+        assert 'action="/generate"' in client.get("/").get_data(as_text=True)
+
+    def test_생성은_작업으로_돌고_목록으로_돌아가는_링크(self):
+        calls: list[int] = []
+        client, runner = self._client(calls)
+        html = client.get("/").get_data(as_text=True)
+        token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+        resp = client.post("/generate", data={"csrf_token": token})
+        job_id = resp.headers["Location"].rsplit("/", 1)[-1]
+        runner.wait(job_id, timeout=5)
+        page = client.get(f"/jobs/{job_id}").get_data(as_text=True)
+        assert calls == [0]
+        assert "글 생성" in page and "notice-success" in page and "발행대기 3건" in page
+        assert 'href="/"' in page
+
+    def test_CSRF_없는_생성은_거부(self):
+        calls: list[int] = []
+        client, _ = self._client(calls)
+        assert client.post("/generate").status_code == 400
+        assert calls == []
+
+
+def test_생성_기능이_없는_앱에는_버튼도_경로도_없다(h):
+    h.login()
+    assert 'action="/generate"' not in h.client.get("/").get_data(as_text=True)
+    resp = h.client.post("/generate", data={"csrf_token": h.csrf("/")})
+    assert resp.status_code == 404
+
+
 def test_미리보기와_시험이_없는_앱에는_버튼도_없다(h):
     h.login()
     html = h.client.get("/posts/2").get_data(as_text=True)

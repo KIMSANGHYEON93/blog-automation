@@ -104,6 +104,12 @@ def test_주입된_코드가_문법상_유효하다(wf, tmp_path):
         assert result.returncode == 0, f"{name}: {result.stderr}"
 
 
+def test_대시보드가_찾는_워크플로_이름과_같다():
+    from src.interface.web.generation import NAVER_WORKFLOW_NAME
+
+    assert builder.WORKFLOW_NAME == NAVER_WORKFLOW_NAME
+
+
 def test_LLM이_고른_카테고리를_시트에_쓴다(wf):
     columns = _node(wf, "Sheets Update (발행대기)")["parameters"]["columns"]["value"]
     assert "Parse JSON Response" in columns["카테고리"]

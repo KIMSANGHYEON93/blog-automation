@@ -2,9 +2,15 @@
 {% block content %}
 {% if active_job %}
 <div class="notice notice-info">
-  {{ active_job.row_index }}행 발행 진행 중 —
+  {{ job_labels[active_job.kind] }}{% if active_job.kind != "generate" %}({{ active_job.row_index }}행){% endif %} 진행 중 —
   <a href="{{ url_for('job_status', job_id=active_job.job_id) }}">진행 상황 보기</a>
 </div>
+{% elif generate_enabled %}
+<form method="post" action="{{ url_for('generate_posts') }}" class="generate">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit">지금 생성</button>
+  <span class="sub">'대기' 키워드로 n8n 글 생성을 지금 실행합니다(키워드마다 1~3분).</span>
+</form>
 {% endif %}
 
 <section class="stats">

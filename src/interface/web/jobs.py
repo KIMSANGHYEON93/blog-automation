@@ -30,32 +30,35 @@ class PublishJob:
     started_at: datetime
     finished_at: datetime | None = None
     result: ManualPublishResult | None = None
-    draft: bool = False
+    kind: str = "publish"  # publish | draft | generate
 
 
 class PublishJobRunner:
-    """발행과 임시저장 시험은 같은 브라우저를 쓰므로 한 실행기에서 동시에 1건만 돈다."""
+    """발행·임시저장 시험·글 생성은 브라우저·시트를 함께 쓰므로 한 실행기에서 동시에 1건만 돈다."""
 
     def __init__(
         self,
         publish: Callable[[int], ManualPublishResult],
         draft: Callable[[int], ManualPublishResult] | None = None,
+        generate: Callable[[int], ManualPublishResult] | None = None,
     ):
-        self._publish = publish
-        self.draft_enabled = draft is not None
-        self._draft = draft
+        tasks = {"publish": publish, "draft": draft, "generate": generate}
+        self._tasks = {kind: task for kind, task in tasks.items() if task is not None}
         self._jobs: OrderedDict[str, PublishJob] = OrderedDict()
         self._events: dict[str, threading.Event] = {}
         self._active_id: str | None = None
         self._mutex = threading.Lock()
 
-    def submit(self, row_index: int, draft: bool = False) -> str | None:
+    def enabled(self, kind: str) -> bool:
+        return kind in self._tasks
+
+    def submit(self, row_index: int, kind: str = "publish") -> str | None:
         """작업 시작. 이미 실행 중인 작업이 있으면 None."""
         with self._mutex:
             if self._active_id is not None:
                 return None
             job = PublishJob(
-                uuid.uuid4().hex, row_index, JobState.RUNNING, datetime.now(), draft=draft,
+                uuid.uuid4().hex, row_index, JobState.RUNNING, datetime.now(), kind=kind,
             )
             self._jobs[job.job_id] = job
             self._events[job.job_id] = threading.Event()
@@ -89,8 +92,7 @@ class PublishJobRunner:
 
     def _run(self, job: PublishJob) -> None:
         try:
-            run = self._draft if job.draft and self._draft else self._publish
-            result = run(job.row_index)
+            result = self._tasks[job.kind](job.row_index)
         except Exception as e:
             logger.exception(f"수동 발행 작업 예외: row={job.row_index}")
             result = ManualPublishResult.failed(job.row_index, f"{type(e).__name__}: {e}")

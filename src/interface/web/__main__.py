@@ -32,6 +32,7 @@ from src.application.use_cases.publish_selected_post import (
 from src.application.use_cases.register_keyword import RegisterKeywordUseCase
 from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.quota_manager import QuotaManager
+from src.domain.value_objects.post_status import PostStatus
 from src.domain.value_objects.site_profile import SiteProfile
 from src.infrastructure.browser.naver.adapter import DRAFT_ONLY_MESSAGE, MAX_IMAGES
 from src.infrastructure.browser.naver.preview import build_preview_html
@@ -45,6 +46,11 @@ from src.infrastructure.persistence.sheets_brain_term_adapter import SheetsBrain
 from src.interface.cli import _build_notification as build_notification
 from src.interface.web.app import create_app
 from src.interface.web.auth import AdminAuthenticator
+from src.interface.web.generation import (
+    DEFAULT_N8N_CONTAINER,
+    NAVER_WORKFLOW_NAME,
+    build_generator,
+)
 from src.interface.web.jobs import PublishJobRunner
 from src.interface.web.platform import PlatformProfile, make_browser, resolve_platform
 from src.interface.web.settings import DashboardSettings, SettingsError
@@ -196,6 +202,12 @@ def _serve(platform: str) -> int:
         job_runner=PublishJobRunner(
             publish=_build_publisher(config, repo, profile),
             draft=_build_drafter(config, repo, profile) if profile.name == "naver" else None,
+            generate=(
+                build_generator(
+                    os.getenv("N8N_CONTAINER", DEFAULT_N8N_CONTAINER), NAVER_WORKFLOW_NAME,
+                    lambda: sum(1 for p in repo.find_all() if p.status == PostStatus.PENDING),
+                ) if profile.name == "naver" else None
+            ),
         ),
         edit_post=EditPostUseCase(repo),
         preview=(

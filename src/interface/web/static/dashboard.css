@@ -148,6 +148,7 @@ th:last-child, td:last-child { padding-right: 20px; }
 }
 .edit textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 .restore { margin-top: 12px; }
+.generate { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
 .checks { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
 
 /* 네이버 모바일 글 모양 흉내 — 가운데 정렬 줄, 인용구 소제목, 사진 자리 */

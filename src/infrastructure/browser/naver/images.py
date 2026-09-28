@@ -11,20 +11,133 @@ import urllib.parse
 from typing import Callable, Optional
 
 import requests
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
 
 ImageFn = Callable[[str], Optional[bytes]]
 
 _BASE_URL = "https://gen.pollinations.ai/image"
+# macOS 기본 한글 글꼴(ExtraBold=14번 face). 발행은 이 맥에서만 돌아 저장소에 넣지 않는다
+THUMBNAIL_FONT = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
+THUMBNAIL_FONT_INDEX = 14
 _STYLE = "minimal flat illustration, soft pastel colors, clean composition, no text, no letters"
+_COVER_STYLE = (
+    "vibrant detailed isometric illustration, rich scene filling the full frame, "
+    "subject centered, modern tech mood, no empty space, no text, no letters, "
+    "no signs, no logos"  # 간판에 가짜 글자가 그려졌다(2026-09-28)
+)
 
 
-def image_prompt(keyword: str, heading: str = "") -> str:
-    """키워드(+소제목)로 사진 설명을 만든다. 글자가 섞이면 깨진 한글이 나오므로 글자는 금지."""
+def image_prompt(keyword: str, heading: str = "", cover: bool = False) -> str:
+    """키워드(+소제목)로 사진 설명을 만든다. 글자가 섞이면 깨진 한글이 나오므로 글자는 금지.
+
+    cover=True(대표 썸네일 배경)는 꽉 찬 장면을 요구한다 — 'minimal' 스타일은 빈 배경이 나온다.
+    """
     topic = f"{keyword} - {heading}" if heading else keyword
-    return f"{_STYLE}, blog illustration about: {topic}"
+    style = _COVER_STYLE if cover else _STYLE
+    return f"{style}, blog illustration about: {topic}"
+
+
+def wrap_title(title: str, fits: Callable[[str], bool], max_lines: int = 3) -> list[str] | None:
+    """제목을 너비에 맞춰 줄로 나눈다. 콜론 뒤에서 먼저 끊는다. max_lines를 넘으면 None."""
+    head, colon, tail = title.partition(":")
+    parts = [head + colon, tail] if colon else [title]
+    lines: list[str] = []
+    for part in parts:
+        current = ""
+        for word in part.split():
+            candidate = f"{current} {word}".strip()
+            if fits(candidate) or not current:
+                current = candidate
+            else:
+                lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+    if len(lines) > max_lines or not all(fits(line) for line in lines):
+        return None
+    return lines
+
+
+def title_thumbnail(
+    title: str, background: bytes, keyword: str = "", brand: str = "",
+    font_path: str = THUMBNAIL_FONT, font_index: int = THUMBNAIL_FONT_INDEX,
+) -> bytes:
+    """대표 썸네일: 왼쪽 짙은 판에 키워드 칩과 제목, 오른쪽에 생성 그림을 선명하게.
+
+    처음엔 그림 전체를 어둡게 깔고 가운데에 제목을 얹었는데, 파스텔 그림이 탁해지고 밋밋했다
+    (2026-09-28 실제 제목 3개로 확인). 글꼴이 없으면 배경을 그대로 쓴다.
+    """
+    try:
+        ImageFont.truetype(font_path, 10, index=font_index)
+    except OSError:
+        logger.warning(f"썸네일 글꼴 없음({font_path}) — 제목 없이 사진만 씀")
+        return background
+    art = Image.open(io.BytesIO(background)).convert("RGBA")
+    width, height = art.size
+    canvas = Image.new("RGBA", (width, height), (15, 23, 42, 255))  # 짙은 남색 판
+
+    # 오른쪽 그림: 왼쪽 가장자리를 투명하게 번지게 해 판과 이어 붙인다
+    # 생성 그림은 주제가 가운데 있다 — 오른쪽 절반이 아니라 가운데를 잘라 온다
+    art_left = int(width * 0.46)
+    crop_width = width - art_left
+    crop_left = (width - crop_width) // 2
+    right = art.crop((crop_left, 0, crop_left + crop_width, height))
+    fade = int(crop_width * 0.28)
+    mask = Image.new("L", right.size, 255)
+    mask_draw = ImageDraw.Draw(mask)
+    for x in range(fade):
+        # 완만하게 시작하는 곡선 — 직선이면 가운데에 탁한 회색 띠가 생긴다
+        mask_draw.line([(x, 0), (x, height)], fill=int(255 * (x / max(1, fade)) ** 2))
+    canvas.paste(right, (art_left, 0), mask)
+
+    draw = ImageDraw.Draw(canvas)
+    margin = width * 0.065
+    max_width = width * 0.56
+    size = max(1, int(width * 0.058))
+    min_size = max(1, int(width * 0.038))
+
+    def fits(text: str) -> bool:
+        return draw.textlength(text, font=font) <= max_width
+
+    while True:
+        font = ImageFont.truetype(font_path, size, index=font_index)
+        lines = wrap_title(title, fits, max_lines=4)
+        if lines or size <= min_size:
+            break
+        size -= 2
+    if not lines:
+        # 가장 작은 글씨로도 네 줄을 넘으면 네 번째 줄에서 자른다
+        lines = (wrap_title(title, fits, max_lines=99) or [title])[:4]
+        lines[-1] = lines[-1].rstrip() + "…"
+
+    line_height = size * 1.28
+    chip_font = ImageFont.truetype(font_path, max(1, int(size * 0.46)), index=6)
+    chip_height = chip_font.size * 1.9 if keyword else 0
+    block = chip_height + (size * 0.6 if keyword else 0) + line_height * len(lines)
+    y = (height - block) / 2
+    if keyword:
+        pad = chip_font.size * 0.9
+        chip_width = draw.textlength(keyword, font=chip_font) + pad * 2
+        draw.rounded_rectangle(
+            [margin, y, margin + chip_width, y + chip_height],
+            radius=chip_height / 2, fill=(3, 199, 90, 255),  # 네이버 초록
+        )
+        draw.text((margin + pad, y + chip_height / 2), keyword, font=chip_font,
+                  fill=(255, 255, 255, 255), anchor="lm")
+        y += chip_height + size * 0.6
+    for line in lines:
+        draw.text((margin, y), line, font=font, fill=(255, 255, 255, 255))
+        y += line_height
+    if brand:
+        small = ImageFont.truetype(font_path, max(1, int(width * 0.02)), index=2)
+        draw.text((margin, height - margin * 0.8), brand, font=small,
+                  fill=(148, 163, 184, 255), anchor="ls")
+
+    out = io.BytesIO()
+    canvas.convert("RGB").save(out, "JPEG", quality=92)
+    return out.getvalue()
 
 
 def reencode_jpeg(data: bytes) -> bytes | None:

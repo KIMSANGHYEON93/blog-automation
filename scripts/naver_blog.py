@@ -28,7 +28,10 @@ from src.infrastructure.browser.naver.adapter import (  # noqa: E402
     NaverBrowserAdapter,
 )
 from src.infrastructure.browser.naver.editor import NaverEditorError  # noqa: E402
-from src.infrastructure.browser.naver.images import pollinations_image_fn  # noqa: E402
+from src.infrastructure.browser.naver.images import (  # noqa: E402
+    pollinations_image_fn,
+    title_thumbnail,
+)
 
 load_dotenv()
 
@@ -82,6 +85,7 @@ def main() -> int:
     adapter = NaverBrowserAdapter(
         _blog_id(), profile_dir=DEFAULT_PROFILE_DIR, draft_only=True, min_delay=0, max_delay=0,
         image_fn=pollinations_image_fn(os.getenv("POLLINATIONS_API_KEY", "")),
+        thumbnail_fn=title_thumbnail,
     )
     adapter.start()
     try:

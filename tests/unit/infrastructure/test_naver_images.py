@@ -29,6 +29,55 @@ def test_이미지가_아니면_None():
     assert reencode_jpeg(b"not an image") is None
 
 
+def _fits(limit):
+    return lambda line: len(line) <= limit
+
+
+def test_제목은_너비에_맞춰_줄바꿈한다():
+    from src.infrastructure.browser.naver.images import wrap_title
+
+    assert wrap_title("감마 AI PPT 만들기 초보자도 10분 만에 끝내는 가이드", _fits(14)) == [
+        "감마 AI PPT 만들기", "초보자도 10분 만에", "끝내는 가이드",
+    ]
+
+
+def test_콜론_뒤에서_먼저_줄을_바꾼다():
+    from src.infrastructure.browser.naver.images import wrap_title
+
+    assert wrap_title("노션 AI 사용법: 업무 효율 높이는 가이드", _fits(30)) == [
+        "노션 AI 사용법:", "업무 효율 높이는 가이드",
+    ]
+
+
+def test_세_줄을_넘으면_None():
+    from src.infrastructure.browser.naver.images import wrap_title
+
+    assert wrap_title("가나 다라 마바 사아 자차 카타", _fits(4)) is None  # 한 단어씩 6줄
+
+
+def test_썸네일은_같은_크기의_JPEG이고_배경과_다르다():
+    from src.infrastructure.browser.naver.images import title_thumbnail
+
+    background = _jpeg_with_exif()
+    out = title_thumbnail("MCP란 무엇일까요? AI 연동 표준 쉬운 정리", background, keyword="MCP란")
+    image = Image.open(io.BytesIO(out))
+    assert image.format == "JPEG" and image.size == (32, 18)
+    assert out != reencode_jpeg(background)
+
+
+def test_글꼴이_없으면_배경을_그대로_쓴다(tmp_path):
+    from src.infrastructure.browser.naver.images import title_thumbnail
+
+    background = reencode_jpeg(_jpeg_with_exif())
+    assert title_thumbnail("제목", background, font_path=str(tmp_path / "없음.ttc")) == background
+
+
+def test_대표_사진_설명은_꽉_찬_장면을_요구한다():
+    # 본문용 'minimal' 스타일은 표지로 쓰면 빈 배경에 의자 하나 같은 그림이 나왔다(2026-09-28)
+    prompt = image_prompt("감마 AI PPT 만들기", cover=True)
+    assert "full frame" in prompt and "no text" in prompt and "minimal" not in prompt
+
+
 def test_사진_설명은_글자를_금지하고_주제를_담는다():
     prompt = image_prompt("MCP란", "어떻게 작동하나요")
     assert "no text" in prompt

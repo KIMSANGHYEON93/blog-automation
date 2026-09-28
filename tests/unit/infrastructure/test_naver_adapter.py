@@ -270,6 +270,22 @@ def test_발행에_시트_카테고리를_넘긴다(calls):
     assert ("category", "TechNova") in calls
 
 
+def test_첫_사진만_제목_썸네일로_바꾼다(calls):
+    seen: list[tuple[str, bytes, str]] = []
+
+    def thumbnail(title, data, keyword):
+        seen.append((title, data, keyword))
+        return b"thumb"
+
+    adapter = NaverBrowserAdapter(
+        "myblog", draft_only=False, image_fn=lambda p: b"jpg", thumbnail_fn=thumbnail,
+    )
+    adapter.publish(_sectioned_post(2))
+    images = [c[1] for c in calls if c[0] == "image"]
+    assert images == [b"thumb", b"jpg", b"jpg"]
+    assert seen == [("제목", b"jpg", "키워드")]
+
+
 def test_업로드_확인이_늦어도_붙인_사진은_한_장으로_센다(calls, monkeypatch):
     # 2026-09-26 실측: 45초 안에 확인 못 한 사진이 늦게 올라가 6장이 됐다
     def unconfirmed(sb, data):

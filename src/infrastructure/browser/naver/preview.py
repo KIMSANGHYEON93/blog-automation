@@ -22,10 +22,14 @@ _ATTRS = {"a": ["href"], "p": ["class"], "div": ["class"]}
 
 def build_preview_html(keyword: str, markdown: str) -> str:
     parts = []
+    first_image = True
     for kind, value in layout_blocks(markdown, MAX_IMAGES):
         if kind == "image":
-            topic = escape(f"{keyword} · {value}" if value else f"{keyword} (대표 사진)")
-            parts.append(f'<div class="photo">사진 · {topic}</div>')
+            if first_image:
+                parts.append('<div class="photo">대표 썸네일 · 제목이 들어간 사진</div>')
+            else:
+                parts.append(f'<div class="photo">사진 · {escape(f"{keyword} · {value}")}</div>')
+            first_image = False
         else:
             parts.append(build_naver_html(value))
     soup = BeautifulSoup("".join(parts), "html.parser")

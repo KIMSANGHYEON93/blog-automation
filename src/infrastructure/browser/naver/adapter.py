@@ -15,6 +15,7 @@ import random
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 from src.domain.entities.post import Post
 from src.domain.ports.browser_port import BrowserPort
@@ -42,7 +43,8 @@ class NaverBrowserAdapter(BrowserPort):
     def __init__(self, blog_id: str, profile_dir: str = DEFAULT_PROFILE_DIR,
                  headless: bool = False, draft_only: bool = True,
                  min_delay: int = 300, max_delay: int = 900,
-                 screenshot_dir: str = "logs/naver", image_fn: ImageFn | None = None):
+                 screenshot_dir: str = "logs/naver", image_fn: ImageFn | None = None,
+                 thumbnail_fn: Callable[[str, bytes, str], bytes] | None = None):
         # headless 기본 False: 네이버는 헤드리스 탐지가 강하다(참고 저장소 공통 권고)
         self._blog_id = blog_id
         self._profile_dir = os.path.abspath(profile_dir)
@@ -52,6 +54,7 @@ class NaverBrowserAdapter(BrowserPort):
         self._max_delay = max_delay
         self._screenshot_dir = Path(screenshot_dir)
         self._image_fn = image_fn
+        self._thumbnail_fn = thumbnail_fn  # 첫 사진(대표)에 제목을 얹는다
         self.images_uploaded = 0  # 마지막 글에서 업로드가 확인된 사진 수(임시저장 시험 보고용)
         self._sb = None
         self._sb_context = None
@@ -106,24 +109,28 @@ class NaverBrowserAdapter(BrowserPort):
         markdown = content.body_markdown or ""
         editor.open_editor(self._sb, self._blog_id)
         editor.fill_title(self._sb, content.title_or_fallback(post.keyword))
-        self._paste_sections(post.keyword, markdown)
+        self._paste_sections(post.keyword, markdown, content.title_or_fallback(post.keyword))
         if self._draft_only:
             editor.save_draft(self._sb)
             return PublishResult.fail(DRAFT_ONLY_MESSAGE)
         url = editor.publish(self._sb, normalize_tags(content.tag_list()), post.category)
         return PublishResult.ok(url=url, entry_id=parse_log_no(url))
 
-    def _paste_sections(self, keyword: str, markdown: str) -> None:
+    def _paste_sections(self, keyword: str, markdown: str, title: str) -> None:
         """대표 사진 → 도입부 → (소제목 → 사진 → 본문)… 순서로 커서 뒤에 이어 붙인다."""
         editor.focus_body(self._sb)
         self.images_uploaded = 0
+        first_image = True
         for kind, value in layout_blocks(markdown, MAX_IMAGES):
             if kind == "text":
                 editor.paste_html(self._sb, build_naver_html(value), value)
-            elif self._insert_image(keyword, value):
+                continue
+            # 첫 사진은 네이버가 대표(썸네일)로 쓴다 — 거기에만 제목을 얹는다
+            if self._insert_image(keyword, value, title if first_image else ""):
                 self.images_uploaded += 1
+            first_image = False
 
-    def _insert_image(self, keyword: str, heading: str) -> bool:
+    def _insert_image(self, keyword: str, heading: str, thumbnail_title: str = "") -> bool:
         """사진 자리 하나를 채운다. 생성에 실패하면 그 자리는 비운다.
 
         자리 수(상한)는 layout_blocks가 정한다 — 확인이 늦은 사진 때문에 자리를 더 만들지 않는다
@@ -131,7 +138,10 @@ class NaverBrowserAdapter(BrowserPort):
         """
         if self._image_fn is None:
             return False
-        data = self._image_fn(image_prompt(keyword, heading))
+        cover = bool(thumbnail_title) and self._thumbnail_fn is not None
+        data = self._image_fn(image_prompt(keyword, heading, cover=cover))
+        if data is not None and cover and self._thumbnail_fn is not None:
+            data = self._thumbnail_fn(thumbnail_title, data, keyword)
         return data is not None and editor.paste_image(self._sb, data)
 
     def _save_failure_screenshot(self, post: Post) -> None:

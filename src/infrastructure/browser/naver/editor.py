@@ -59,6 +59,23 @@ target.dispatchEvent(new ClipboardEvent('paste', {
 
 IMAGE_UPLOAD_TIMEOUT = 45
 
+# 모바일 공개 글의 점검 수치(2026-09-24~26 실측한 DOM). 태그는 6개만 보이고 나머지는 '+N' 버튼
+_POST_STATS_JS = """
+const body = document.querySelector('.se-main-container');
+const shown = document.querySelectorAll('[class*="PostTag__tag"]').length;
+const more = [...document.querySelectorAll('[class*="PostTag"] button, [class*="PostTag"] a')]
+  .map(e => (e.innerText || '').trim()).find(t => /^\\+\\d+$/.test(t));
+const category = document.querySelector('.blog_category, [class*="category"] a');
+return {
+  category: category ? category.innerText.trim() : '',
+  tags: shown + (more ? parseInt(more.slice(1), 10) : 0),
+  images: body ? body.querySelectorAll('.se-image img').length : 0,
+  quotes: body ? body.querySelectorAll('.se-quotation').length : 0,
+  orphan_numbers: body ? [...body.querySelectorAll('.se-text-paragraph')]
+    .filter(p => /^\\d+\\.$/.test(p.innerText.trim())).length : 0,
+};
+"""
+
 
 class NaverEditorError(RuntimeError):
     pass
@@ -192,6 +209,13 @@ def publish(sb, tags: list[str], category: str = "") -> str:
     except Exception as e:
         # 확인을 누른 뒤라 실제로 발행됐을 수 있다 — 재발행하지 않게 표식을 남긴다
         raise NaverEditorError(f"발행 확인 뒤 오류({e}) — {PUBLISH_UNCONFIRMED}") from e
+
+
+def collect_post_stats(sb, url: str) -> dict:
+    """공개 글(모바일 화면)을 열어 점검용 수치를 읽는다. 태그는 '+N' 접힘까지 센다."""
+    _open(sb, url.replace("://blog.naver.com", "://m.blog.naver.com"))
+    time.sleep(3)
+    return dict(sb.execute_script(_POST_STATS_JS))
 
 
 def _open(sb, url: str) -> None:

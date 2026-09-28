@@ -26,8 +26,10 @@ from src.infrastructure.browser.naver.content import (
     layout_blocks,
     normalize_tags,
     parse_log_no,
+    split_sections,
 )
 from src.infrastructure.browser.naver.images import ImageFn, image_prompt
+from src.infrastructure.browser.naver.inspect import check_published
 
 # 대표 1장 + 소제목마다 1장, 상한
 MAX_IMAGES = 5
@@ -113,8 +115,28 @@ class NaverBrowserAdapter(BrowserPort):
         if self._draft_only:
             editor.save_draft(self._sb)
             return PublishResult.fail(DRAFT_ONLY_MESSAGE)
-        url = editor.publish(self._sb, normalize_tags(content.tag_list()), post.category)
-        return PublishResult.ok(url=url, entry_id=parse_log_no(url))
+        tags = normalize_tags(content.tag_list())
+        url = editor.publish(self._sb, tags, post.category)
+        return PublishResult.ok(
+            url=url, entry_id=parse_log_no(url),
+            warnings=tuple(self._inspect(url, post.category, len(tags), markdown)),
+        )
+
+    def _inspect(self, url: str, category: str, tag_count: int, markdown: str) -> list[str]:
+        """발행된 글을 열어 점검한다. 점검이 실패해도 발행 결과는 바꾸지 않는다."""
+        try:
+            stats = editor.collect_post_stats(self._sb, url)
+        except Exception as e:
+            logger.warning(f"발행 후 점검 실패(발행은 완료): {e}")
+            return [f"발행 후 점검을 하지 못함: {e}"]
+        headings = sum(1 for heading, _ in split_sections(markdown) if heading)
+        warnings = check_published(
+            stats, category=category, tag_count=tag_count, heading_count=headings,
+            max_images=MAX_IMAGES if self._image_fn else 0,
+        )
+        for warning in warnings:
+            logger.warning(f"발행 후 점검: {warning} — {url}")
+        return warnings
 
     def _paste_sections(self, keyword: str, markdown: str, title: str) -> None:
         """대표 사진 → 도입부 → (소제목 → 사진 → 본문)… 순서로 커서 뒤에 이어 붙인다."""

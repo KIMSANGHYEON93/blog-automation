@@ -12,6 +12,7 @@ from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.quota_manager import QuotaManager
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
+from src.domain.value_objects.publish_result import PublishResult
 from src.infrastructure.browser.mock_browser import MockBrowserAdapter
 from src.infrastructure.persistence.in_memory_repo import InMemoryPostRepository
 
@@ -53,6 +54,22 @@ def _use_case(repo, browser=None, lock=None, daily_limit=15):
         quota=QuotaManager(daily_limit=daily_limit),
         lock=lock or FakeLock(),
     )
+
+
+class WarningBrowser(MockBrowserAdapter):
+    def publish(self, post: Post) -> PublishResult:
+        self.published_posts.append(post)
+        return PublishResult.ok("https://blog.naver.com/a/1", warnings=("태그 1개(기대 10개)",))
+
+
+def test_발행_후_점검_경고는_시트와_결과에_남기되_발행완료로_둔다():
+    post = _post()
+    repo = InMemoryPostRepository([post])
+    result = _use_case(repo, WarningBrowser()).execute(row_index=2)
+    assert result.outcome == ManualPublishOutcome.PUBLISHED
+    assert "태그 1개(기대 10개)" in result.message
+    assert post.status == PostStatus.PUBLISHED
+    assert post.error_message == "발행 후 점검: 태그 1개(기대 10개)"
 
 
 class TestManualPublishSuccess:

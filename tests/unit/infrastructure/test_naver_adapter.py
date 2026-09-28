@@ -270,6 +270,26 @@ def test_발행에_시트_카테고리를_넘긴다(calls):
     assert ("category", "TechNova") in calls
 
 
+def test_발행_뒤_공개_글을_점검해_경고를_돌려준다(calls, monkeypatch):
+    stats = {"category": "낙서장", "tags": 2, "images": 1, "quotes": 1, "orphan_numbers": 0}
+    monkeypatch.setattr(editor, "collect_post_stats", lambda sb, url: stats)
+    post = _post()
+    post.category = "TechNova"
+    result = NaverBrowserAdapter("myblog", draft_only=False).publish(post)
+    assert result.success
+    assert "카테고리가 '낙서장'(기대 'TechNova')" in result.warnings
+
+
+def test_점검이_실패해도_발행은_성공으로(calls, monkeypatch):
+    def broken(sb, url):
+        raise RuntimeError("page timeout")
+
+    monkeypatch.setattr(editor, "collect_post_stats", broken)
+    result = NaverBrowserAdapter("myblog", draft_only=False).publish(_post())
+    assert result.success
+    assert result.warnings == ("발행 후 점검을 하지 못함: page timeout",)
+
+
 def test_첫_사진만_제목_썸네일로_바꾼다(calls):
     seen: list[tuple[str, bytes, str]] = []
 

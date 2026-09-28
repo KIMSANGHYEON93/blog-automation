@@ -147,8 +147,13 @@ class PublishSelectedPostUseCase:
             return ManualPublishResult.failed(post.row_index, f"발행 실패: {result.error}")
 
         post.mark_published(result.url, entry_id=result.entry_id)
+        message = "발행 완료"
+        if result.warnings:
+            # 발행은 됐다 — 상태는 발행완료로 두고, 고칠 거리를 시트 오류 열과 결과에 남긴다
+            post.error_message = f"발행 후 점검: {'; '.join(result.warnings)}"[:200]
+            message += f" — 점검 경고 {len(result.warnings)}건: {'; '.join(result.warnings)}"
         self._repo.save(post)
         logger.info(f"수동 발행 완료: {post.keyword} → {result.url}")
         return ManualPublishResult(
-            ManualPublishOutcome.PUBLISHED, post.row_index, "발행 완료", url=result.url,
+            ManualPublishOutcome.PUBLISHED, post.row_index, message, url=result.url,
         )

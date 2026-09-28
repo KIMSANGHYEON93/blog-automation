@@ -29,3 +29,9 @@ class TestPublishResult:
         r = PublishResult.ok("https://test.com")
         with pytest.raises(AttributeError):
             r.success = False
+
+
+def test_발행_후_점검_경고를_담는다():
+    result = PublishResult.ok("https://blog.naver.com/a/1", warnings=("태그 1개(기대 10개)",))
+    assert result.success and result.warnings == ("태그 1개(기대 10개)",)
+    assert PublishResult.ok("u").warnings == ()

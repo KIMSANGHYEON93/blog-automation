@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from typing import Callable, Protocol
 from urllib.parse import urlsplit
 
@@ -33,6 +33,10 @@ from src.interface.web.jobs import JobState, PublishJobRunner
 PUBLIC_ENDPOINTS = frozenset({"login", "static", "favicon"})
 SAFE_URL_SCHEMES = frozenset({"http", "https"})
 JOB_REFRESH_SECONDS = 3
+# .pipeline_b.lock을 잡는 launchd 실행 시각(run_pipeline_b.sh). 그 직전에 수동 발행이 락을 쥐고
+# 있으면 자동 실행이 [SKIP]으로 조용히 건너뛰어진다. launchd 시각을 바꾸면 여기도 바꿀 것
+AUTOMATION_TIMES = (time(0, 0), time(8, 30), time(9, 0), time(10, 0), time(14, 0), time(14, 30))
+AUTOMATION_GUARD = timedelta(minutes=20)  # 네이버 발행(사진 5장) 소요 시간보다 넉넉하게
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'self'; script-src 'none'; object-src 'none'; "
@@ -78,6 +82,7 @@ def create_app(
     preview: Callable[[PostSummary], str] | None = None,
     keywords: KeywordDesk | None = None,
     daily_limit: int | None = None,
+    clock: Callable[[], datetime] = datetime.now,
 ) -> Flask:
     if len(secret_key) < 16:
         raise ValueError("secret_key는 16자 이상이어야 합니다")
@@ -95,13 +100,32 @@ def create_app(
     _register_guards(app, allowed_hosts, brand_label)
     app.jinja_env.globals["daily_limit"] = daily_limit  # 목록 상단 발행 현황(없으면 숨김)
     _register_auth_routes(app, authenticator, login_throttle)
-    _register_dashboard_routes(app, list_posts, job_runner)
+    _register_dashboard_routes(app, list_posts, job_runner, clock)
     if edit_post is not None:
         _register_edit_routes(app, edit_post)
-    _register_check_routes(app, list_posts, job_runner, preview)
+    _register_check_routes(app, list_posts, job_runner, preview, clock)
     if keywords is not None:
         _register_keyword_routes(app, keywords)
     return app
+
+
+def automation_soon(now: datetime) -> time | None:
+    """AUTOMATION_GUARD 안에 시작할 자동 실행 시각. 이미 시작한 실행은 락이 막으므로 보지 않는다."""
+    for start in AUTOMATION_TIMES:
+        at = datetime.combine(now.date(), start)
+        if at <= now:
+            at += timedelta(days=1)
+        if at - now < AUTOMATION_GUARD:
+            return start
+    return None
+
+
+def _refuse_near_automation(clock: Callable[[], datetime]) -> bool:
+    soon = automation_soon(clock())
+    if soon is not None:
+        flash(f"곧 {soon:%H:%M} 자동 실행이 있어 발행하지 않았습니다 — 겹치면 자동 실행이 "
+              "건너뛰어집니다. 그 실행이 끝난 뒤 다시 시도하세요.", "error")
+    return soon is not None
 
 
 def _csrf_token() -> str:
@@ -192,7 +216,9 @@ def _parse_status(raw: str) -> PostStatus | None:
         return None
 
 
-def _register_dashboard_routes(app: Flask, reader: PostReader, runner: PublishJobRunner) -> None:
+def _register_dashboard_routes(
+    app: Flask, reader: PostReader, runner: PublishJobRunner, clock: Callable[[], datetime],
+) -> None:
     @app.get("/")
     def index():  # type: ignore[no-untyped-def]
         status = _parse_status(request.args.get("status", ""))
@@ -213,6 +239,8 @@ def _register_dashboard_routes(app: Flask, reader: PostReader, runner: PublishJo
 
     @app.post("/posts/<int:row_index>/publish")
     def publish(row_index: int):  # type: ignore[no-untyped-def]
+        if _refuse_near_automation(clock):
+            return redirect(url_for("post_detail", row_index=row_index))
         job_id = runner.submit(row_index)
         if job_id is None:
             flash("이미 진행 중인 발행 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")
@@ -235,6 +263,7 @@ def _register_check_routes(
     reader: PostReader,
     runner: PublishJobRunner,
     preview: Callable[[PostSummary], str] | None,
+    clock: Callable[[], datetime],
 ) -> None:
     """발행 전 점검: 미리보기(변환 HTML)와 임시저장 시험(실제 에디터, 시트 변경 없음)."""
     app.jinja_env.globals["preview_enabled"] = preview is not None
@@ -263,6 +292,8 @@ def _register_check_routes(
     def draft_post(row_index: int):  # type: ignore[no-untyped-def]
         if not runner.enabled("draft") or reader.get(row_index) is None:
             abort(404)
+        if _refuse_near_automation(clock):
+            return redirect(url_for("post_detail", row_index=row_index))
         job_id = runner.submit(row_index, kind="draft")
         if job_id is None:
             flash("이미 진행 중인 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")

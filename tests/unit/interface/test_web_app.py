@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import threading
+from datetime import datetime
 
 import pytest
 from werkzeug.security import generate_password_hash
@@ -17,11 +18,12 @@ from src.domain.entities.post import Post
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
 from src.infrastructure.persistence.in_memory_repo import InMemoryPostRepository
-from src.interface.web.app import create_app
+from src.interface.web.app import automation_soon, create_app
 from src.interface.web.auth import AdminAuthenticator, LoginThrottle
 from src.interface.web.jobs import PublishJobRunner
 
 PASSWORD = "correct horse battery"
+NOON = datetime(2026, 9, 28, 12, 0)  # 자동 실행과 먼 시각 — 발행 테스트가 시계에 흔들리지 않게
 
 
 def _post(row, keyword, status=PostStatus.PENDING, body_len=3500):
@@ -34,7 +36,7 @@ def _post(row, keyword, status=PostStatus.PENDING, body_len=3500):
 
 
 class Harness:
-    def __init__(self, publish=None, allowed_hosts=None):
+    def __init__(self, publish=None, allowed_hosts=None, now=NOON):
         self.published_rows: list[int] = []
         published = _post(4, "Kafka 입문", PostStatus.PUBLISHED)
         published.published_url = "https://blog.tistory.com/4"
@@ -64,6 +66,7 @@ class Harness:
             throttle=LoginThrottle(max_attempts=3, window_seconds=600),
             allowed_hosts=allowed_hosts,
             edit_post=EditPostUseCase(repo),
+            clock=lambda: now,
         )
         app.config["TESTING"] = True
         self.client = app.test_client()
@@ -606,3 +609,24 @@ def test_미리보기와_시험이_없는_앱에는_버튼도_없다(h):
     html = h.client.get("/posts/2").get_data(as_text=True)
     assert "/preview" not in html and "/draft" not in html
     assert h.client.get("/posts/2/preview").status_code == 404
+
+
+@pytest.mark.parametrize(("now", "expected"), [
+    (datetime(2026, 9, 28, 8, 45), "09:00"),   # 이미 시작한 08:30은 락이 거부
+    (datetime(2026, 9, 28, 13, 50), "14:00"),
+    (datetime(2026, 9, 28, 23, 50), "00:00"),  # 자정을 넘는 실행
+    (datetime(2026, 9, 28, 12, 0), None),
+    (datetime(2026, 9, 28, 9, 0, 30), None),   # 이미 시작한 실행은 락이 막는다
+])
+def test_자동_실행_직전인지(now, expected):
+    found = automation_soon(now)
+    assert (found.strftime("%H:%M") if found else None) == expected
+
+
+def test_자동_실행_직전에는_발행을_막는다():
+    h = Harness(now=datetime(2026, 9, 28, 8, 50))
+    h.login()
+    resp = h.client.post("/posts/2/publish", data={"csrf_token": h.csrf("/posts/2")},
+                         follow_redirects=True)
+    assert "09:00 자동 실행" in resp.get_data(as_text=True)
+    assert h.published_rows == []

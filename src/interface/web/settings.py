@@ -27,13 +27,15 @@ class DashboardSettings:
     host: str = "127.0.0.1"
     port: int = 8787
     secure_cookies: bool = False
+    extra_hosts: frozenset[str] = frozenset()  # tailscale serve 등 HTTPS 프록시가 보내는 Host
 
     @property
     def allowed_hosts(self) -> frozenset[str] | None:
         """로컬 바인딩이면 Host 헤더 허용 목록 (DNS rebinding 방지). 외부 바인딩은 프록시가 담당."""
         if self.host not in LOOPBACK_HOSTS:
             return None
-        return frozenset({f"127.0.0.1:{self.port}", f"localhost:{self.port}", f"[::1]:{self.port}"})
+        loopback = {f"127.0.0.1:{self.port}", f"localhost:{self.port}", f"[::1]:{self.port}"}
+        return frozenset(loopback) | self.extra_hosts
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> DashboardSettings:
@@ -55,6 +57,13 @@ class DashboardSettings:
         secure_cookies = _truthy(env.get("DASHBOARD_SECURE_COOKIES", ""))
         if host not in LOOPBACK_HOSTS:
             _validate_remote(host, env, secure_cookies)
+        extra_hosts = frozenset(
+            h.strip().lower() for h in env.get("DASHBOARD_EXTRA_HOSTS", "").split(",") if h.strip()
+        )
+        if extra_hosts and not secure_cookies:
+            raise SettingsError(
+                "DASHBOARD_EXTRA_HOSTS를 쓰려면 DASHBOARD_SECURE_COOKIES=true가 필요합니다",
+            )
         return cls(
             admin_user=env["DASHBOARD_ADMIN_USER"].strip(),
             admin_password_hash=password_hash,
@@ -62,6 +71,7 @@ class DashboardSettings:
             host=host,
             port=_parse_port(env.get("DASHBOARD_PORT", "8787")),
             secure_cookies=secure_cookies,
+            extra_hosts=extra_hosts,
         )
 
 

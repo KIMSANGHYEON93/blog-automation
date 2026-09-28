@@ -62,6 +62,18 @@ class TestDashboardSettings:
         assert {"127.0.0.1:8799", "localhost:8799"} <= hosts
         assert "evil.example:8799" not in hosts
 
+    def test_추가_Host는_tailscale_serve_주소를_허용(self):
+        hosts = DashboardSettings.from_env(_env(
+            DASHBOARD_EXTRA_HOSTS=" Mac.tail1234.ts.net , ",
+            DASHBOARD_SECURE_COOKIES="true",
+        )).allowed_hosts
+        assert "mac.tail1234.ts.net" in hosts and "127.0.0.1:8787" in hosts
+        assert "" not in hosts
+
+    def test_추가_Host는_Secure_쿠키_필수(self):
+        with pytest.raises(SettingsError, match="DASHBOARD_SECURE_COOKIES"):
+            DashboardSettings.from_env(_env(DASHBOARD_EXTRA_HOSTS="mac.tail1234.ts.net"))
+
     def test_외부_바인딩은_Host_검사를_프록시에_맡김(self):
         remote = _env(
             DASHBOARD_HOST="0.0.0.0",

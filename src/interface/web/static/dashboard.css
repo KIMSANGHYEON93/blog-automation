@@ -174,6 +174,23 @@ th:last-child, td:last-child { padding-right: 20px; }
   .topbar { padding-left: 16px; }
   .topbar::before { display: none; }
   .container { padding: 16px 16px 40px; }
-  .meta { grid-template-columns: 1fr; }
-  .meta dt { border-bottom: 0; padding-bottom: 0; }
+  .meta { grid-template-columns: 76px 1fr; }
+  .who { display: none; }
+  .card { padding: 16px; }
+  /* 목록: 가로 스크롤 대신 키워드·상태·열기만 — 행 번호·본문·품질은 상세에 있다 */
+  .wide { display: none; }
+  th:first-child, td:first-child { padding-left: 16px; }
+  th:last-child, td:last-child { padding-right: 16px; }
+  .open { display: inline-block; padding: 10px 0 10px 8px; white-space: nowrap; }
+  /* 상태 타일 10개가 네 줄을 먹지 않게 한 줄 가로 스크롤 */
+  .stats { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 96px; overflow-x: auto; padding: 2px 2px 6px; }
+  .edit textarea { height: 60vh; }
+}
+/* 터치: 버튼 44px, 입력 16px(iOS는 16px 미만 입력칸에 포커스하면 화면을 확대한다) */
+@media (pointer: coarse) {
+  button, .search button { height: 44px; padding: 0 18px; font-size: 16px; }
+  button.link { height: auto; padding: 0; font-size: 15px; }
+  input { height: 44px; font-size: 16px; }
+  .edit textarea { font-size: 16px; }
+  .checks { gap: 16px; }
 }

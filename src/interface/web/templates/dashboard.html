@@ -58,25 +58,25 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>행</th><th>키워드 / 제목</th><th>상태</th><th>본문</th><th>품질</th><th>발행</th><th></th></tr>
+        <tr><th class="wide">행</th><th>키워드 / 제목</th><th>상태</th><th class="wide">본문</th><th class="wide">품질</th><th class="wide">발행</th><th></th></tr>
       </thead>
       <tbody>
         {% for post in page.items %}
         <tr>
-          <td class="num">{{ post.row_index }}</td>
+          <td class="num wide">{{ post.row_index }}</td>
           <td>
             <div class="kw">{{ post.keyword }}</div>
             <div class="sub">{{ post.title }}</div>
           </td>
           <td><span class="badge badge-{{ post.status.name|lower }}">{{ post.status.value }}</span></td>
-          <td class="num">{{ "{:,}".format(post.body_length) }}</td>
-          <td class="num">{{ post.quality_score }}</td>
-          <td class="sub">
+          <td class="num wide">{{ "{:,}".format(post.body_length) }}</td>
+          <td class="num wide">{{ post.quality_score }}</td>
+          <td class="sub wide">
             {% set url = post.published_url|safe_url %}
             {% if url %}<a href="{{ url }}" rel="noopener noreferrer" target="_blank">{{ post.published_at or "보기" }}</a>{% endif %}
           </td>
           <td>
-            <a href="{{ url_for('post_detail', row_index=post.row_index) }}">
+            <a class="open" href="{{ url_for('post_detail', row_index=post.row_index) }}">
               {% if post.can_publish %}<strong>발행하기</strong>{% else %}상세{% endif %}
             </a>
           </td>

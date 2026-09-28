@@ -3,12 +3,15 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import date, datetime
 
 from src.application.use_cases.edit_post import EDITABLE_STATUSES
 from src.application.use_cases.publish_selected_post import publish_blockers
 from src.domain.entities.post import Post
 from src.domain.ports.post_repository import PostRepository
 from src.domain.value_objects.post_status import PostStatus
+
+RECENT_PUBLISHED = 5
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,8 @@ class PostPage:
     items: tuple[PostSummary, ...]
     counts: dict[PostStatus, int] = field(default_factory=dict)
     total: int = 0
+    published_today: int = 0
+    recent_published: tuple[PostSummary, ...] = ()  # 필터와 무관하게 최신 발행 순
 
 
 def summarize(post: Post) -> PostSummary:
@@ -92,7 +97,18 @@ class ListPostsUseCase:
         posts = self._repo.find_all()
         counts = Counter(p.status for p in posts)
         items = tuple(summarize(p) for p in posts if _matches(p, query))
-        return PostPage(items=items, counts=dict(counts), total=len(posts))
+        published = sorted(
+            (p for p in posts if p.status == PostStatus.PUBLISHED and p.published_at),
+            key=lambda p: p.published_at or datetime.min, reverse=True,
+        )
+        today = date.today()
+        return PostPage(
+            items=items, counts=dict(counts), total=len(posts),
+            published_today=sum(
+                1 for p in published if p.published_at and p.published_at.date() == today
+            ),
+            recent_published=tuple(summarize(p) for p in published[:RECENT_PUBLISHED]),
+        )
 
     def get(self, row_index: int) -> PostSummary | None:
         post = next((p for p in self._repo.find_all() if p.row_index == row_index), None)

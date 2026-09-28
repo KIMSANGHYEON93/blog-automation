@@ -560,6 +560,40 @@ class TestGenerate:
         assert calls == []
 
 
+def _status_client(daily_limit):
+    from datetime import datetime
+
+    published = _post(4, "오늘 글", PostStatus.PUBLISHED)
+    published.published_url = "https://blog.naver.com/a/4"
+    published.published_at = datetime.now()
+    app = create_app(
+        authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
+        list_posts=ListPostsUseCase(InMemoryPostRepository([published, _post(2, "대기")])),
+        job_runner=PublishJobRunner(
+            publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
+        ),
+        secret_key="test-secret-key-0123456789",
+        daily_limit=daily_limit,
+    )
+    app.config["TESTING"] = True
+    client = app.test_client()
+    html = client.get("/login").get_data(as_text=True)
+    token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+    client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
+    return client.get("/").get_data(as_text=True)
+
+
+def test_목록_위에_오늘_발행_현황과_최근_발행():
+    html = _status_client(daily_limit=15)
+    assert "오늘 발행 1 / 15" in html
+    assert 'href="https://blog.naver.com/a/4"' in html and "오늘 글" in html
+    assert "내일" not in html
+
+
+def test_한도를_채우면_내일_다시_가능하다고_알린다():
+    assert "내일 다시 발행할 수 있습니다" in _status_client(daily_limit=1)
+
+
 def test_생성_기능이_없는_앱에는_버튼도_경로도_없다(h):
     h.login()
     assert 'action="/generate"' not in h.client.get("/").get_data(as_text=True)

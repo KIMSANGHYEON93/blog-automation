@@ -215,6 +215,7 @@ def _serve(platform: str) -> int:
             if profile.name == "naver" else None
         ),
         keywords=_build_keyword_desk(config, repo, profile),
+        daily_limit=profile.daily_limit,
         secret_key=settings.secret_key,
         secure_cookies=settings.secure_cookies,
         allowed_hosts=settings.allowed_hosts,

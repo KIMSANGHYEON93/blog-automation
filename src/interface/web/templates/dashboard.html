@@ -13,6 +13,28 @@
 </form>
 {% endif %}
 
+{% if daily_limit %}
+<section class="card status">
+  <div>
+    <strong>오늘 발행 {{ page.published_today }} / {{ daily_limit }}</strong>
+    {% if page.published_today >= daily_limit %}
+    <span class="sub">— 오늘 한도를 채웠습니다. 내일 다시 발행할 수 있습니다.</span>
+    {% endif %}
+  </div>
+  {% if page.recent_published %}
+  <ul class="jobs">
+    {% for post in page.recent_published %}
+    {% set url = post.published_url|safe_url %}
+    <li>
+      {% if url %}<a href="{{ url }}" rel="noopener noreferrer" target="_blank">{{ post.keyword }}</a>{% else %}{{ post.keyword }}{% endif %}
+      <span class="sub">· {{ post.published_at }}{% if post.error_message %} · <span class="error-text">{{ post.error_message }}</span>{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="stats">
   <a class="stat {% if not selected_status %}active{% endif %}" href="{{ url_for('index', q=search) }}">
     <span class="stat-label">전체</span><span class="stat-value">{{ page.total }}</span>

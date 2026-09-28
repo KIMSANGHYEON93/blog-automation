@@ -66,3 +66,16 @@ class TestListPosts:
         uc = ListPostsUseCase(_repo())
         assert uc.get(4).keyword == "Kafka 입문"
         assert uc.get(99) is None
+
+
+def test_오늘_발행_수와_최근_발행_글():
+    now = datetime.now()
+    repo = InMemoryPostRepository([
+        _post(2, "오늘 글", PostStatus.PUBLISHED, published_url="https://b/2", published_at=now),
+        _post(3, "어제 글", PostStatus.PUBLISHED, published_url="https://b/3",
+              published_at=now.replace(year=now.year - 1)),
+        _post(4, "대기 글"),
+    ])
+    page = ListPostsUseCase(repo).execute(PostQuery(status=PostStatus.PENDING))
+    assert page.published_today == 1
+    assert [s.keyword for s in page.recent_published] == ["오늘 글", "어제 글"]  # 최신순, 필터 무관

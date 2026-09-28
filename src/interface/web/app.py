@@ -77,6 +77,7 @@ def create_app(
     edit_post: EditPostUseCase | None = None,
     preview: Callable[[PostSummary], str] | None = None,
     keywords: KeywordDesk | None = None,
+    daily_limit: int | None = None,
 ) -> Flask:
     if len(secret_key) < 16:
         raise ValueError("secret_key는 16자 이상이어야 합니다")
@@ -92,6 +93,7 @@ def create_app(
     )
     login_throttle = throttle or LoginThrottle()
     _register_guards(app, allowed_hosts, brand_label)
+    app.jinja_env.globals["daily_limit"] = daily_limit  # 목록 상단 발행 현황(없으면 숨김)
     _register_auth_routes(app, authenticator, login_throttle)
     _register_dashboard_routes(app, list_posts, job_runner)
     if edit_post is not None:

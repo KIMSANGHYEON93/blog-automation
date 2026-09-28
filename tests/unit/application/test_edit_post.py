@@ -41,12 +41,36 @@ def test_보류와_실패_글도_고칠_수_있다(status):
     assert _get(repo).content.title == "t"
 
 
-@pytest.mark.parametrize("status", [PostStatus.PUBLISHED, PostStatus.PUBLISHING])
-def test_발행된_글이나_발행_중인_글은_고칠_수_없다(status):
+@pytest.mark.parametrize("status", [PostStatus.PUBLISHING, PostStatus.REVISING])
+def test_발행_중이거나_수정_중인_글은_고칠_수_없다(status):
     repo = _repo(status)
     with pytest.raises(PostNotEditableError):
         EditPostUseCase(repo).edit(5, title="t", body="b", tags="", category="")
     assert _get(repo).content.title == "옛 제목"
+
+
+def test_발행된_글을_고치면_수정대기가_된다():
+    # 시트만 고치면 블로그 글과 어긋난다 — 수정대기로 돌려 '수정 발행'을 기다린다
+    repo = _repo(PostStatus.PUBLISHED)
+    EditPostUseCase(repo).edit(5, title="새 제목", body="b", tags="", category="꿀팁")
+    post = _get(repo)
+    assert post.status == PostStatus.REVISION_PENDING
+    assert (post.content.title, post.category) == ("새 제목", "꿀팁")
+
+
+def test_수정대기_글은_다시_고쳐도_수정대기():
+    repo = _repo(PostStatus.REVISION_PENDING)
+    EditPostUseCase(repo).edit(5, title="t", body="b", tags="", category="")
+    assert _get(repo).status == PostStatus.REVISION_PENDING
+
+
+def test_발행했던_글의_실패는_수정대기로_되돌린다():
+    # 발행대기로 되돌리면 새 글로 한 번 더 발행돼 중복 글이 생긴다
+    repo = _repo(PostStatus.FAILED)
+    post = _get(repo)
+    post.published_url, post.entry_id = "https://blog.naver.com/b/1", "1"
+    EditPostUseCase(repo).restore(5)
+    assert _get(repo).status == PostStatus.REVISION_PENDING
 
 
 def test_없는_행은_편집_불가():

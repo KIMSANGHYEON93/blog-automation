@@ -75,8 +75,55 @@ def test_write_url_uses_redirect_write_entry():
     )
 
 
-def test_update_is_not_supported(calls):
-    assert not NaverBrowserAdapter("myblog").update(_post()).success
+@pytest.fixture
+def update_calls(calls, monkeypatch):
+    monkeypatch.setattr(editor, "open_update_editor",
+                        lambda sb, blog, log_no: calls.append(("open_update", log_no)))
+    monkeypatch.setattr(editor, "replace_title", lambda sb, t: calls.append(("replace_title", t)))
+    monkeypatch.setattr(editor, "clear_body", lambda sb: calls.append(("clear",)))
+    monkeypatch.setattr(editor, "body_text_length", lambda sb: 5000)
+    return calls
+
+
+def _published(entry_id: str = "223456789012") -> Post:
+    post = _post()
+    post.published_url, post.entry_id = PUBLISHED, entry_id
+    return post
+
+
+def test_수정은_기존_글을_열어_제목을_바꾸고_본문을_비운_뒤_다시_붙인다(update_calls):
+    result = NaverBrowserAdapter("myblog", draft_only=False).update(_published())
+    assert result.success and result.url == PUBLISHED
+    kinds = [c[0] for c in update_calls]
+    assert kinds[:3] == ["open_update", "replace_title", "clear"]
+    assert kinds.index("clear") < kinds.index("body") < kinds.index("publish")
+    assert ("open_update", "223456789012") in update_calls
+    assert ("replace_title", "제목") in update_calls
+
+
+def test_글_번호는_발행_URL에서도_얻는다(update_calls):
+    NaverBrowserAdapter("myblog", draft_only=False).update(_published(entry_id=""))
+    assert ("open_update", "223456789012") in update_calls
+
+
+def test_글_번호가_없으면_에디터를_열지_않는다(update_calls):
+    result = NaverBrowserAdapter("myblog", draft_only=False).update(_post())
+    assert not result.success
+    assert update_calls == []
+
+
+def test_붙인_본문이_모자라면_발행을_누르지_않는다(update_calls, monkeypatch):
+    # 네이버는 발행을 눌러야 수정이 저장된다 — 누르지 않으면 기존 글은 그대로다
+    monkeypatch.setattr(editor, "body_text_length", lambda sb: 0)
+    result = NaverBrowserAdapter("myblog", draft_only=False).update(_published())
+    assert not result.success and "기존 글은 그대로" in result.error
+    assert not any(c[0] == "publish" for c in update_calls)
+
+
+def test_시험_모드면_수정을_저장하지_않는다(update_calls):
+    result = NaverBrowserAdapter("myblog").update(_published())
+    assert not result.success
+    assert not any(c[0] in ("publish", "draft") for c in update_calls)
 
 
 class _FakeSb:

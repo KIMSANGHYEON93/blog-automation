@@ -30,6 +30,7 @@ from src.application.use_cases.publish_selected_post import (
     PublishSelectedPostUseCase,
 )
 from src.application.use_cases.register_keyword import RegisterKeywordUseCase
+from src.application.use_cases.revise_selected_post import ReviseSelectedPostUseCase
 from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.quota_manager import QuotaManager
 from src.domain.value_objects.post_status import PostStatus
@@ -147,6 +148,28 @@ def _build_drafter(  # type: ignore[no-untyped-def]
     return draft
 
 
+def _build_reviser(  # type: ignore[no-untyped-def]
+    config: Config, repo: GoogleSheetsPostRepository, profile: PlatformProfile,
+):
+    """수정 발행: 대시보드에서 고친 발행 글을 같은 주소에서 고쳐 쓴다(네이버)."""
+
+    def revise(row_index: int) -> ManualPublishResult:
+        use_case = ReviseSelectedPostUseCase(
+            repo=repo,
+            browser=make_browser(profile, config, PROJECT_ROOT, build_notification(), None),
+            lock=DirectoryPipelineLock(LOCK_DIR),
+        )
+        logger.info(f"[{profile.name}] 수정 발행 시작: row={row_index}")
+        result = use_case.execute(row_index)
+        logger.info(
+            f"[{profile.name}] 수정 발행 결과: row={row_index} "
+            f"{result.outcome.value} — {result.message}"
+        )
+        return result
+
+    return revise
+
+
 class _KeywordDesk:
     """대시보드 키워드 화면: AI-Brain 용어 추천 + 직접 등록. 중복은 두 탭 모두와 본다."""
 
@@ -202,6 +225,7 @@ def _serve(platform: str) -> int:
         job_runner=PublishJobRunner(
             publish=_build_publisher(config, repo, profile),
             draft=_build_drafter(config, repo, profile) if profile.name == "naver" else None,
+            revise=_build_reviser(config, repo, profile) if profile.name == "naver" else None,
             generate=(
                 build_generator(
                     os.getenv("N8N_CONTAINER", DEFAULT_N8N_CONTAINER), NAVER_WORKFLOW_NAME,

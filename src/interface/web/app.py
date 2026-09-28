@@ -64,7 +64,8 @@ class KeywordDesk(Protocol):
 
 
 KEYWORD_MAX_LENGTH = 60
-JOB_LABELS = {"publish": "수동 발행", "draft": "임시저장 시험", "generate": "글 생성"}
+JOB_LABELS = {"publish": "수동 발행", "draft": "임시저장 시험", "generate": "글 생성",
+              "revise": "수정 발행"}
 
 
 def create_app(
@@ -269,6 +270,19 @@ def _register_check_routes(
     app.jinja_env.globals["preview_enabled"] = preview is not None
     app.jinja_env.globals["draft_enabled"] = runner.enabled("draft")
     app.jinja_env.globals["generate_enabled"] = runner.enabled("generate")
+    app.jinja_env.globals["revise_enabled"] = runner.enabled("revise")
+
+    @app.post("/posts/<int:row_index>/revise")
+    def revise_post(row_index: int):  # type: ignore[no-untyped-def]
+        if not runner.enabled("revise") or reader.get(row_index) is None:
+            abort(404)
+        if _refuse_near_automation(clock):
+            return redirect(url_for("post_detail", row_index=row_index))
+        job_id = runner.submit(row_index, kind="revise")
+        if job_id is None:
+            flash("이미 진행 중인 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")
+            return redirect(url_for("post_detail", row_index=row_index))
+        return redirect(url_for("job_status", job_id=job_id))
 
     @app.post("/generate")
     def generate_posts():  # type: ignore[no-untyped-def]
@@ -349,10 +363,14 @@ def _register_edit_routes(app: Flask, editor: EditPostUseCase) -> None:
         if values is None:
             abort(400, description="제목과 본문은 필수이고, 글자 수 상한을 넘을 수 없습니다")
         try:
-            editor.edit(row_index, **values)
+            post = editor.edit(row_index, **values)
         except PostNotEditableError:
-            abort(409, description="발행됐거나 발행 중인 글은 고칠 수 없습니다")
-        flash("저장했습니다. 발행 전에 본문을 다시 확인하세요.", "success")
+            abort(409, description="발행·수정 중인 글은 고칠 수 없습니다")
+        if post.status == PostStatus.REVISION_PENDING:
+            flash("저장하고 수정대기로 바꿨습니다. '수정 발행'을 눌러야 블로그 글에 반영됩니다.",
+                  "success")
+        else:
+            flash("저장했습니다. 발행 전에 본문을 다시 확인하세요.", "success")
         return redirect(url_for("post_detail", row_index=row_index))
 
     @app.post("/posts/<int:row_index>/restore")

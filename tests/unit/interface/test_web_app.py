@@ -36,7 +36,7 @@ def _post(row, keyword, status=PostStatus.PENDING, body_len=3500):
 
 
 class Harness:
-    def __init__(self, publish=None, allowed_hosts=None, now=NOON):
+    def __init__(self, publish=None, allowed_hosts=None, now=NOON, revise=None):
         self.published_rows: list[int] = []
         published = _post(4, "Kafka 입문", PostStatus.PUBLISHED)
         published.published_url = "https://blog.tistory.com/4"
@@ -57,7 +57,7 @@ class Harness:
             return ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "발행 완료",
                                        url=f"https://blog.tistory.com/{row}")
 
-        self.runner = PublishJobRunner(publish=publish or default_publish)
+        self.runner = PublishJobRunner(publish=publish or default_publish, revise=revise)
         app = create_app(
             authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
             list_posts=ListPostsUseCase(repo),
@@ -325,9 +325,9 @@ class TestEditPost:
         assert 'action="/posts/2/edit"' in html
         assert "<textarea" in html
 
-    def test_발행된_글에는_편집_폼이_없다(self, h):
+    def test_발행된_글도_편집_폼이_있다(self, h):
         h.login()
-        assert 'action="/posts/4/edit"' not in h.client.get("/posts/4").get_data(as_text=True)
+        assert 'action="/posts/4/edit"' in h.client.get("/posts/4").get_data(as_text=True)
 
     def test_편집하면_저장하고_상세로_돌아간다(self, h):
         h.login()
@@ -355,11 +355,14 @@ class TestEditPost:
         h.login()
         assert self._edit(h, title="가" * 151).status_code == 400
 
-    def test_발행된_글은_편집_요청도_거부(self, h):
+    def test_발행된_글을_고치면_수정대기로_바뀐다(self, h):
         h.login()
         resp = self._edit(h, row=4)
-        assert resp.status_code == 409
-        assert self._row(h, 4).content.title == "Kafka 입문 제목"
+        assert resp.status_code == 302
+        post = self._row(h, 4)
+        assert post.content.title == "새 제목"
+        assert post.status == PostStatus.REVISION_PENDING
+        assert "수정대기로 바꿨습니다" in h.client.get("/posts/4").get_data(as_text=True)
 
     def test_편집한_제목도_이스케이프(self, h):
         h.login()
@@ -630,3 +633,48 @@ def test_자동_실행_직전에는_발행을_막는다():
                          follow_redirects=True)
     assert "09:00 자동 실행" in resp.get_data(as_text=True)
     assert h.published_rows == []
+
+
+def _revise_harness(now=NOON):
+    revised: list[int] = []
+
+    def revise(row: int) -> ManualPublishResult:
+        revised.append(row)
+        return ManualPublishResult(ManualPublishOutcome.REVISED, row, "수정 발행 완료")
+
+    h = Harness(revise=revise, now=now)
+    h.login()
+    post = next(p for p in h.repo.find_all() if p.row_index == 4)
+    post.status = PostStatus.REVISION_PENDING
+    post.entry_id = "4"
+    return h, revised
+
+
+def test_수정대기_글은_수정_발행으로_작업을_돌린다():
+    h, revised = _revise_harness()
+    assert 'action="/posts/4/revise"' in h.client.get("/posts/4").get_data(as_text=True)
+    resp = h.client.post("/posts/4/revise", data={"csrf_token": h.csrf("/posts/4")})
+    job_id = resp.headers["Location"].rsplit("/", 1)[-1]
+    h.runner.wait(job_id, timeout=5)
+    assert revised == [4]
+    assert "수정 발행" in h.client.get(f"/jobs/{job_id}").get_data(as_text=True)
+
+
+def test_수정대기가_아니면_수정_발행_버튼이_없다():
+    h, _ = _revise_harness()
+    assert "/revise" not in h.client.get("/posts/2").get_data(as_text=True)
+
+
+def test_수정_발행_기능이_없는_앱은_404():
+    h = Harness()
+    h.login()
+    resp = h.client.post("/posts/4/revise", data={"csrf_token": h.csrf("/posts/4")})
+    assert resp.status_code == 404
+
+
+def test_자동_실행_직전에는_수정_발행도_막는다():
+    h, revised = _revise_harness(now=datetime(2026, 9, 28, 9, 50))
+    resp = h.client.post("/posts/4/revise", data={"csrf_token": h.csrf("/posts/4")},
+                         follow_redirects=True)
+    assert "10:00 자동 실행" in resp.get_data(as_text=True)
+    assert revised == []

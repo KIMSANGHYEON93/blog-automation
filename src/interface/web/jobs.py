@@ -30,19 +30,20 @@ class PublishJob:
     started_at: datetime
     finished_at: datetime | None = None
     result: ManualPublishResult | None = None
-    kind: str = "publish"  # publish | draft | generate
+    kind: str = "publish"  # publish | draft | generate | revise
 
 
 class PublishJobRunner:
-    """발행·임시저장 시험·글 생성은 브라우저·시트를 함께 쓰므로 한 실행기에서 동시에 1건만 돈다."""
+    """발행·임시저장 시험·글 생성·수정 발행은 브라우저·시트를 함께 쓰므로 동시에 1건만 돈다."""
 
     def __init__(
         self,
         publish: Callable[[int], ManualPublishResult],
         draft: Callable[[int], ManualPublishResult] | None = None,
         generate: Callable[[int], ManualPublishResult] | None = None,
+        revise: Callable[[int], ManualPublishResult] | None = None,
     ):
-        tasks = {"publish": publish, "draft": draft, "generate": generate}
+        tasks = {"publish": publish, "draft": draft, "generate": generate, "revise": revise}
         self._tasks = {kind: task for kind, task in tasks.items() if task is not None}
         self._jobs: OrderedDict[str, PublishJob] = OrderedDict()
         self._events: dict[str, threading.Event] = {}

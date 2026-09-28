@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import sys
 import time
 
 from src.infrastructure.browser.naver import selectors as sel
@@ -106,8 +107,61 @@ def is_logged_in(sb, blog_id: str) -> bool:
     return True
 
 
+def update_url(blog_id: str, log_no: str) -> str:
+    return BLOG_HOST + sel.UPDATE_PATH.format(blog_id=blog_id, log_no=log_no)
+
+
 def open_editor(sb, blog_id: str) -> None:
-    _open(sb, write_url(blog_id))
+    _open_editor_at(sb, write_url(blog_id))
+
+
+def open_update_editor(sb, blog_id: str, log_no: str) -> None:
+    """발행된 글의 수정 화면. 기존 제목·본문이 불러와진 채 열린다."""
+    _open_editor_at(sb, update_url(blog_id, log_no))
+
+
+def replace_title(sb, title: str) -> None:
+    """기존 제목을 지우고 새 제목을 넣는다. 수정이라 '포함'이 아니라 '같음'으로 확인한다."""
+    from selenium.webdriver.common.action_chains import ActionChains
+
+    target = _first_visible(sb, sel.TITLE)
+    if not target:
+        raise NaverEditorError("제목 입력란을 찾지 못함 — selectors.TITLE 확인")
+    sb.click(target)
+    time.sleep(0.5)
+    _select_all_and_delete(sb)
+    ActionChains(sb.driver).send_keys(title).perform()
+    time.sleep(0.5)
+    typed = str(sb.execute_script(f"return document.querySelector({target!r})?.innerText || ''"))
+    if typed.strip() != title.strip():
+        raise NaverEditorError(f"제목이 바뀌지 않음 (현재: {typed.strip()[:40]!r})")
+
+
+def clear_body(sb) -> None:
+    """본문을 모두 비운다(사진·인용구 포함). 제목은 남는다(2026-09-29 실측)."""
+    focus_body(sb)
+    _select_all_and_delete(sb)
+    time.sleep(1.5)
+    remaining = sb.execute_script(_COUNT_JS, sel.COMPONENTS)
+    if remaining > 2:  # 제목 + 빈 텍스트
+        raise NaverEditorError(f"기존 본문을 비우지 못함 (구성 요소 {remaining}개 남음)")
+
+
+def body_text_length(sb) -> int:
+    return int(sb.execute_script(_TEXT_LEN_JS, sel.BODY_PARAGRAPHS))
+
+
+def _select_all_and_delete(sb) -> None:
+    from selenium.webdriver.common.action_chains import ActionChains
+    from selenium.webdriver.common.keys import Keys
+
+    modifier = Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL
+    ActionChains(sb.driver).key_down(modifier).send_keys("a").key_up(modifier)\
+        .send_keys(Keys.DELETE).perform()
+
+
+def _open_editor_at(sb, url: str) -> None:
+    _open(sb, url)
     time.sleep(3)
     if "nid.naver.com" in sb.get_current_url():
         raise NaverEditorError("네이버 세션 없음 — scripts/naver_blog.py login 으로 먼저 로그인")

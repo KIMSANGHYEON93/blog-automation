@@ -10,6 +10,12 @@ from __future__ import annotations
 # /{blog_id}/postwrite 는 블로그 홈으로 튕기는 경우가 있었다. 이 경로는 매번
 # #mainFrame 안에 PostWriteForm.naver 를 연다(2026-09-23 실측).
 WRITE_PATH = "/{blog_id}?Redirect=Write&categoryNo=0"
+# 발행 글 수정: #mainFrame 안에 PostUpdateForm.naver 가 기존 제목·본문을 불러온 채 열린다
+# (2026-09-29 실측, MCP란·챗GPT 엑셀 글)
+UPDATE_PATH = "/{blog_id}?Redirect=Update&logNo={log_no}"
+
+# 편집 화면 구성 요소. 본문을 다 비우면 제목 + 빈 텍스트 = 2개가 남는다(2026-09-29 실측 19→2)
+COMPONENTS = ".se-component"
 
 MAIN_FRAME = "#mainFrame"
 

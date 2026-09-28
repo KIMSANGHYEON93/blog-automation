@@ -103,7 +103,37 @@ class NaverBrowserAdapter(BrowserPort):
         return result
 
     def update(self, post: Post) -> PublishResult:
-        return PublishResult.fail("네이버 글 수정은 아직 지원하지 않음")
+        """발행된 글을 같은 주소에서 고쳐 쓴다: 수정 화면 → 제목 교체 → 본문 비우기 → 다시 붙이기.
+
+        네이버는 마지막 '발행'을 눌러야 수정이 저장된다. 그 전에 멈추면 기존 글은 그대로다.
+        """
+        content = post.content
+        if content is None or not content.has_body():
+            return PublishResult.fail("본문 없음")
+        log_no = post.entry_id or parse_log_no(post.published_url or "")
+        if not log_no:
+            return PublishResult.fail("글 번호가 없어 수정할 글을 찾을 수 없음")
+        markdown = content.body_markdown or ""
+        title = content.title_or_fallback(post.keyword)
+        try:
+            editor.open_update_editor(self._sb, self._blog_id, log_no)
+            editor.replace_title(self._sb, title)
+            editor.clear_body(self._sb)
+            self._paste_sections(post.keyword, markdown, title)
+            if self._draft_only:
+                return PublishResult.fail("수정 시험만 함 — 저장하지 않아 기존 글은 그대로")
+            filled = editor.body_text_length(self._sb)
+            # ponytail: 마크다운 기호·줄바꿈이 빠지므로 절반을 하한으로 둔다.
+            # 붙여넣기가 중간에 끊긴 경우만 잡는다 — 더 엄밀히는 소제목 수 대조
+            if filled < len(markdown) // 2:
+                return PublishResult.fail(
+                    f"붙인 본문이 {filled}자로 모자라 발행을 누르지 않음 — 기존 글은 그대로",
+                )
+            return self._confirm(post, markdown)
+        except editor.NaverEditorError as e:
+            logger.error(f"네이버 수정 실패 [{post.keyword}]: {e}")
+            self._save_failure_screenshot(post)
+            return PublishResult.fail(str(e))
 
     def _write(self, post: Post) -> PublishResult:
         assert post.content is not None
@@ -115,7 +145,12 @@ class NaverBrowserAdapter(BrowserPort):
         if self._draft_only:
             editor.save_draft(self._sb)
             return PublishResult.fail(DRAFT_ONLY_MESSAGE)
-        tags = normalize_tags(content.tag_list())
+        return self._confirm(post, markdown)
+
+    def _confirm(self, post: Post, markdown: str) -> PublishResult:
+        """발행 레이어에서 카테고리·태그를 넣고 확정한 뒤 공개 글을 점검한다."""
+        assert post.content is not None
+        tags = normalize_tags(post.content.tag_list())
         url = editor.publish(self._sb, tags, post.category)
         return PublishResult.ok(
             url=url, entry_id=parse_log_no(url),

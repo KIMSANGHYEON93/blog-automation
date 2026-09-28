@@ -18,7 +18,7 @@
     <p class="notice notice-info">{{ job_label }} 중입니다… 이 페이지는 {{ refresh_seconds }}초마다 새로고침됩니다.</p>
   {% else %}
     {% set outcome = job.result.outcome.value %}
-    <p class="notice notice-{{ 'success' if outcome in ('published', 'drafted', 'generated') else 'error' }}">{{ job.result.message }}</p>
+    <p class="notice notice-{{ 'success' if outcome in ('published', 'drafted', 'generated', 'revised') else 'error' }}">{{ job.result.message }}</p>
     {% set url = job.result.url|safe_url %}
     {% if url %}
     <p><a href="{{ url }}" rel="noopener noreferrer" target="_blank">{{ url }}</a></p>

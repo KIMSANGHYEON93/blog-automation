@@ -75,6 +75,10 @@ CATEGORY_BUTTON = ["button[class*='selectbox_button']"]
 # 글자 비교로는 안 잡힌다
 CATEGORY_OPTION = "label[for$='_{name}']"
 
+# 발행 레이어에 이미 붙은 태그(수정 화면이 불러온 것).
+# 태그 입력란에서 백스페이스 1번에 1개씩 지워진다(2026-09-29 실측)
+EXISTING_TAGS = "span[id^='tag-item-']"
+
 TAG_INPUT = [
     "input[placeholder*='태그']",
     "input[class*='tag_input']",

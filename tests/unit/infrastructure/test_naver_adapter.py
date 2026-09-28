@@ -226,6 +226,29 @@ def test_발행_확인_뒤_일반_예외도_수동_확인_필요로_바꾼다(mo
         editor.publish(object(), [])
 
 
+class _UrlSb:
+    """발행 확인 뒤 주소가 차례로 바뀌는 가짜 브라우저."""
+
+    def __init__(self, urls: list[str]):
+        self._urls = urls
+
+    def switch_to_default_content(self):
+        pass
+
+    def get_current_url(self):
+        return self._urls.pop(0) if len(self._urls) > 1 else self._urls[0]
+
+
+def test_수정_화면_주소는_발행_완료로_보지_않는다(monkeypatch):
+    # 2026-09-29 실측: 수정 화면 주소에도 logNo가 있어 누르자마자 '완료'로 판단했다
+    monkeypatch.setattr(editor, "_click_first", lambda sb, s, name: None)
+    monkeypatch.setattr(editor.time, "sleep", lambda s: None)
+    form = "https://blog.naver.com/b?Redirect=Update&logNo=224421344442"
+    post = "https://blog.naver.com/b/224421344442"
+    sb = _UrlSb([form, form, form, post])
+    assert editor.publish(sb, []) == post
+
+
 def _sectioned_post(n_headings: int) -> Post:
     body = "도입 문장.\n\n" + "\n\n".join(f"## 소제목{i}\n\n본문{i}." for i in range(n_headings))
     return _post(body=body)
@@ -268,11 +291,15 @@ def test_사진_함수가_없으면_사진_없이(calls):
 class _LayerSb:
     """발행 레이어 가짜 — 보이는 셀렉터와 클릭·입력 기록."""
 
-    def __init__(self, visible):
+    def __init__(self, visible, existing_tags: int = 0):
         self.visible, self.log = set(visible), []
+        self.existing_tags = existing_tags
 
     def is_element_visible(self, selector):
         return selector in self.visible
+
+    def execute_script(self, script, selector):
+        return self.existing_tags if selector == editor.sel.EXISTING_TAGS else 0
 
     def click(self, selector):
         self.log.append(("click", selector))
@@ -293,6 +320,19 @@ def test_태그는_지우지_않고_이어_쓴다(monkeypatch):
         ("add_text", "가\n"), ("add_text", "나\n"), ("add_text", "다\n"),
     ]
     assert not any(e[0] == "type" for e in sb.log)
+
+
+def test_수정할_때는_기존_태그를_지우고_새로_넣는다(monkeypatch):
+    # 수정 화면은 기존 태그를 불러온다 — 뺀 태그가 남지 않게 백스페이스로 하나씩 지운다
+    # (2026-09-29 실측: 백스페이스 1번에 태그 1개)
+    from selenium.webdriver.common.keys import Keys
+
+    monkeypatch.setattr(editor.time, "sleep", lambda s: None)
+    sb = _LayerSb({editor.sel.TAG_INPUT[0]}, existing_tags=2)
+    editor._fill_tags(sb, ["가"])
+    assert [e[1] for e in sb.log if e[0] == "add_text"] == [
+        Keys.BACKSPACE, Keys.BACKSPACE, "가\n",
+    ]
 
 
 def test_카테고리는_목록에서_이름이_같은_항목을_고른다(monkeypatch):

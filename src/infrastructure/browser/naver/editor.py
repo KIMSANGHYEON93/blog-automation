@@ -347,6 +347,12 @@ def _fill_tags(sb, tags: list[str]) -> None:
         # 태그는 발행을 막을 이유가 아니다. 경고만 남긴다.
         logger.warning("태그 입력란을 찾지 못해 태그 없이 발행 — selectors.TAG_INPUT 확인")
         return
+    from selenium.webdriver.common.keys import Keys
+
+    # 수정 화면은 기존 태그를 불러온다 — 뺀 태그가 남지 않게 먼저 지운다(새 글은 0개)
+    for _ in range(int(sb.execute_script(_COUNT_JS, sel.EXISTING_TAGS) or 0)):
+        sb.add_text(target, Keys.BACKSPACE)
+        time.sleep(0.2)
     for tag in tags:
         # sb.type은 입력란을 지운 뒤 쓴다 — 마지막 태그만 남았다(2026-09-23 실측)
         sb.add_text(target, tag + "\n")
@@ -377,7 +383,9 @@ def _wait_published_url(sb) -> str:
     while time.time() < deadline:
         sb.switch_to_default_content()
         url = str(sb.get_current_url())
-        if parse_log_no(url):
+        # 수정 화면(?Redirect=Update&logNo=)에도 글 번호가 있다 — 공개 글 주소가 될 때까지 대기
+        # (2026-09-29 실측: 누르자마자 완료로 판단해 수정 화면 주소를 저장했다)
+        if parse_log_no(url) and "Redirect=" not in url:
             return url
         time.sleep(1)
     raise NaverEditorError(

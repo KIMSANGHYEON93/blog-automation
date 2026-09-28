@@ -67,7 +67,7 @@ python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 �
 - 자동 파이프라인과 같은 `.browser_data`를 쓰므로 `DirectoryPipelineLock`(`run_pipeline_b.sh`와 같은 `.pipeline_b.lock`)을 잡은 뒤에만 브라우저를 엶. 자동 실행 중이면 거부
 - 발행은 `PublishJobRunner` 백그라운드 스레드에서 동시에 1건만 실행, 작업 상태는 메모리에만 있음(서버 재시작 시 사라짐). 작업 페이지는 meta refresh로 갱신(CSP상 JS 없음)
 - 보안: 모든 페이지 로그인 필요, 모든 POST CSRF 검증, IP별 로그인 5회/15분 제한, `127.0.0.1` 바인딩 기본(외부 바인딩은 `DASHBOARD_ALLOW_REMOTE=true` 필요 — HTTP라 HTTPS 프록시 뒤에서만)
-- launchd에 등록하지 않음 — 필요할 때 직접 실행
+- 네이버 대시보드는 launchd `com.blog-automation.naver-dashboard`(KeepAlive, 127.0.0.1:8787, `scripts/`의 plist)로 상시 실행. 재시작은 `launchctl kickstart -k gui/$(id -u)/com.blog-automation.naver-dashboard` — 8787을 다른 프로세스가 잡고 있으면 KeepAlive가 30초마다 실패를 반복한다. 티스토리 대시보드는 필요할 때 다른 포트(`DASHBOARD_PORT=8788`)로 직접 실행
 - 폰 접속은 Tailscale `tailscale serve --bg <포트>`(Funnel 금지). 바인딩은 127.0.0.1 그대로 두고 `.env`에 `DASHBOARD_EXTRA_HOSTS=<맥>.<tailnet>.ts.net`·`DASHBOARD_SECURE_COOKIES=true` — 없으면 Host 검사가 400을 낸다(2026-09-29 실측). 자동 실행 20분 전에는 발행·시험을 거부(`app.py` `AUTOMATION_TIMES`, launchd 시각과 맞출 것)
 
 ### 네이버 블로그 (`--platform naver`)

@@ -5,7 +5,9 @@ from src.domain.entities.post import Post
 from src.domain.value_objects.post_content import PostContent
 from src.infrastructure.browser.naver import adapter as adapter_mod
 from src.infrastructure.browser.naver import editor
+from src.infrastructure.browser.naver import login as login_mod
 from src.infrastructure.browser.naver.adapter import DRAFT_ONLY_MESSAGE, NaverBrowserAdapter
+from src.infrastructure.browser.naver.login import LoginOutcome
 
 PUBLISHED = "https://blog.naver.com/myblog/223456789012"
 
@@ -403,10 +405,6 @@ def test_업로드_확인이_늦어도_붙인_사진은_한_장으로_센다(cal
     adapter = NaverBrowserAdapter("myblog", draft_only=False, image_fn=lambda p: b"jpg")
     adapter.publish(_sectioned_post(6))
     assert sum(1 for c in calls if c[0] == "image") == 5
-
-
-from src.infrastructure.browser.naver import login as login_mod
-from src.infrastructure.browser.naver.login import LoginOutcome
 
 
 def _relogin_adapter(monkeypatch, outcome, session_ok=True):

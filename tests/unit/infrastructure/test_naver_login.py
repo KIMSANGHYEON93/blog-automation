@@ -1,11 +1,16 @@
 """네이버 자동 로그인 — 화면 판정과 입력 흐름 (브라우저 없음)."""
 from __future__ import annotations
 
+import logging
+
 import pytest
 
+from src.infrastructure.browser.naver import login as login_mod
+from src.infrastructure.browser.naver import selectors as sel
 from src.infrastructure.browser.naver.login import (
     LOGIN_MESSAGES,
     LoginOutcome,
+    auto_login,
     classify_login_page,
 )
 
@@ -34,13 +39,6 @@ def test_캡차가_비밀번호_오류보다_먼저():
 
 def test_모든_결과에_안내_문구가_있다():
     assert set(LOGIN_MESSAGES) == set(LoginOutcome)
-
-
-import logging
-
-from src.infrastructure.browser.naver import login as login_mod
-from src.infrastructure.browser.naver import selectors as sel
-from src.infrastructure.browser.naver.login import auto_login
 
 
 class _FakeSb:
@@ -94,7 +92,10 @@ def _run(sb, timeout=300):
 
 
 def test_입력하고_한_번_제출한다():
-    sb = _FakeSb([("https://nid.naver.com/nidlogin.login", "", False), ("https://www.naver.com/", "", False)])
+    sb = _FakeSb([
+        ("https://nid.naver.com/nidlogin.login", "", False),
+        ("https://www.naver.com/", "", False),
+    ])
     assert _run(sb) is LoginOutcome.SUCCESS
     assert sb.opened == [login_mod.LOGIN_URL]
     assert sb.filled == {sel.LOGIN_ID_INPUT: "my-id", sel.LOGIN_PW_INPUT: "secret-pw"}

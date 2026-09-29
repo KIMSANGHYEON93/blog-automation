@@ -8,7 +8,7 @@
 - is_complete: 검색한 사람이 궁금해할 내용을 빠짐없이 다뤘는가
 - is_useful: 읽고 나서 바로 써먹을 수 있는가
 - is_in_depth: 뻔한 설명을 넘어 판단 기준과 주의점이 있는가
-- no_fabricated_experience: "직접 써보니", "제가 해보니" 같은 지어낸 1인칭 경험이 없으면 true
+- no_fabricated_experience: "직접 써보니", "제가 해보니" 같은 지어낸 1인칭 경험이 없으면 true. `[[직접 해 보니]]`로 시작하는 문단은 발행 전에 사람이 채울 자리 표시이므로 지어낸 경험으로 보지 않는다
 - natural_keyword_use: 키워드가 억지로 반복되거나 문장이 어색하게 비틀리지 않았으면 true
 - has_unique_info: 함께 준 "네이버 검색 상위 글"에 없는 정보가 1개 이상 있으면 true
 - mobile_readable: 문단이 짧고(2~3문장) 소제목·목록으로 훑어보기 쉬우면 true

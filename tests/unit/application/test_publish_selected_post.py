@@ -3,8 +3,10 @@ from __future__ import annotations
 
 from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.application.use_cases.publish_selected_post import (
+    EXPERIENCE_PLACEHOLDER,
     ManualPublishOutcome,
     PublishSelectedPostUseCase,
+    publish_blockers,
 )
 from src.domain.entities.post import Post
 from src.domain.ports.pipeline_lock_port import PipelineLockPort
@@ -177,3 +179,17 @@ class TestManualPublishFailure:
         assert post.status == PostStatus.FAILED
         assert browser.stopped is True
         assert lock.released is True
+
+
+def test_직접_해_보니_자리_표시가_남아_있으면_발행하지_않는다():
+    # 사람 검수를 건너뛴 AI 초안이 그대로 나가지 않게(네이버 AI 콘텐츠 가이드 2026-05)
+    body = "## 본문\n" + "x" * 3000 + f"\n\n{EXPERIENCE_PLACEHOLDER} 해 본 결과를 적어 주세요."
+    post = _post(content=PostContent(title="제목", body_markdown=body))
+    assert any("직접 해 보니" in reason for reason in publish_blockers(post))
+    result = _use_case(InMemoryPostRepository([post])).execute(row_index=2)
+    assert result.outcome == ManualPublishOutcome.REJECTED
+    assert post.status == PostStatus.PENDING
+
+
+def test_자리_표시를_채우면_발행할_수_있다():
+    assert publish_blockers(_post()) == []

@@ -72,7 +72,8 @@ python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 �
 
 ### 네이버 블로그 (`--platform naver`)
 
-- 흐름: `naver_calendar` 탭 '대기' → n8n `workflow_naver.json`(02:00) → '발행대기' → `python -m src.interface.web --platform naver`에서 사람이 1건씩 발행. 자동 발행 없음, 하루 1건
+- 흐름: `naver_calendar` 탭 '대기' → n8n `workflow_naver.json` → '발행대기' → `python -m src.interface.web --platform naver`에서 사람이 1건씩 발행. 자동 발행 없음, 하루 1건. n8n 워크플로(ID `SGXJWwyw6GW5aN6w`)는 **비활성**이라 02:00 스케줄은 돌지 않고, 생성은 대시보드 '지금 생성'(n8n CLI execute)으로 한다(2026-09-29 확인). 프롬프트를 고치면 같은 ID로 `n8n import:workflow`해야 중복이 안 생긴다
+- 사람 검수 강제: 초안은 `[[직접 해 보니]]` 문단 하나를 남기고(prompt_naver_common.md), 이 표시가 남아 있으면 `publish_blockers`가 발행을 막는다 — 대시보드 편집에서 실제 경험으로 바꿔 써야 발행된다. 검증 프롬프트는 이 표시를 지어낸 경험으로 보지 않는다
 - **워크플로우 JSON은 손으로 고치지 않는다**: 노드 코드는 `n8n/code_nodes/naver/*.js`, 프롬프트는 `n8n/prompts/prompt_naver_*.md`가 원본이고 `python scripts/build_naver_workflow.py`가 `workflow_complete.json`을 복사해 넣는다. 원본을 고친 뒤 스크립트를 돌려 n8n에 다시 가져올 것. `make test-n8n`이 최신 여부를 검사한다
 - 로그인은 사람이 한다: `python scripts/naver_blog.py login`('로그인 상태 유지' 체크), 세션은 `.browser_data_naver/`. `NAVER_BLOG_ID`는 로그인 아이디가 아니라 블로그 주소(`sangpedia`)
 - SmartEditor 실측(2026-09-23): 진입은 `?Redirect=Write`(`/postwrite`는 홈으로 튕길 때가 있음), 제목·본문 입력은 숨은 `input_buffer*` iframe으로 간다. 셀렉터는 `naver/selectors.py` 한 곳

@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 MIN_QUALITY_SCORE = 70
 DUPLICATE_THRESHOLD = 0.7
+# 네이버 초안(n8n prompt_naver_common.md)이 사람의 실제 경험을 채울 자리에 남기는 표시.
+# 남아 있으면 검수를 건너뛴 AI 글이라 발행하지 않는다(네이버 AI 콘텐츠 가이드 2026-05)
+EXPERIENCE_PLACEHOLDER = "[[직접 해 보니]]"
 
 
 class ManualPublishOutcome(Enum):
@@ -60,6 +63,8 @@ def publish_blockers(post: Post) -> list[str]:
         reasons.append("본문 없음")
     elif len(body) < MIN_CONTENT_LENGTH:
         reasons.append(f"본문 {len(body)}자 < 최소 {MIN_CONTENT_LENGTH}자")
+    if EXPERIENCE_PLACEHOLDER in body:
+        reasons.append(f"'{EXPERIENCE_PLACEHOLDER}' 자리를 실제 경험으로 채우지 않음")
     if post.quality_score < MIN_QUALITY_SCORE:
         reasons.append(f"품질 점수 {post.quality_score} < {MIN_QUALITY_SCORE}")
     return reasons

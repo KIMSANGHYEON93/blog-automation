@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 네이버 세션 아침 점검(만료일 때만 새 봇 알림). 설치:
+     cp scripts/com.blog-automation.naver-session-check.plist ~/Library/LaunchAgents/
+     launchctl load ~/Library/LaunchAgents/com.blog-automation.naver-session-check.plist -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.blog-automation.naver-session-check</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/kimsanghyeon/.pyenv/versions/3.11.11/bin/python3</string>
+		<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/scripts/naver_blog.py</string>
+		<string>check</string>
+		<string>--notify</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation</string>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>7</integer>
+		<key>Minute</key>
+		<integer>30</integer>
+	</dict>
+	<key>StandardErrorPath</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/logs/naver_session_check.err</string>
+	<key>StandardOutPath</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/logs/naver_session_check.log</string>
+</dict>
+</plist>

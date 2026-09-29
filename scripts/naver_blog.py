@@ -32,10 +32,18 @@ from src.infrastructure.browser.naver.images import (  # noqa: E402
     pollinations_image_fn,
     title_thumbnail,
 )
+from src.infrastructure.config import Config  # noqa: E402
+from src.infrastructure.locking.directory_lock import DirectoryPipelineLock  # noqa: E402
+from src.interface.web.platform import (  # noqa: E402
+    dashboard_url,
+    naver_notifier,
+    notify_if_expired,
+)
 
 load_dotenv()
 
 LOGIN_URL = "https://nid.naver.com/nidlogin.login"
+LOCK_DIR = Path(__file__).resolve().parent.parent / ".pipeline_b.lock"  # 발행과 같은 락
 
 
 def _blog_id() -> str:
@@ -54,9 +62,13 @@ def _login(adapter: NaverBrowserAdapter) -> int:
     return 0 if ok else 1
 
 
-def _check(adapter: NaverBrowserAdapter) -> int:
+def _check(adapter: NaverBrowserAdapter, notify: bool) -> int:
     ok = adapter.login()
     print("세션 유효" if ok else "세션 만료 — login 을 다시 실행하세요.")
+    if notify and notify_if_expired(
+        ok, naver_notifier(Config.from_env()), dashboard_url(os.environ)
+    ):
+        print("만료 알림 보냄")
     return 0 if ok else 1
 
 
@@ -75,7 +87,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="네이버 블로그 로그인·임시저장 시험")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("login")
-    sub.add_parser("check")
+    check = sub.add_parser("check")
+    check.add_argument(
+        "--notify", action="store_true", help="만료면 네이버 봇으로 알림(07:30 launchd)",
+    )
     draft = sub.add_parser("draft")
     draft.add_argument("markdown", type=Path)
     draft.add_argument("--title", required=True)
@@ -87,18 +102,26 @@ def main() -> int:
         image_fn=pollinations_image_fn(os.getenv("POLLINATIONS_API_KEY", "")),
         thumbnail_fn=title_thumbnail,
     )
+    lock = None
+    if args.cmd == "check" and args.notify:
+        lock = DirectoryPipelineLock(LOCK_DIR)
+        if not lock.acquire():
+            print("다른 작업이 브라우저를 쓰는 중 — 오늘 점검은 건너뜀")
+            return 0
     adapter.start()
     try:
         if args.cmd == "login":
             return _login(adapter)
         if args.cmd == "check":
-            return _check(adapter)
+            return _check(adapter, getattr(args, "notify", False))
         return _draft(adapter, args.markdown, args.title)
     except NaverEditorError as e:
         print(f"실패: {e}")
         return 1
     finally:
         adapter.stop()
+        if lock is not None:
+            lock.release()
 
 
 if __name__ == "__main__":

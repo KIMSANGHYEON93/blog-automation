@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 
 from src.application.use_cases.publish_selected_post import (
+    LOGIN_FAILED,
     ManualPublishOutcome,
     ManualPublishResult,
 )
@@ -39,7 +40,7 @@ class ReviseSelectedPostUseCase:
             self._browser.start()
             try:
                 if not self._browser.login():
-                    return ManualPublishResult.failed(row_index, "로그인 실패 — 수정대기 유지")
+                    return ManualPublishResult.failed(row_index, f"{LOGIN_FAILED} — 수정대기 유지")
                 return self._revise(post)
             finally:
                 self._browser.stop()

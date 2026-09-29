@@ -4,6 +4,7 @@ from __future__ import annotations
 from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.application.use_cases.publish_selected_post import (
     EXPERIENCE_PLACEHOLDER,
+    LOGIN_FAILED,
     ManualPublishOutcome,
     PublishSelectedPostUseCase,
     publish_blockers,
@@ -160,6 +161,7 @@ class TestManualPublishFailure:
         assert result.outcome == ManualPublishOutcome.FAILED
         assert "로그인" in result.message
         assert "Tistory" not in result.message  # 네이버 대시보드도 같은 메시지를 쓴다
+        assert result.message.startswith(LOGIN_FAILED)  # 대시보드가 이 접두어로 새 봇 알림
         assert post.status == PostStatus.PENDING
         assert browser.stopped is True
 

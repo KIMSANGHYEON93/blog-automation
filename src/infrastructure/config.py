@@ -20,6 +20,10 @@ class Config:
     site_profile_path: str
     naver_blog_id: str = ""
     naver_sheet_tab: str = "naver_calendar"
+    naver_login_id: str = ""
+    naver_login_pw: str = ""
+    naver_telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -39,6 +43,10 @@ class Config:
             site_profile_path=os.getenv("SITE_PROFILE", "site_profile.json"),
             naver_blog_id=os.getenv("NAVER_BLOG_ID", ""),
             naver_sheet_tab=os.getenv("NAVER_SHEET_TAB", "naver_calendar"),
+            naver_login_id=os.getenv("NAVER_LOGIN_ID", ""),
+            naver_login_pw=os.getenv("NAVER_LOGIN_PW", ""),
+            naver_telegram_bot_token=os.getenv("NAVER_TELEGRAM_BOT_TOKEN", ""),
+            telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", ""),
         )
 
     def validate(self) -> None:

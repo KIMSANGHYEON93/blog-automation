@@ -26,6 +26,7 @@ DUPLICATE_THRESHOLD = 0.7
 # 네이버 초안(n8n prompt_naver_common.md)이 사람의 실제 경험을 채울 자리에 남기는 표시.
 # 남아 있으면 검수를 건너뛴 AI 글이라 발행하지 않는다(네이버 AI 콘텐츠 가이드 2026-05)
 EXPERIENCE_PLACEHOLDER = "[[직접 해 보니]]"
+LOGIN_FAILED = "로그인 실패"
 
 
 class ManualPublishOutcome(Enum):
@@ -35,6 +36,7 @@ class ManualPublishOutcome(Enum):
     DRAFTED = "drafted"  # 임시저장 시험만 함 — 시트 상태는 바뀌지 않는다
     GENERATED = "generated"  # 대시보드 '지금 생성'(n8n 실행) 성공
     REVISED = "revised"  # 발행된 글을 같은 URL에서 수정 발행
+    LOGGED_IN = "logged_in"  # 대시보드 '네이버 다시 로그인' 성공
 
 
 @dataclass(frozen=True)
@@ -122,7 +124,7 @@ class PublishSelectedPostUseCase:
         try:
             if not self._browser.login():
                 return ManualPublishResult.failed(
-                    post.row_index, "로그인 실패 — 발행대기 유지",
+                    post.row_index, f"{LOGIN_FAILED} — 발행대기 유지",
                 )
             self._enricher.enrich_with_related_links(
                 post, published, self._enricher.identify_hubs(published),

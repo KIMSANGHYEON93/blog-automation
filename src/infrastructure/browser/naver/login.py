@@ -5,9 +5,13 @@
 """
 from __future__ import annotations
 
+import logging
+import time
 from enum import Enum
 
 from src.infrastructure.browser.naver import selectors as sel
+
+logger = logging.getLogger(__name__)
 
 LOGIN_URL = "https://nid.naver.com/nidlogin.login"
 
@@ -42,3 +46,64 @@ def classify_login_page(url: str, page_text: str, has_captcha: bool) -> LoginOut
     if any(m in page_text for m in sel.LOGIN_APPROVAL_MARKERS):
         return LoginOutcome.WAITING_APPROVAL
     return LoginOutcome.UNKNOWN
+
+
+APPROVAL_TIMEOUT = 300
+
+# 값은 인자로만 넘긴다 — 스크립트 문자열에 넣으면 드라이버 로그에 남을 수 있다
+_SET_VALUE_JS = """
+const [selector, value] = arguments;
+const el = document.querySelector(selector);
+if (!el) return false;
+el.focus();
+el.value = value;
+el.dispatchEvent(new Event('input', {bubbles: true}));
+el.dispatchEvent(new Event('change', {bubbles: true}));
+return true;
+"""
+_CHECK_KEEP_JS = """
+for (const selector of arguments[0]) {
+  const el = document.querySelector(selector);
+  if (el) { if (!el.checked) el.click(); return true; }
+}
+return false;
+"""
+_BODY_TEXT_JS = "return document.body ? document.body.innerText : '';"
+
+
+def auto_login(sb, login_id: str, login_pw: str, timeout: float = APPROVAL_TIMEOUT,
+               poll: float = 2.0, clock=time.monotonic, sleep=time.sleep) -> LoginOutcome:
+    """로그인 페이지에 값을 넣고 한 번 제출한 뒤, 폰 승인을 기다리며 결과를 판정한다."""
+    sb.open(LOGIN_URL)
+    sleep(2)
+    for selector, value in ((sel.LOGIN_ID_INPUT, login_id), (sel.LOGIN_PW_INPUT, login_pw)):
+        if not sb.execute_script(_SET_VALUE_JS, selector, value):
+            logger.error(f"로그인 입력란을 찾지 못함 — selectors 확인: {selector}")
+            return LoginOutcome.UNKNOWN
+    if not sb.execute_script(_CHECK_KEEP_JS, sel.LOGIN_KEEP):
+        logger.warning("'로그인 상태 유지' 체크박스를 찾지 못함 — 세션이 짧게 끝날 수 있음")
+    sb.click(sel.LOGIN_SUBMIT)
+    logger.info("네이버 로그인 제출 — 폰 승인 대기")
+
+    deadline = clock() + timeout
+    last = LoginOutcome.UNKNOWN
+    while True:
+        sleep(poll)
+        text = str(sb.execute_script(_BODY_TEXT_JS) or "")
+        outcome = classify_login_page(
+            str(sb.get_current_url()), text, bool(sb.is_element_present(sel.LOGIN_CAPTCHA)),
+        )
+        if outcome in (LoginOutcome.SUCCESS, LoginOutcome.WRONG_PASSWORD, LoginOutcome.BLOCKED):
+            logger.info(f"네이버 로그인 결과: {outcome.value}")
+            return outcome
+        if any(m in text for m in sel.LOGIN_DEVICE_MARKERS) and sb.is_element_visible(
+            sel.LOGIN_DEVICE_REGISTER
+        ):
+            sb.click(sel.LOGIN_DEVICE_REGISTER)
+        # 모르는 화면도 바로 멈추지 않는다 — 네이버 2단계 화면 문구를 다 알 수 없어서,
+        # 바로 멈추면 정상 승인 대기를 끊는다. 시간이 다 되면 결과 불명으로 끝낸다
+        last = outcome
+        if clock() >= deadline:
+            final = LoginOutcome.TIMEOUT if last is LoginOutcome.WAITING_APPROVAL else last
+            logger.warning(f"네이버 로그인 결과: {final.value}")
+            return final

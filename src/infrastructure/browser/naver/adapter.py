@@ -20,7 +20,7 @@ from typing import Callable
 from src.domain.entities.post import Post
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.value_objects.publish_result import PublishResult
-from src.infrastructure.browser.naver import editor
+from src.infrastructure.browser.naver import editor, login
 from src.infrastructure.browser.naver.content import (
     build_naver_html,
     layout_blocks,
@@ -88,6 +88,22 @@ class NaverBrowserAdapter(BrowserPort):
         if not ok:
             logger.error("네이버 세션 만료 — scripts/naver_blog.py login 으로 다시 로그인 필요")
         return ok
+
+    def relogin(self, login_id: str, login_pw: str) -> tuple[bool, str]:
+        """대시보드 '네이버 다시 로그인' — 브라우저를 열어 자동 입력하고 폰 승인을 기다린다."""
+        if not login_id or not login_pw:
+            return False, "NAVER_LOGIN_ID·NAVER_LOGIN_PW가 .env에 없음"
+        self.start()
+        try:
+            outcome = login.auto_login(self._sb, login_id, login_pw)
+            if outcome is not login.LoginOutcome.SUCCESS:
+                # 로그인 화면에는 아이디가 보이므로 실패 스크린샷을 남기지 않는다
+                return False, login.LOGIN_MESSAGES[outcome]
+            if not editor.is_logged_in(self._sb, self._blog_id):
+                return False, "로그인은 됐지만 블로그 세션 확인 실패 — 직접 확인"
+            return True, login.LOGIN_MESSAGES[login.LoginOutcome.SUCCESS]
+        finally:
+            self.stop()
 
     def publish(self, post: Post) -> PublishResult:
         content = post.content

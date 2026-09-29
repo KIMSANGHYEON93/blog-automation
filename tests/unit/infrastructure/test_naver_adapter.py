@@ -403,3 +403,42 @@ def test_업로드_확인이_늦어도_붙인_사진은_한_장으로_센다(cal
     adapter = NaverBrowserAdapter("myblog", draft_only=False, image_fn=lambda p: b"jpg")
     adapter.publish(_sectioned_post(6))
     assert sum(1 for c in calls if c[0] == "image") == 5
+
+
+from src.infrastructure.browser.naver import login as login_mod
+from src.infrastructure.browser.naver.login import LoginOutcome
+
+
+def _relogin_adapter(monkeypatch, outcome, session_ok=True):
+    adapter = NaverBrowserAdapter("myblog")
+    monkeypatch.setattr(adapter, "start", lambda: setattr(adapter, "_sb", object()))
+    monkeypatch.setattr(adapter, "stop", lambda: setattr(adapter, "_sb", None))
+    monkeypatch.setattr(login_mod, "auto_login", lambda sb, i, p: outcome)
+    monkeypatch.setattr(editor, "is_logged_in", lambda sb, blog: session_ok)
+    return adapter
+
+
+def test_relogin_성공(monkeypatch):
+    adapter = _relogin_adapter(monkeypatch, LoginOutcome.SUCCESS)
+    assert adapter.relogin("id", "pw") == (True, "네이버 로그인 성공")
+    assert adapter._sb is None  # 브라우저를 닫았다
+
+
+def test_relogin_실패는_안내_문구(monkeypatch):
+    adapter = _relogin_adapter(monkeypatch, LoginOutcome.WRONG_PASSWORD)
+    ok, message = adapter.relogin("id", "pw")
+    assert not ok and "NAVER_LOGIN_PW" in message
+
+
+def test_relogin_로그인은_됐지만_블로그_세션_확인_실패(monkeypatch):
+    adapter = _relogin_adapter(monkeypatch, LoginOutcome.SUCCESS, session_ok=False)
+    ok, message = adapter.relogin("id", "pw")
+    assert not ok and "직접 확인" in message
+
+
+def test_relogin_값이_없으면_브라우저를_열지_않는다(monkeypatch):
+    adapter = _relogin_adapter(monkeypatch, LoginOutcome.SUCCESS)
+    started = []
+    monkeypatch.setattr(adapter, "start", lambda: started.append(True))
+    ok, message = adapter.relogin("", "")
+    assert not ok and "NAVER_LOGIN_ID" in message and started == []

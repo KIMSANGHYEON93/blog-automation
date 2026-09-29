@@ -683,3 +683,68 @@ def test_자동_실행_직전에는_수정_발행도_막는다():
                          follow_redirects=True)
     assert "10:00 자동 실행" in resp.get_data(as_text=True)
     assert revised == []
+
+
+class TestNaverLogin:
+    def _client(self, calls, now=NOON):
+        def login(row):
+            calls.append(row)
+            return ManualPublishResult(ManualPublishOutcome.LOGGED_IN, row, "네이버 로그인 성공")
+
+        runner = PublishJobRunner(
+            publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
+            login=login,
+        )
+        app = create_app(
+            authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
+            list_posts=ListPostsUseCase(InMemoryPostRepository([])),
+            job_runner=runner,
+            secret_key="test-secret-key-0123456789",
+            clock=lambda: now,
+        )
+        app.config["TESTING"] = True
+        client = app.test_client()
+        html = client.get("/login").get_data(as_text=True)
+        token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+        client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
+        return client, runner
+
+    def _token(self, client):
+        html = client.get("/").get_data(as_text=True)
+        return re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+
+    def test_네이버_대시보드에만_버튼이_있다(self):
+        client, _ = self._client([])
+        assert 'action="/naver/login"' in client.get("/").get_data(as_text=True)
+        h = Harness()
+        h.login()
+        assert 'action="/naver/login"' not in h.client.get("/").get_data(as_text=True)
+        assert h.client.post("/naver/login", data={"csrf_token": h.csrf("/")}).status_code == 404
+
+    def test_로그인은_작업으로_돈다(self):
+        calls: list[int] = []
+        client, runner = self._client(calls)
+        resp = client.post("/naver/login", data={"csrf_token": self._token(client)})
+        job_id = resp.headers["Location"].rsplit("/", 1)[-1]
+        job = runner.wait(job_id, timeout=5)
+        assert job.result.outcome is ManualPublishOutcome.LOGGED_IN and calls == [0]
+        html = client.get(f"/jobs/{job_id}").get_data(as_text=True)
+        assert "notice-success" in html and "네이버 로그인" in html
+
+    def test_CSRF_없으면_거부(self):
+        calls: list[int] = []
+        client, _ = self._client(calls)
+        assert client.post("/naver/login").status_code == 400
+        assert calls == []
+
+    def test_자동_실행_직전에는_거부(self):
+        calls: list[int] = []
+        client, _ = self._client(calls, now=datetime(2026, 9, 28, 8, 50))
+        resp = client.post("/naver/login", data={"csrf_token": self._token(client)},
+                           follow_redirects=True)
+        assert "09:00 자동 실행" in resp.get_data(as_text=True) and calls == []
+
+
+def test_아침_점검_시각도_자동_실행으로_본다():
+    found = automation_soon(datetime(2026, 9, 28, 7, 20))
+    assert found is not None and found.strftime("%H:%M") == "07:30"

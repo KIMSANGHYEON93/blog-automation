@@ -30,7 +30,7 @@ class PublishJob:
     started_at: datetime
     finished_at: datetime | None = None
     result: ManualPublishResult | None = None
-    kind: str = "publish"  # publish | draft | generate | revise
+    kind: str = "publish"  # publish | draft | generate | revise | login
 
 
 class PublishJobRunner:
@@ -42,8 +42,10 @@ class PublishJobRunner:
         draft: Callable[[int], ManualPublishResult] | None = None,
         generate: Callable[[int], ManualPublishResult] | None = None,
         revise: Callable[[int], ManualPublishResult] | None = None,
+        login: Callable[[int], ManualPublishResult] | None = None,
     ):
-        tasks = {"publish": publish, "draft": draft, "generate": generate, "revise": revise}
+        tasks = {"publish": publish, "draft": draft, "generate": generate, "revise": revise,
+                 "login": login}
         self._tasks = {kind: task for kind, task in tasks.items() if task is not None}
         self._jobs: OrderedDict[str, PublishJob] = OrderedDict()
         self._events: dict[str, threading.Event] = {}

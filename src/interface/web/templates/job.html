@@ -3,13 +3,14 @@
 {% block title %}{{ job_labels[job.kind] }} · {{ brand_label }}{% endblock %}
 {% block content %}
 {% set job_label = job_labels[job.kind] %}
-{% if job.kind == "generate" %}
+{% if job.kind in ("generate", "login") %}
 <p><a href="{{ url_for('index') }}">← 목록</a></p>
 {% else %}
 <p><a href="{{ url_for('post_detail', row_index=job.row_index) }}">← {{ job.row_index }}행 게시물</a></p>
 {% endif %}
 <section class="card">
-  <h1>{{ job_label }}{% if job.kind != "generate" %} — {{ job.row_index }}행{% endif %}</h1>
+  {% if running and job.kind == "login" %}<p class="notice notice-info">폰 네이버 앱에서 로그인을 승인하세요.</p>{% endif %}
+  <h1>{{ job_label }}{% if job.kind not in ("generate", "login") %} — {{ job.row_index }}행{% endif %}</h1>
   <dl class="meta">
     <dt>시작</dt><dd>{{ job.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</dd>
     {% if job.finished_at %}<dt>종료</dt><dd>{{ job.finished_at.strftime("%Y-%m-%d %H:%M:%S") }}</dd>{% endif %}
@@ -18,7 +19,7 @@
     <p class="notice notice-info">{{ job_label }} 중입니다… 이 페이지는 {{ refresh_seconds }}초마다 새로고침됩니다.</p>
   {% else %}
     {% set outcome = job.result.outcome.value %}
-    <p class="notice notice-{{ 'success' if outcome in ('published', 'drafted', 'generated', 'revised') else 'error' }}">{{ job.result.message }}</p>
+    <p class="notice notice-{{ 'success' if outcome in ('published', 'drafted', 'generated', 'revised', 'logged_in') else 'error' }}">{{ job.result.message }}</p>
     {% set url = job.result.url|safe_url %}
     {% if url %}
     <p><a href="{{ url }}" rel="noopener noreferrer" target="_blank">{{ url }}</a></p>

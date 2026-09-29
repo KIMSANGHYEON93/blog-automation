@@ -58,7 +58,15 @@ from src.interface.web.generation import (
     build_generator,
 )
 from src.interface.web.jobs import PublishJobRunner
-from src.interface.web.platform import PlatformProfile, make_browser, resolve_platform
+from src.interface.web.platform import (
+    PlatformProfile,
+    build_relogin,
+    dashboard_url,
+    make_browser,
+    naver_notifier,
+    notify_login_failure,
+    resolve_platform,
+)
 from src.interface.web.settings import DashboardSettings, SettingsError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -109,6 +117,8 @@ def _build_publisher(  # type: ignore[no-untyped-def]
         )
         logger.info(f"[{profile.name}] 수동 발행 시작: row={row_index}")
         result = use_case.execute(row_index)
+        if profile.name == "naver":
+            notify_login_failure(result, naver_notifier(config), dashboard_url(os.environ))
         logger.info(
             f"[{profile.name}] 수동 발행 결과: row={row_index} "
             f"{result.outcome.value} — {result.message}"
@@ -166,6 +176,8 @@ def _build_reviser(  # type: ignore[no-untyped-def]
         )
         logger.info(f"[{profile.name}] 수정 발행 시작: row={row_index}")
         result = use_case.execute(row_index)
+        if profile.name == "naver":
+            notify_login_failure(result, naver_notifier(config), dashboard_url(os.environ))
         logger.info(
             f"[{profile.name}] 수정 발행 결과: row={row_index} "
             f"{result.outcome.value} — {result.message}"
@@ -287,6 +299,10 @@ def _serve(platform: str) -> int:
             publish=_build_publisher(config, repo, profile),
             draft=_build_drafter(config, repo, profile) if profile.name == "naver" else None,
             revise=_build_reviser(config, repo, profile) if profile.name == "naver" else None,
+            login=(
+                build_relogin(config, PROJECT_ROOT, DirectoryPipelineLock(LOCK_DIR))
+                if profile.name == "naver" else None
+            ),
             generate=(
                 build_generator(
                     os.getenv("N8N_CONTAINER", DEFAULT_N8N_CONTAINER), NAVER_WORKFLOW_NAME,

@@ -36,7 +36,8 @@ SAFE_URL_SCHEMES = frozenset({"http", "https"})
 JOB_REFRESH_SECONDS = 3
 # .pipeline_b.lock을 잡는 launchd 실행 시각(run_pipeline_b.sh). 그 직전에 수동 발행이 락을 쥐고
 # 있으면 자동 실행이 [SKIP]으로 조용히 건너뛰어진다. launchd 시각을 바꾸면 여기도 바꿀 것
-AUTOMATION_TIMES = (time(0, 0), time(8, 30), time(9, 0), time(10, 0), time(14, 0), time(14, 30))
+AUTOMATION_TIMES = (time(0, 0), time(7, 30), time(8, 30), time(9, 0), time(10, 0), time(14, 0),
+                    time(14, 30))  # 07:30 = 네이버 세션 아침 점검(같은 락을 잡는다)
 AUTOMATION_GUARD = timedelta(minutes=20)  # 네이버 발행(사진 5장) 소요 시간보다 넉넉하게
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
@@ -74,7 +75,7 @@ class KeywordDesk(Protocol):
 
 KEYWORD_MAX_LENGTH = 60
 JOB_LABELS = {"publish": "수동 발행", "draft": "임시저장 시험", "generate": "글 생성",
-              "revise": "수정 발행"}
+              "revise": "수정 발행", "login": "네이버 로그인"}
 
 
 def create_app(
@@ -160,6 +161,7 @@ def _register_guards(
     app.jinja_env.globals["draft_enabled"] = False
     app.jinja_env.globals["keywords_enabled"] = False
     app.jinja_env.globals["generate_enabled"] = False
+    app.jinja_env.globals["login_enabled"] = False
     app.jinja_env.globals["job_labels"] = JOB_LABELS
     app.jinja_env.filters["safe_url"] = safe_url
 
@@ -279,6 +281,7 @@ def _register_check_routes(
     app.jinja_env.globals["preview_enabled"] = preview is not None
     app.jinja_env.globals["draft_enabled"] = runner.enabled("draft")
     app.jinja_env.globals["generate_enabled"] = runner.enabled("generate")
+    app.jinja_env.globals["login_enabled"] = runner.enabled("login")
     app.jinja_env.globals["revise_enabled"] = runner.enabled("revise")
 
     @app.post("/posts/<int:row_index>/revise")
@@ -298,6 +301,18 @@ def _register_check_routes(
         if not runner.enabled("generate"):
             abort(404)
         job_id = runner.submit(0, kind="generate")
+        if job_id is None:
+            flash("이미 진행 중인 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")
+            return redirect(url_for("index"))
+        return redirect(url_for("job_status", job_id=job_id))
+
+    @app.post("/naver/login")
+    def naver_login():  # type: ignore[no-untyped-def]
+        if not runner.enabled("login"):
+            abort(404)
+        if _refuse_near_automation(clock):
+            return redirect(url_for("index"))
+        job_id = runner.submit(0, kind="login")
         if job_id is None:
             flash("이미 진행 중인 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")
             return redirect(url_for("index"))

@@ -5,12 +5,19 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
+from src.application.use_cases.publish_selected_post import (
+    LOGIN_FAILED,
+    ManualPublishOutcome,
+    ManualPublishResult,
+)
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.notification_port import NotificationPort
+from src.domain.ports.pipeline_lock_port import PipelineLockPort
 from src.domain.services.quota_manager import DEFAULT_DAILY_LIMIT
 from src.domain.value_objects.credentials import Credentials
 from src.domain.value_objects.site_profile import SiteProfile
@@ -18,6 +25,8 @@ from src.infrastructure.browser.naver.adapter import DEFAULT_PROFILE_DIR, NaverB
 from src.infrastructure.browser.naver.images import pollinations_image_fn, title_thumbnail
 from src.infrastructure.browser.selenium_adapter import SeleniumBrowserAdapter
 from src.infrastructure.config import Config
+from src.infrastructure.notification.null_adapter import NullNotificationAdapter
+from src.infrastructure.notification.telegram_adapter import TelegramNotificationAdapter
 
 NAVER_DAILY_LIMIT = 1
 
@@ -73,3 +82,64 @@ def make_browser(
         # 2FA가 뜨면 브라우저 앞에 사람이 없다 — 즉시 알려야 승인할 수 있다
         notifier=notifier,
     )
+
+
+def naver_notifier(config: Config) -> NotificationPort:
+    """네이버 알림 전용 새 봇. 토큰·채팅이 없으면 조용히 버린다(알림은 부가 기능)."""
+    if config.naver_telegram_bot_token and config.telegram_chat_id:
+        return TelegramNotificationAdapter(
+            bot_token=config.naver_telegram_bot_token, chat_id=config.telegram_chat_id,
+        )
+    return NullNotificationAdapter()
+
+
+def dashboard_url(env: Mapping[str, str]) -> str:
+    hosts = [h.strip() for h in env.get("DASHBOARD_EXTRA_HOSTS", "").split(",") if h.strip()]
+    return f"https://{hosts[0]}/" if hosts else ""
+
+
+def session_expired_message(url: str) -> str:
+    message = (
+        "네이버 세션 만료 — 대시보드에서 [네이버 다시 로그인]을 누르고 폰 네이버 앱에서 승인하세요"
+    )
+    return f"{message}\n{url}" if url else message
+
+
+def notify_if_expired(logged_in: bool, notifier: NotificationPort, url: str) -> bool:
+    if logged_in:
+        return False
+    notifier.send(session_expired_message(url), "WARNING")
+    return True
+
+
+def notify_login_failure(
+    result: ManualPublishResult, notifier: NotificationPort, url: str,
+) -> None:
+    if result.outcome is ManualPublishOutcome.FAILED and result.message.startswith(LOGIN_FAILED):
+        notifier.send(session_expired_message(url), "WARNING")
+
+
+def build_relogin(
+    config: Config, project_root: Path, lock: PipelineLockPort,
+) -> Callable[[int], ManualPublishResult]:
+    """대시보드 작업 종류 'login'. 발행과 같은 브라우저 프로필을 쓰므로 같은 락을 잡는다."""
+
+    def relogin(row_index: int) -> ManualPublishResult:
+        if not lock.acquire():
+            return ManualPublishResult.rejected(
+                row_index, "자동 파이프라인이 실행 중 — 끝난 뒤 다시 시도하세요",
+            )
+        try:
+            adapter = NaverBrowserAdapter(
+                config.naver_blog_id,
+                profile_dir=str(project_root / DEFAULT_PROFILE_DIR),
+                min_delay=0,
+                max_delay=0,
+            )
+            ok, message = adapter.relogin(config.naver_login_id, config.naver_login_pw)
+        finally:
+            lock.release()
+        outcome = ManualPublishOutcome.LOGGED_IN if ok else ManualPublishOutcome.FAILED
+        return ManualPublishResult(outcome, row_index, message)
+
+    return relogin

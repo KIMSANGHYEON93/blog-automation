@@ -13,17 +13,20 @@
 </section>
 
 <section class="card">
-  <h2>추천 ({{ suggestions|length }}건) — AI-Brain 용어에서, 두 탭과 겹치지 않는 것만</h2>
+  <h2>추천 ({{ suggestions|length }}건) — {{ source }}, 두 탭과 겹치지 않는 것만</h2>
   {% if suggestions %}
   <table>
     <tbody>
-      {% for keyword in suggestions %}
+      {% for idea in suggestions %}
       <tr>
-        <td class="kw">{{ keyword }}</td>
+        <td>
+          <div class="kw">{{ idea.keyword }}</div>
+          {% if idea.detail %}<div class="sub">{{ idea.detail }}</div>{% endif %}
+        </td>
         <td class="num">
           <form method="post" action="{{ url_for('register_keyword') }}" class="inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="keyword" value="{{ keyword }}">
+            <input type="hidden" name="keyword" value="{{ idea.keyword }}">
             <button type="submit">등록</button>
           </form>
         </td>

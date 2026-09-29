@@ -446,11 +446,15 @@ class TestPreviewAndDraft:
 
 
 class _FakeDesk:
+    source = "네이버 검색량"
+
     def __init__(self):
         self.registered: list[str] = []
 
     def suggest(self):
-        return ["RAG란", "<b>XSS</b>란"]
+        from src.interface.web.app import KeywordIdea
+
+        return [KeywordIdea("RAG란", "월 1,200회 · AI 실무"), KeywordIdea("<b>XSS</b>란")]
 
     def register(self, keyword):
         from src.application.use_cases.register_keyword import DuplicateKeywordError
@@ -490,6 +494,7 @@ class TestKeywords:
         html = client.get("/keywords").get_data(as_text=True)
         assert 'value="RAG란"' in html
         assert "<b>XSS</b>" not in html and "&lt;b&gt;XSS" in html
+        assert "월 1,200회 · AI 실무" in html and "네이버 검색량" in html
         assert 'href="/keywords"' in client.get("/").get_data(as_text=True)
 
     def test_등록하면_행_번호를_알려준다(self):

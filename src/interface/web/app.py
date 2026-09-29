@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from typing import Callable, Protocol
 from urllib.parse import urlsplit
@@ -55,10 +56,18 @@ class PostReader(Protocol):
     def get(self, row_index: int) -> PostSummary | None: ...
 
 
+@dataclass(frozen=True)
+class KeywordIdea:
+    keyword: str
+    detail: str = ""  # 예: '월 3,210회 · 경제' — 추천 근거
+
+
 class KeywordDesk(Protocol):
     """키워드 추천(두 탭과 중복 제외)과 등록. 등록은 중복이면 DuplicateKeywordError."""
 
-    def suggest(self) -> list[str]: ...
+    source: str  # 추천 출처 — 화면 제목에 쓴다
+
+    def suggest(self) -> list[KeywordIdea]: ...
 
     def register(self, keyword: str) -> int: ...
 
@@ -321,7 +330,8 @@ def _register_keyword_routes(app: Flask, desk: KeywordDesk) -> None:
     @app.get("/keywords")
     def keywords():  # type: ignore[no-untyped-def]
         return render_template(
-            "keywords.html", suggestions=desk.suggest(), max_length=KEYWORD_MAX_LENGTH,
+            "keywords.html", suggestions=desk.suggest(), source=desk.source,
+            max_length=KEYWORD_MAX_LENGTH,
         )
 
     @app.post("/keywords")

@@ -31,6 +31,10 @@ from src.application.use_cases.publish_selected_post import (
 )
 from src.application.use_cases.register_keyword import RegisterKeywordUseCase
 from src.application.use_cases.revise_selected_post import ReviseSelectedPostUseCase
+from src.application.use_cases.suggest_volume_keywords import (
+    KeywordPillar,
+    SuggestVolumeKeywordsUseCase,
+)
 from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.quota_manager import QuotaManager
 from src.domain.value_objects.post_status import PostStatus
@@ -44,8 +48,9 @@ from src.infrastructure.logging_setup import setup_logging
 from src.infrastructure.persistence.google_sheets_repo import GoogleSheetsPostRepository
 from src.infrastructure.persistence.json_site_profile import JsonSiteProfileAdapter
 from src.infrastructure.persistence.sheets_brain_term_adapter import SheetsBrainTermAdapter
+from src.infrastructure.seo.naver_searchad import NaverSearchAdKeywordAdapter
 from src.interface.cli import _build_notification as build_notification
-from src.interface.web.app import create_app
+from src.interface.web.app import KeywordIdea, create_app
 from src.interface.web.auth import AdminAuthenticator
 from src.interface.web.generation import (
     DEFAULT_N8N_CONTAINER,
@@ -173,28 +178,84 @@ def _build_reviser(  # type: ignore[no-untyped-def]
 class _KeywordDesk:
     """대시보드 키워드 화면: AI-Brain 용어 추천 + 직접 등록. 중복은 두 탭 모두와 본다."""
 
+    source = "AI-Brain 용어에서"
+
     def __init__(
         self, suggester: GenerateKeywordsFromTermsUseCase, register: RegisterKeywordUseCase,
     ):
         self._suggester = suggester
         self._register = register
 
-    def suggest(self) -> list[str]:
+    def suggest(self) -> list[KeywordIdea]:
         result = self._suggester.execute()
-        return [s.keyword for s in result.suggestions] if result.success else []
+        return [KeywordIdea(s.keyword) for s in result.suggestions] if result.success else []
 
     def register(self, keyword: str) -> int:
         return self._register.register(keyword)
 
 
+# 네이버 블로그 키워드 축: IT·AI 실무가 본진, 경제는 보조(2026-09-29 성장 계획).
+# hints는 검색광고 키워드 도구 시드, anchors는 연관 키워드 중 남길 기준 단어
+# (없으면 엉뚱한 게 섞인다)
+NAVER_KEYWORD_PILLARS = [
+    KeywordPillar(
+        "AI 실무",
+        hints=("챗GPT사용법", "챗GPT엑셀", "AIPPT", "회의록요약", "AI보고서",
+               "클로드사용법", "제미나이사용법", "노션AI", "캔바AI", "AI글쓰기"),
+        anchors=("AI", "GPT", "지피티", "클로드", "제미나이", "코파일럿", "뤼튼", "퍼플렉시티"),
+    ),
+    KeywordPillar(
+        "경제",
+        hints=("연말정산", "정부지원금", "청년도약계좌", "근로장려금", "소득공제"),
+        anchors=("연말정산", "지원금", "도약계좌", "장려금", "세액공제", "소득공제", "환급"),
+    ),
+]
+
+
+class _VolumeKeywordDesk:
+    """네이버 키워드 화면: 검색광고 키워드 도구의 월간 검색량 기준 추천."""
+
+    source = "네이버 월간 검색량(검색광고 키워드 도구)"
+
+    def __init__(self, suggester: SuggestVolumeKeywordsUseCase, register: RegisterKeywordUseCase):
+        self._suggester = suggester
+        self._register = register
+
+    def suggest(self) -> list[KeywordIdea]:
+        try:
+            ideas = self._suggester.execute()
+        except Exception as e:  # API 장애로 키워드 화면(직접 등록)까지 막지 않는다
+            logger.error(f"검색량 키워드 추천 실패: {type(e).__name__}: {e}")
+            return []
+        return [KeywordIdea(s.keyword, f"월 {s.monthly_searches:,}회 · {s.pillar}")
+                for s in ideas]
+
+    def register(self, keyword: str) -> int:
+        return self._register.register(keyword)
+
+
+def _search_ad_port() -> NaverSearchAdKeywordAdapter | None:
+    keys = [os.getenv(k, "").strip()
+            for k in ("NAVER_AD_API_KEY", "NAVER_AD_SECRET", "NAVER_AD_CUSTOMER_ID")]
+    return NaverSearchAdKeywordAdapter(*keys) if all(keys) else None
+
+
 def _build_keyword_desk(
     config: Config, repo: GoogleSheetsPostRepository, profile: PlatformProfile,
-) -> _KeywordDesk:
+) -> _KeywordDesk | _VolumeKeywordDesk:
     # 다른 블로그 탭 — 네이버 대시보드면 티스토리(sheet1), 티스토리면 네이버 탭
     other_tab = "" if profile.name == "naver" else config.naver_sheet_tab
     other = GoogleSheetsPostRepository(
         creds_path=config.google_creds, sheet_name=config.sheet_name, worksheet=other_tab,
     )
+    volumes = _search_ad_port() if profile.name == "naver" else None
+    if volumes is not None:
+        return _VolumeKeywordDesk(
+            # 새 블로그라 월 5천 회 넘는 큰 키워드는 상위 노출이 어렵다 — 롱테일만(성장 계획)
+            SuggestVolumeKeywordsUseCase(volumes, [repo, other], NAVER_KEYWORD_PILLARS,
+                                         max_searches=5000),
+            RegisterKeywordUseCase(repo, other_repos=[other]),
+        )
     terms = SheetsBrainTermAdapter(creds_path=config.google_creds, sheet_name=config.sheet_name)
     return _KeywordDesk(
         GenerateKeywordsFromTermsUseCase(repo=repo, term_port=terms, top_n=15, other_repos=[other]),

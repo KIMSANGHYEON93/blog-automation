@@ -88,3 +88,18 @@ PUBLISH_CONFIRM = [
     "button[class*='confirm_btn']",
     "//div[contains(@class, 'layer')]//button[contains(normalize-space(), '발행')]",
 ]
+
+# --- 로그인 페이지 (nid.naver.com) — 자동 로그인(login.py) 전용 ---
+LOGIN_ID_INPUT = "input#id"
+LOGIN_PW_INPUT = "input#pw"
+LOGIN_SUBMIT = "#log\\.login"
+LOGIN_CAPTCHA = "#captcha"
+# '로그인 상태 유지' — 없으면 경고만 하고 진행한다
+LOGIN_KEEP = ["input#keep", "input[name='nvlong']"]
+# 판정 문구. 네이버가 문구를 바꾸면 결과 불명으로 끝난다(성공으로 넘어가지 않음)
+LOGIN_BLOCKED_MARKERS = ["자동입력 방지", "보호조치"]
+LOGIN_WRONG_PASSWORD_MARKERS = ["비밀번호를 잘못"]
+LOGIN_APPROVAL_MARKERS = ["2단계 인증", "인증 요청", "알림을 보냈"]
+# 승인 뒤 '새로운 기기 등록' 화면 — 등록을 눌러야 다음 로그인에서 다시 묻지 않는다
+LOGIN_DEVICE_MARKERS = ["새로운 기기", "자주 사용하는 기기"]
+LOGIN_DEVICE_REGISTER = "//button[normalize-space()='등록'] | //a[normalize-space()='등록']"

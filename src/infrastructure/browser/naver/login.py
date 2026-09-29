@@ -76,6 +76,10 @@ def auto_login(sb, login_id: str, login_pw: str, timeout: float = APPROVAL_TIMEO
     """로그인 페이지에 값을 넣고 한 번 제출한 뒤, 폰 승인을 기다리며 결과를 판정한다."""
     sb.open(LOGIN_URL)
     sleep(2)
+    # 이미 로그인된 세션: LOGIN_URL에 접속했으나 로그인 페이지를 벗어났으면 성공으로 본다
+    if "nid.naver.com" not in str(sb.get_current_url()):
+        logger.info("이미 로그인된 세션 — 입력 생략")
+        return LoginOutcome.SUCCESS
     for selector, value in ((sel.LOGIN_ID_INPUT, login_id), (sel.LOGIN_PW_INPUT, login_pw)):
         if not sb.execute_script(_SET_VALUE_JS, selector, value):
             logger.error(f"로그인 입력란을 찾지 못함 — selectors 확인: {selector}")
@@ -87,6 +91,7 @@ def auto_login(sb, login_id: str, login_pw: str, timeout: float = APPROVAL_TIMEO
 
     deadline = clock() + timeout
     last = LoginOutcome.UNKNOWN
+    device_clicked = False
     while True:
         sleep(poll)
         text = str(sb.execute_script(_BODY_TEXT_JS) or "")
@@ -96,10 +101,10 @@ def auto_login(sb, login_id: str, login_pw: str, timeout: float = APPROVAL_TIMEO
         if outcome in (LoginOutcome.SUCCESS, LoginOutcome.WRONG_PASSWORD, LoginOutcome.BLOCKED):
             logger.info(f"네이버 로그인 결과: {outcome.value}")
             return outcome
-        if any(m in text for m in sel.LOGIN_DEVICE_MARKERS) and sb.is_element_visible(
-            sel.LOGIN_DEVICE_REGISTER
-        ):
+        if (not device_clicked and any(m in text for m in sel.LOGIN_DEVICE_MARKERS)
+                and sb.is_element_visible(sel.LOGIN_DEVICE_REGISTER)):
             sb.click(sel.LOGIN_DEVICE_REGISTER)
+            device_clicked = True
         # 모르는 화면도 바로 멈추지 않는다 — 네이버 2단계 화면 문구를 다 알 수 없어서,
         # 바로 멈추면 정상 승인 대기를 끊는다. 시간이 다 되면 결과 불명으로 끝낸다
         last = outcome

@@ -94,11 +94,17 @@ def _run(sb, timeout=300):
 
 
 def test_입력하고_한_번_제출한다():
-    sb = _FakeSb([("https://www.naver.com/", "", False)])
+    sb = _FakeSb([("https://nid.naver.com/nidlogin.login", "", False), ("https://www.naver.com/", "", False)])
     assert _run(sb) is LoginOutcome.SUCCESS
     assert sb.opened == [login_mod.LOGIN_URL]
     assert sb.filled == {sel.LOGIN_ID_INPUT: "my-id", sel.LOGIN_PW_INPUT: "secret-pw"}
     assert sb.clicks.count(sel.LOGIN_SUBMIT) == 1
+
+
+def test_이미_로그인돼_있으면_입력하지_않고_성공():
+    sb = _FakeSb([("https://www.naver.com/", "", False)])
+    assert _run(sb) is LoginOutcome.SUCCESS
+    assert sb.filled == {} and sel.LOGIN_SUBMIT not in sb.clicks
 
 
 def test_승인을_기다렸다가_성공():
@@ -133,6 +139,13 @@ def test_새_기기_등록_화면이면_등록을_누른다():
     sb = _FakeSb([device, ("https://www.naver.com/", "", False)])
     assert _run(sb) is LoginOutcome.SUCCESS
     assert sel.LOGIN_DEVICE_REGISTER in sb.clicks
+
+
+def test_기기_등록_화면이_여러_폴링에_남으면_한_번만_누른다():
+    device = ("https://nid.naver.com/login/ext/device", "새로운 기기에서 로그인했습니다", False)
+    sb = _FakeSb([device, device, device, ("https://www.naver.com/", "", False)])
+    assert _run(sb) is LoginOutcome.SUCCESS
+    assert sb.clicks.count(sel.LOGIN_DEVICE_REGISTER) == 1
 
 
 def test_입력란이_없으면_제출하지_않는다():

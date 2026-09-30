@@ -108,8 +108,9 @@ def main() -> int:
         if not lock.acquire():
             print("다른 작업이 브라우저를 쓰는 중 — 오늘 점검은 건너뜀")
             return 0
-    adapter.start()
     try:
+        # 브라우저 시작이 실패해도 finally가 락을 푼다(안 풀면 08:30·09:00 자동 실행이 건너뜀)
+        adapter.start()
         if args.cmd == "login":
             return _login(adapter)
         if args.cmd == "check":

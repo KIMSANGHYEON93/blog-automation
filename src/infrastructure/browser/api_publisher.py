@@ -29,6 +29,16 @@ def call_tistory_post_api(
     """
     import contextlib
 
+    published = "1"  # 신규: 지금 발행
+    if entry_id and entry_id != "0":
+        published = _original_published(sb, entry_id)
+        if not published:
+            logger.error(
+                f"원래 발행일을 읽지 못함(entry_id={entry_id}) — '1'로 보내면 발행일이 "
+                "수정 시각으로 바뀌므로 수정을 중단한다. 수정 화면(/manage/newpost/<id>) 확인 필요"
+            )
+            return None
+
     for attempt in range(max_retries):
         if attempt > 0:
             backoff = 3 * (2 ** (attempt - 1))  # 3s, 6s, 12s
@@ -54,7 +64,7 @@ def call_tistory_post_api(
         result = _call_tistory_post_api_once(
             sb, blog_name, title, html_body, tags,
             thumbnail_url, category_id, content_type, entry_id,
-            view_channel,
+            view_channel, published,
         )
         if result is not None:
             if not _is_expected_entry(result, entry_id):
@@ -66,6 +76,24 @@ def call_tistory_post_api(
             return result
 
     return None
+
+
+# 수정 화면(/manage/newpost/<id>)의 window.Config.post.published = 원래 발행 시각.
+# 에디터는 수정 저장 때 이 값을 그대로 돌려보낸다. '1'은 '지금 발행'이라
+# 보내는 순간 발행일이 수정 시각으로 바뀌고 글이 RSS 맨 위로 올라간다(2026-10-01 실측).
+_JS_ORIGINAL_PUBLISHED = """
+var p = (window.Config || {}).post || {};
+return (String(p.id) === String(arguments[0]) && p.published) ? String(p.published) : '';
+"""
+
+
+def _original_published(sb, entry_id: str) -> str:
+    """수정 화면에 로드된 글의 원래 발행 시각. 다른 글이거나 못 읽으면 ''."""
+    try:
+        return str(sb.execute_script(_JS_ORIGINAL_PUBLISHED, entry_id) or "")
+    except Exception as e:
+        logger.error(f"원래 발행일 조회 실패: {e}")
+        return ""
 
 
 def _is_expected_entry(result: tuple[str, str], entry_id: str) -> bool:
@@ -115,7 +143,7 @@ def _call_tistory_post_api_once(
     sb, blog_name: str, title: str, html_body: str, tags: str,
     thumbnail_url: str = "", category_id: str = "0",
     content_type: str = "", entry_id: str = "0",
-    view_channel: str = "",
+    view_channel: str = "", published: str = "1",
 ) -> tuple[str, str] | None:
     """단일 API 호출 시도."""
     import json as json_mod
@@ -132,6 +160,7 @@ def _call_tistory_post_api_once(
             var contentType = arguments[6] || '';
             var entryId = arguments[7] || '0';
             var viewChannel = arguments[8] || '';
+            var published = arguments[9] || '1';
 
             // 이전 결과 초기화 (script timeout 후 확인용)
             window.__publishResult = null;
@@ -159,7 +188,7 @@ def _call_tistory_post_api_once(
                 categoryId: catNum,
                 tag: tags,
                 acceptComment: '1',
-                published: '1',
+                published: published,
                 password: Math.random().toString(36).substring(2, 10),
                 uselessMarginForEntry: blogSettings.uselessMargin || '0',
                 daumLike: viewChannel,
@@ -228,7 +257,7 @@ def _call_tistory_post_api_once(
                 callback(JSON.stringify(errResult));
             });
         """, title, html_body, tags, blog_name, thumbnail_url, category_id,
-            content_type, entry_id, view_channel)
+            content_type, entry_id, view_channel, published)
 
         logger.info(f"API 발행 결과: {result_json}")
 

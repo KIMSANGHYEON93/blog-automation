@@ -277,13 +277,13 @@ def update_post(
         content = post.content
         body_markdown: str = content.body_markdown or ""
 
-        # 에디터 페이지 열기 (API 컨텍스트 확보용)
+        # 이 글의 수정 화면을 연다 — API 컨텍스트 + 원래 발행일(window.Config.post)
         import contextlib
 
         with contextlib.suppress(Exception):
             sb.set_window_size(1920, 1080)
 
-        write_url = f"https://{blog_name}.tistory.com{EDITOR_PATH}"
+        write_url = f"https://{blog_name}.tistory.com{EDITOR_PATH}/{post.entry_id}"
         fresh_url = f"{write_url}?_t={int(time.time())}{_rnd.randint(0, 999)}"
         sb.open(fresh_url)
         time.sleep(5)

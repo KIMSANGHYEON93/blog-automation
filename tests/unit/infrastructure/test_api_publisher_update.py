@@ -34,17 +34,21 @@ class FakeDriver:
             "url": (
                 f"/manage/post/{entry_id}.json" if is_update else "/manage/post.json"
             ),
+            "published": args[9],
         }
         self.calls.append(call)
         return json.dumps(self._responder(call))
 
 
 class FakeSB:
-    def __init__(self, responder):
-        self.driver = FakeDriver(responder)
+    """수정 화면의 window.Config.post.published 조회는 original_published를 돌려준다."""
 
-    def execute_script(self, _script):
-        return None
+    def __init__(self, responder, original_published="1759100000"):
+        self.driver = FakeDriver(responder)
+        self._original_published = original_published
+
+    def execute_script(self, _script, *args):
+        return self._original_published if args else None
 
 
 def _ok(entry_id: str) -> dict:
@@ -70,6 +74,32 @@ class TestUpdateUsesPutEndpoint:
         assert result == ("https://blog.tistory.com/900", "900")
         assert sb.driver.calls[0]["method"] == "POST"
         assert sb.driver.calls[0]["url"] == "/manage/post.json"
+
+
+class TestUpdateKeepsOriginalPublishDate:
+    """published='1'은 '지금 발행' — 수정 때 보내면 발행일이 수정 시각으로 바뀐다."""
+
+    def test_수정은_원래_발행시각을_보낸다(self):
+        sb = FakeSB(lambda call: _ok(call["entry_id"]), original_published="1759100000")
+        api_publisher.call_tistory_post_api(
+            sb, "blog", "제목", "<p>본문</p>", "", entry_id="252", max_retries=1,
+        )
+        assert sb.driver.calls[0]["published"] == "1759100000"
+
+    def test_원래_발행시각을_못_읽으면_수정하지_않는다(self):
+        sb = FakeSB(lambda call: _ok(call["entry_id"]), original_published="")
+        result = api_publisher.call_tistory_post_api(
+            sb, "blog", "제목", "<p>본문</p>", "", entry_id="252", max_retries=1,
+        )
+        assert result is None
+        assert sb.driver.calls == []
+
+    def test_신규는_지금_발행(self):
+        sb = FakeSB(lambda _call: _ok("900"), original_published="")
+        api_publisher.call_tistory_post_api(
+            sb, "blog", "제목", "<p>본문</p>", "", entry_id="0", max_retries=1,
+        )
+        assert sb.driver.calls[0]["published"] == "1"
 
 
 class TestMismatchedEntryIsRejected:

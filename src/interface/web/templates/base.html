@@ -11,6 +11,11 @@
 <body>
   <header class="topbar">
     <a class="brand" href="{{ url_for('index') }}">{{ brand_label }}</a>
+    {% if hub_tabs and session.get('admin') %}
+    <nav class="tabs" aria-label="블로그">
+      {% for key, label, href in hub_tabs %}<a href="{{ href }}"{% if key == hub_tab %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+    </nav>
+    {% endif %}
     {% if session.get('admin') %}
     <nav>
       {% if keywords_enabled %}<a href="{{ url_for('keywords') }}">키워드</a>{% endif %}

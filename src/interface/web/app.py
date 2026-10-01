@@ -76,6 +76,8 @@ class KeywordDesk(Protocol):
 KEYWORD_MAX_LENGTH = 60
 JOB_LABELS = {"publish": "수동 발행", "draft": "임시저장 시험", "generate": "글 생성",
               "revise": "수정 발행", "login": "네이버 로그인"}
+# 통합 대시보드(hub) 탭: (플랫폼, 표시 이름, 마운트 주소) — hub.py가 이 주소로 앱을 붙인다
+HUB_TABS = (("naver", "네이버", "/naver/"), ("tistory", "티스토리", "/tistory/"))
 
 
 def create_app(
@@ -94,15 +96,19 @@ def create_app(
     keywords: KeywordDesk | None = None,
     daily_limit: int | None = None,
     clock: Callable[[], datetime] = datetime.now,
+    hub_tab: str | None = None,
 ) -> Flask:
     if len(secret_key) < 16:
         raise ValueError("secret_key는 16자 이상이어야 합니다")
+    if hub_tab is not None and hub_tab not in {key for key, _, _ in HUB_TABS}:
+        raise ValueError(f"알 수 없는 탭: {hub_tab}")
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=secret_key,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=secure_cookies,
+        SESSION_COOKIE_PATH="/",
         PERMANENT_SESSION_LIFETIME=timedelta(hours=session_hours),
         # 본문 편집 폼: 한글은 URL 인코딩 시 글자당 9바이트 — 3만 자 본문도 들어가게
         MAX_CONTENT_LENGTH=512 * 1024,
@@ -110,6 +116,8 @@ def create_app(
     login_throttle = throttle or LoginThrottle()
     _register_guards(app, allowed_hosts, brand_label)
     app.jinja_env.globals["daily_limit"] = daily_limit  # 목록 상단 발행 현황(없으면 숨김)
+    app.jinja_env.globals["hub_tabs"] = HUB_TABS if hub_tab else ()
+    app.jinja_env.globals["hub_tab"] = hub_tab
     _register_auth_routes(app, authenticator, login_throttle)
     _register_dashboard_routes(app, list_posts, job_runner, clock)
     if edit_post is not None:

@@ -36,7 +36,7 @@ def _post(row, keyword, status=PostStatus.PENDING, body_len=3500):
 
 
 class Harness:
-    def __init__(self, publish=None, allowed_hosts=None, now=NOON, revise=None):
+    def __init__(self, publish=None, allowed_hosts=None, now=NOON, revise=None, hub_tab=None):
         self.published_rows: list[int] = []
         published = _post(4, "Kafka 입문", PostStatus.PUBLISHED)
         published.published_url = "https://blog.tistory.com/4"
@@ -67,6 +67,7 @@ class Harness:
             allowed_hosts=allowed_hosts,
             edit_post=EditPostUseCase(repo),
             clock=lambda: now,
+            hub_tab=hub_tab,
         )
         app.config["TESTING"] = True
         self.client = app.test_client()
@@ -766,3 +767,28 @@ def test_미발행_글은_다시_생성과_보관():
     resp = h.client.post("/posts/4/regenerate", data={"csrf_token": h.csrf("/posts/4")})
     assert resp.status_code == 409
     assert h.client.post("/posts/2/archive").status_code == 400  # CSRF 없음
+
+
+class TestHubTabs:
+    def test_단독_실행에는_탭이_없다(self, h):
+        h.login()
+        assert 'class="tabs"' not in h.client.get("/").get_data(as_text=True)
+
+    def test_통합_실행은_현재_블로그_탭을_강조한다(self):
+        h = Harness(hub_tab="tistory")
+        h.login()
+        html = h.client.get("/").get_data(as_text=True)
+        assert '<a href="/naver/">네이버</a>' in html
+        assert '<a href="/tistory/" aria-current="page">티스토리</a>' in html
+
+    def test_로그인_전에는_탭이_없다(self):
+        h = Harness(hub_tab="naver")
+        assert 'class="tabs"' not in h.client.get("/login").get_data(as_text=True)
+
+    def test_모르는_탭은_거부(self):
+        with pytest.raises(ValueError):
+            Harness(hub_tab="wordpress")
+
+    def test_세션_쿠키는_루트_경로(self, h):
+        cookie = h.login().headers["Set-Cookie"]
+        assert re.search(r"Path=/(;|$)", cookie), cookie

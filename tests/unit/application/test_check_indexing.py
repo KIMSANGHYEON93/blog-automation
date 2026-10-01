@@ -119,3 +119,25 @@ class TestCheckIndexingUseCase:
 
         saved = repo.all()
         assert "Crawled - currently not indexed" in saved[0].error_message
+
+
+def test_최근_발행_수정한_글은_색인_점검을_건너뛴다():
+    # 수정하면 published_at이 지금으로 바뀐다. 14일 안에 다시 점검하면 미색인 → 수정대기 →
+    # 다음 날 같은 글을 또 수정하는 순환이 생긴다(2026-09-27~10-01 매일 같은 5건)
+    from datetime import datetime, timedelta
+
+    now = datetime(2026, 10, 1, 14, 0)
+    not_indexed = IndexingResult(url="", is_indexed=False, verdict="NEUTRAL",
+                                 coverage_state="Discovered - currently not indexed")
+    recent, old = _published_post(row=2), _published_post(row=3)
+    recent.published_at = now - timedelta(days=3)
+    old.published_at = now - timedelta(days=20)
+    repo = InMemoryPostRepository([recent, old])
+    uc = CheckIndexingUseCase(repo=repo, indexing=_StubIndexing(not_indexed), clock=lambda: now)
+
+    skipped = uc.execute(recent)
+    assert not skipped.success and not skipped.error and not skipped.marked_revision
+    assert recent.status == PostStatus.PUBLISHED
+
+    assert uc.execute(old).marked_revision
+    assert old.status == PostStatus.REVISION_PENDING

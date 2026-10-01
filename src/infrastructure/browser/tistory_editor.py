@@ -21,7 +21,6 @@ from src.infrastructure.browser import (
     content_injector,
     form_filler,
     html_transformer,
-    markdown_converter,
     publish_verifier,
 )
 from src.infrastructure.browser.dom_selectors import (
@@ -29,8 +28,7 @@ from src.infrastructure.browser.dom_selectors import (
     TITLE_SELECTORS,
     find_element,
 )
-from src.infrastructure.seo.html_optimizer import optimize_html
-from src.infrastructure.seo.inline_styler import apply_inline_styles
+from src.infrastructure.browser.tistory_render import render_tistory_html
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +95,7 @@ def _resolve_category_id(category_name: str, profile: SiteProfile | None = None)
 
 
 def publish_post(
-    sb, post: Post, blog_name: str, profile: SiteProfile | None = None,
+    sb, post: Post, blog_name: str, profile: SiteProfile | None = None, cta_url: str = "",
 ) -> PublishResult:
     """티스토리 에디터에 포스트 발행. PublishResult 반환."""
     try:
@@ -105,7 +103,6 @@ def publish_post(
             return PublishResult.fail("포스트 콘텐츠가 없음")
 
         content = post.content
-        body_markdown: str = content.body_markdown or ""
 
         # 브라우저 창 크기 설정 (에디터 사이드바 가시성 확보)
         import contextlib
@@ -136,54 +133,7 @@ def publish_post(
             return PublishResult.fail("제목 입력 실패")
         time.sleep(0.5)
 
-        # --- MD→HTML 변환 (방향 A: Python 측 변환 후 WYSIWYG 모드 주입) ---
-        html_body = markdown_converter.convert_markdown_to_html(body_markdown)
-
-        # 요약 문단: Tistory는 본문 첫 텍스트로 meta description을 자동 생성
-        html_body = html_transformer.insert_summary_lead(html_body, content.meta_description)
-
-        # 이미지 lazy loading 적용
-        html_body = html_transformer.add_lazy_loading(html_body)
-
-        # 외부 링크에 nofollow/noopener 속성 추가
-        html_body = html_transformer.add_nofollow_to_external_links(html_body, blog_name)
-
-        # 내부 링크 자동 삽입 (published 매핑이 있으면)
-        internal_link_map = post.internal_link_map
-        if internal_link_map:
-            from src.infrastructure.seo.internal_linker import (
-                inject_internal_links,
-            )
-
-            class _LinkPost:
-                def __init__(self, kw, url):
-                    self.keyword = kw
-                    self.published_url = url
-
-            link_posts = [
-                _LinkPost(kw, url) for kw, url in internal_link_map.items()
-            ]
-            keywords = content.internal_keyword_list()
-            prev_len = len(html_body)
-            html_body = inject_internal_links(html_body, keywords, link_posts)
-            logger.info(
-                f"내부 링크 삽입: keywords={len(keywords)}, "
-                f"published={len(link_posts)}, "
-                f"body: {prev_len}→{len(html_body)}자"
-            )
-
-        # HTML 변환 검증
-        if not html_transformer.validate_html(html_body):
-            logger.warning("HTML 변환 검증 실패 — 그대로 진행")
-
-        # FAQ LD+JSON 스키마 주입 (HTML 본문 하단에 추가)
-        faq_ld_json = content.faq_ld_json() if hasattr(content, 'faq_ld_json') else ""
-        if faq_ld_json:
-            html_body = html_transformer.append_faq_schema(html_body, faq_ld_json)
-
-        # 반응형 + 성능 최적화 (img lazy/decoding, iframe lazy, preconnect)
-        html_body = optimize_html(html_body)
-        html_body = apply_inline_styles(html_body)
+        html_body = render_tistory_html(post, blog_name, cta_url)
 
         # [마크다운 모드 전환 — 비활성화: WYSIWYG 기본모드 사용]
         # sb.execute_script("window.confirm = function() { return true; };")
@@ -265,7 +215,7 @@ def publish_post(
 
 
 def update_post(
-    sb, post: Post, blog_name: str, profile: SiteProfile | None = None,
+    sb, post: Post, blog_name: str, profile: SiteProfile | None = None, cta_url: str = "",
 ) -> PublishResult:
     """기존 발행 글 수정. entry_id를 사용하여 Tistory API로 업데이트."""
     try:
@@ -275,7 +225,6 @@ def update_post(
             return PublishResult.fail("포스트 콘텐츠가 없음")
 
         content = post.content
-        body_markdown: str = content.body_markdown or ""
 
         # 이 글의 수정 화면을 연다 — API 컨텍스트 + 원래 발행일(window.Config.post)
         import contextlib
@@ -293,38 +242,7 @@ def update_post(
         with contextlib.suppress(Exception):
             sb.driver.set_script_timeout(120)
 
-        # MD→HTML 변환 (publish_post와 동일 파이프라인)
-        html_body = markdown_converter.convert_markdown_to_html(body_markdown)
-        html_body = html_transformer.insert_summary_lead(html_body, content.meta_description)
-        html_body = html_transformer.add_lazy_loading(html_body)
-        html_body = html_transformer.add_nofollow_to_external_links(html_body, blog_name)
-
-        # 내부 링크 자동 삽입
-        internal_link_map = post.internal_link_map
-        if internal_link_map:
-            from src.infrastructure.seo.internal_linker import (
-                inject_internal_links,
-            )
-
-            class _LinkPost:
-                def __init__(self, kw, url):
-                    self.keyword = kw
-                    self.published_url = url
-
-            link_posts = [
-                _LinkPost(kw, url) for kw, url in internal_link_map.items()
-            ]
-            keywords = content.internal_keyword_list()
-            html_body = inject_internal_links(html_body, keywords, link_posts)
-
-        # FAQ LD+JSON 스키마 주입
-        faq_ld_json = content.faq_ld_json() if hasattr(content, 'faq_ld_json') else ""
-        if faq_ld_json:
-            html_body = html_transformer.append_faq_schema(html_body, faq_ld_json)
-
-        # 반응형 + 성능 최적화
-        html_body = optimize_html(html_body)
-        html_body = apply_inline_styles(html_body)
+        html_body = render_tistory_html(post, blog_name, cta_url)
 
         # API 호출로 수정 (entry_id 전달)
         title = content.title_or_fallback(post.keyword)

@@ -8,14 +8,14 @@
 {% elif generate_enabled %}
 <form method="post" action="{{ url_for('generate_posts') }}" class="generate">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <button type="submit">지금 생성</button>
+  <button type="submit" class="primary">지금 글 생성하기</button>
   <span class="sub">'대기' 키워드로 n8n 글 생성을 지금 실행합니다(키워드마다 1~3분).</span>
 </form>
 {% endif %}
 {% if login_enabled and not active_job %}
 <form method="post" action="{{ url_for('naver_login') }}" class="generate">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <button type="submit">네이버 다시 로그인</button>
+  <button type="submit" class="primary">네이버 다시 로그인</button>
   <span class="sub">세션이 만료됐을 때만. 누른 뒤 폰 네이버 앱에서 승인하세요(최대 5분).</span>
 </form>
 {% endif %}
@@ -47,7 +47,7 @@
     <span class="stat-label">전체</span><span class="stat-value">{{ page.total }}</span>
   </a>
   {% for status in statuses %}
-  <a class="stat {% if selected_status == status %}active{% endif %}"
+  <a class="stat stat-{{ status.name|lower }} {% if selected_status == status %}active{% endif %}"
      href="{{ url_for('index', status=status.value, q=search) }}">
     <span class="stat-label">{{ status.value }}</span>
     <span class="stat-value">{{ page.counts.get(status, 0) }}</span>
@@ -84,7 +84,7 @@
           </td>
           <td>
             <a class="open" href="{{ url_for('post_detail', row_index=post.row_index) }}">
-              {% if post.can_publish %}<strong>발행하기</strong>{% else %}상세{% endif %}
+              {% if post.can_publish %}<strong>발행하기</strong>{% else %}<span class="chev" aria-label="상세">›</span>{% endif %}
             </a>
           </td>
         </tr>

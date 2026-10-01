@@ -57,7 +57,7 @@ class TestListPosts:
     def test_요약_필드(self):
         items = {s.row_index: s for s in ListPostsUseCase(_repo()).execute(PostQuery()).items}
         assert items[4].published_url == "https://b/4"
-        assert items[4].published_at == "2026-09-17 21:04"
+        assert items[4].published_at == "2026.09.17 21:04"
         assert items[5].error_message == "Tistory 500"
         assert items[2].title == "OpenTelemetry 구축 제목"
         assert items[2].body_length == 3500

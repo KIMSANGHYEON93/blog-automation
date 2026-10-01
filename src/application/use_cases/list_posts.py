@@ -79,7 +79,7 @@ def summarize(post: Post) -> PostSummary:
         body_length=len(content.body_markdown or "") if content else 0,
         quality_score=post.quality_score,
         published_url=post.published_url,
-        published_at=post.published_at.strftime("%Y-%m-%d %H:%M") if post.published_at else "",
+        published_at=post.published_at.strftime("%Y.%m.%d %H:%M") if post.published_at else "",
         error_message=post.error_message,
         meta_description=content.meta_description if content else "",
         blockers=tuple(publish_blockers(post)),

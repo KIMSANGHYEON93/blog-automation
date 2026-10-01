@@ -170,8 +170,31 @@ th:last-child, td:last-child { padding-right: 20px; }
 .jobs { margin: 0; padding-left: 18px; font-size: 13px; }
 .jobs li { padding: 3px 0; }
 
+/* 2026-10-01 UI 개선: 헤더 위계, 버튼 통일, 상태 색, 검색 대비, 터치 영역 */
+.brand { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+.topbar nav a, .topbar nav button.link {
+  padding: 6px 12px; border-radius: 999px; background: var(--fill); color: var(--text); font-weight: 500;
+}
+.topbar nav a:hover { text-decoration: none; }
+.stat { border-top: 3px solid var(--tone, transparent); }
+.stat-waiting, .stat-generating, .stat-publishing, .stat-revising { --tone: var(--muted); }
+.stat-pending { --tone: var(--info); }
+.stat-published { --tone: var(--ok); }
+.stat-failed { --tone: var(--err); }
+.stat-hold, .stat-revision_pending { --tone: var(--warn); }
+/* 선택 카드는 채우지 않고 테두리만 — 파란 칸이 다른 숫자를 가리지 않게 */
+.stat.active { background: var(--card); color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
+.stat.active .stat-label { color: var(--muted); }
+.search input { background: var(--card); border-color: var(--control); }
+.badge { font-size: 12px; padding: 4px 10px; }
+.chev { font-size: 22px; line-height: 1; color: var(--muted); }
+
 @media (max-width: 640px) {
   .topbar { padding-left: 16px; }
+  .generate { flex-direction: column; align-items: stretch; gap: 6px; }
+  .generate button { width: 100%; }
+  td { padding-top: 12px; padding-bottom: 12px; }
+  .open { padding: 10px 4px 10px 16px; }
   .topbar::before { display: none; }
   .container { padding: 16px 16px 40px; }
   .meta { grid-template-columns: 76px 1fr; }

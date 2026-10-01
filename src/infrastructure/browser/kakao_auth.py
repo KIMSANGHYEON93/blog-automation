@@ -107,6 +107,17 @@ def kakao_login(
         current_url = sb.get_current_url()
         logger.info(f"카카오 버튼 클릭 후 URL: {current_url}")
 
+        # 카카오 쿠키가 남아 있으면 '해당 카카오계정으로 로그인 [계속하기]'가 먼저 뜬다
+        # (2026-10-01 실측 — 처리하지 않으면 예상 외 URL로 실패해 수정·발행이 막힌다)
+        if "kauth.kakao.com" in current_url:
+            _click_kauth_continue(sb)
+            for _ in range(15):
+                time.sleep(1)
+                current_url = sb.get_current_url()
+                if "kauth.kakao.com" not in current_url:
+                    break
+            logger.info(f"계속하기 후 URL: {current_url}")
+
         # 카카오 로그인 페이지인 경우 → ID/PW 입력
         if "accounts.kakao" in current_url:
             return _enter_credentials_and_wait(sb, kakao_id, kakao_pw, notifier)

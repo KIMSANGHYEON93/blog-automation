@@ -82,3 +82,37 @@ class TestTwoFaAlert:
                 raise RuntimeError("웹훅 다운")
 
         assert kakao_auth._handle_two_fa(FakeSB(), notifier=Broken()) is False
+
+
+class AccountConfirmSB:
+    """카카오 쿠키가 남은 브라우저 — 버튼을 누르면 '해당 카카오계정으로 로그인 [계속하기]'."""
+
+    def __init__(self):
+        self.url = ""
+        self.continued = False
+
+    def open(self, url):
+        self.url = url
+
+    def is_element_visible(self, sel):
+        return sel == "a.btn_login.link_kakao_id"
+
+    def click(self, _sel):
+        self.url = "https://kauth.kakao.com/oauth/authorize?prompt=select_account"
+
+    def get_current_url(self):
+        return self.url
+
+    def execute_script(self, script):
+        if "계속하기" in script:
+            self.continued = True
+            self.url = "https://www.tistory.com/"
+        return None
+
+
+def test_계정_확인_화면이면_계속하기를_눌러_로그인한다(monkeypatch):
+    # 2026-10-01: 이 화면을 '예상 외 URL'로 보고 실패 처리해 수정·발행이 막혔다
+    monkeypatch.setattr(kakao_auth.time, "sleep", lambda _s: None)
+    sb = AccountConfirmSB()
+    assert kakao_auth.kakao_login(sb, "id", "pw") is True
+    assert sb.continued

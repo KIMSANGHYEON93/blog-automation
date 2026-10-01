@@ -5,6 +5,7 @@ import logging
 import re
 
 import markdown as md_lib
+from markdown.extensions.toc import slugify_unicode
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,8 @@ def convert_markdown_to_html(md_text: str) -> str:
     extensions = ["tables", "fenced_code", "nl2br", "sane_lists", "codehilite", "toc"]
     extension_configs = {
         "codehilite": {"css_class": "highlight", "linenums": False, "noclasses": True},
-        "toc": {"permalink": False, "toc_depth": "2-3"},
+        # 한글 소제목도 읽히는 앵커(#작동-원리) — 기본 slugify는 한글을 지워 #_1이 된다
+        "toc": {"permalink": False, "toc_depth": "2-3", "slugify": slugify_unicode},
     }
     md = md_lib.Markdown(extensions=extensions, extension_configs=extension_configs)
     html_body: str = md.convert(md_text)
@@ -103,7 +105,11 @@ def convert_markdown_to_html(md_text: str) -> str:
     # TOC 자동 삽입: 첫 번째 <h2> 앞에 목차 배치
     toc_html = getattr(md, "toc", "")
     if toc_html and "<li>" in toc_html:
-        toc_block = f'<div class="toc-container"><h2>목차</h2>{toc_html}</div>\n\n'
+        # 목차 제목은 소제목이 아니다 — h2로 두면 문서 개요에 '목차'가 섞인다
+        toc_block = (
+            f'<div class="toc-container"><p class="toc-title"><strong>목차</strong></p>'
+            f"{toc_html}</div>\n\n"
+        )
         h2_pos = html_body.find("<h2")
         if h2_pos >= 0:
             html_body = html_body[:h2_pos] + toc_block + html_body[h2_pos:]

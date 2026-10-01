@@ -47,4 +47,6 @@ def render_tistory_html(post: Post, blog_name: str, cta_url: str = "") -> str:
 
     # 반응형 + 성능 최적화 (img lazy/decoding, iframe lazy, preconnect)
     html_body = optimize_html(html_body)
-    return apply_inline_styles(html_body)
+    html_body = apply_inline_styles(html_body)
+    # 스타일러 뒤에 붙인다 — CTA는 자체 인라인 스타일을 가지고, 스타일러가 바꾸지 않게
+    return html_transformer.append_naver_cta(html_body, cta_url)

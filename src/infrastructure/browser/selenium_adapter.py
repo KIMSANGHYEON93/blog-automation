@@ -29,7 +29,8 @@ class SeleniumBrowserAdapter(BrowserPort):
                  min_delay: int = 300, max_delay: int = 900,
                  user_data_dir: str = "",
                  site_profile: SiteProfile | None = None,
-                 notifier: NotificationPort | None = None):
+                 notifier: NotificationPort | None = None,
+                 cta_url: str = ""):
         # notifier: 카카오 2FA 감지 시 즉시 알리기 위한 채널. 없으면 조용히 진행.
         self._notifier = notifier
         self._credentials = credentials
@@ -38,6 +39,7 @@ class SeleniumBrowserAdapter(BrowserPort):
         self._max_delay = max_delay
         self._user_data_dir = user_data_dir
         self._site_profile = site_profile
+        self._cta_url = cta_url  # 티스토리 글 끝 네이버 이웃 CTA 주소 — 비면 붙이지 않는다
         self._sb = None
         self._sb_context = None  # SB 컨텍스트 매니저 참조 유지
 
@@ -130,6 +132,7 @@ class SeleniumBrowserAdapter(BrowserPort):
         result = publish_post(
             self._sb, post, self._credentials.tistory_blog,
             profile=self._site_profile,
+            cta_url=self._cta_url,
         )
         # 건별 딜레이 (봇 탐지 회피)
         delay = random.randint(self._min_delay, self._max_delay)
@@ -141,6 +144,7 @@ class SeleniumBrowserAdapter(BrowserPort):
         result = update_post(
             self._sb, post, self._credentials.tistory_blog,
             profile=self._site_profile,
+            cta_url=self._cta_url,
         )
         delay = random.randint(self._min_delay, self._max_delay)
         logger.info(f"다음 수정까지 {delay}초 대기")

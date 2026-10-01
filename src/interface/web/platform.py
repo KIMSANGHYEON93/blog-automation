@@ -81,6 +81,7 @@ def make_browser(
         site_profile=site_profile,
         # 2FA가 뜨면 브라우저 앞에 사람이 없다 — 즉시 알려야 승인할 수 있다
         notifier=notifier,
+        cta_url=config.naver_blog_url,
     )
 
 

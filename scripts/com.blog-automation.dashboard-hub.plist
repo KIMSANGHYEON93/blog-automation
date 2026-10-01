@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 통합 관리자 대시보드(네이버·티스토리 탭) 상시 실행(127.0.0.1:8787, 폰은 tailscale serve로 접속). com.blog-automation.naver-dashboard를 대체한다 — 둘을 동시에 load하면 8787을 다툰다. 설치:
+     cp scripts/com.blog-automation.dashboard-hub.plist ~/Library/LaunchAgents/
+     launchctl load ~/Library/LaunchAgents/com.blog-automation.dashboard-hub.plist
+     PATH: '지금 생성'이 docker(/usr/local/bin)를 부른다 — launchd 기본 PATH에는 없다 -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.blog-automation.dashboard-hub</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/kimsanghyeon/.pyenv/versions/3.11.11/bin/python3</string>
+		<string>-m</string>
+		<string>src.interface.web</string>
+		<string>hub</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<key>StandardErrorPath</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/logs/dashboard_hub.err</string>
+	<key>StandardOutPath</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/logs/dashboard_hub.log</string>
+</dict>
+</plist>

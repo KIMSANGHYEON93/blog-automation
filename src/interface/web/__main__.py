@@ -4,6 +4,7 @@
     python -m src.interface.web gen-secret      # 세션 시크릿 생성
     python -m src.interface.web                 # 대시보드 실행 (기본 http://127.0.0.1:8787)
     python -m src.interface.web --platform naver  # 네이버 대시보드 (naver_calendar 탭)
+    python -m src.interface.web hub             # 통합 대시보드 (/naver/ · /tistory/ 탭)
 """
 from __future__ import annotations
 
@@ -16,7 +17,9 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from flask import Flask
 from werkzeug.security import generate_password_hash
+from werkzeug.serving import run_simple
 
 from src.application.services.internal_link_enricher import InternalLinkEnricher
 from src.application.use_cases.edit_post import EditPostUseCase
@@ -51,12 +54,13 @@ from src.infrastructure.persistence.sheets_brain_term_adapter import SheetsBrain
 from src.infrastructure.seo.naver_searchad import NaverSearchAdKeywordAdapter
 from src.interface.cli import _build_notification as build_notification
 from src.interface.web.app import KeywordIdea, create_app
-from src.interface.web.auth import AdminAuthenticator
+from src.interface.web.auth import AdminAuthenticator, LoginThrottle
 from src.interface.web.generation import (
     DEFAULT_N8N_CONTAINER,
     NAVER_WORKFLOW_NAME,
     build_generator,
 )
+from src.interface.web.hub import build_hub
 from src.interface.web.jobs import PublishJobRunner
 from src.interface.web.platform import (
     PlatformProfile,
@@ -284,13 +288,18 @@ def _build_keyword_desk(
     )
 
 
-def _serve(platform: str) -> int:
+def _load_settings() -> DashboardSettings | None:
     try:
-        settings = DashboardSettings.from_env(os.environ)
+        return DashboardSettings.from_env(os.environ)
     except SettingsError as e:
         print(f"대시보드 설정 오류: {e}", file=sys.stderr)
-        return 2
+        return None
 
+
+def _build_app(
+    platform: str, settings: DashboardSettings, throttle: LoginThrottle | None = None,
+    hub_tab: str | None = None,
+) -> Flask:
     config = Config.from_env()
     profile = resolve_platform(platform, config)
     if profile.name == "naver":
@@ -301,7 +310,7 @@ def _serve(platform: str) -> int:
         creds_path=config.google_creds, sheet_name=config.sheet_name,
         worksheet=profile.worksheet,
     )
-    app = create_app(
+    return create_app(
         authenticator=AdminAuthenticator(settings.admin_user, settings.admin_password_hash),
         list_posts=ListPostsUseCase(repo),
         job_runner=PublishJobRunner(
@@ -327,19 +336,42 @@ def _serve(platform: str) -> int:
         keywords=_build_keyword_desk(config, repo, profile),
         daily_limit=profile.daily_limit,
         secret_key=settings.secret_key,
+        throttle=throttle,
         secure_cookies=settings.secure_cookies,
         allowed_hosts=settings.allowed_hosts,
         brand_label=profile.label,
+        hub_tab=hub_tab,
     )
-    logger.info(f"{profile.label} 시작: http://{settings.host}:{settings.port}")
+
+
+def _serve(platform: str) -> int:
+    settings = _load_settings()
+    if settings is None:
+        return 2
+    app = _build_app(platform, settings)
+    logger.info(f"대시보드 시작: http://{settings.host}:{settings.port}")
     app.run(host=settings.host, port=settings.port, debug=False, threaded=True, use_reloader=False)
+    return 0
+
+
+def _serve_hub() -> int:
+    settings = _load_settings()
+    if settings is None:
+        return 2
+    throttle = LoginThrottle()  # 두 앱 합산 — 따로 두면 실패 허용 횟수가 두 배가 된다
+    hub = build_hub({
+        name: _build_app(name, settings, throttle, hub_tab=name) for name in ("naver", "tistory")
+    })
+    logger.info(f"통합 대시보드 시작: http://{settings.host}:{settings.port}/")
+    run_simple(settings.host, settings.port, hub, threaded=True, use_reloader=False)
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="블로그 관리자 대시보드")
     parser.add_argument(
-        "command", nargs="?", default="serve", choices=["serve", "hash-password", "gen-secret"],
+        "command", nargs="?", default="serve",
+        choices=["serve", "hub", "hash-password", "gen-secret"],
     )
     parser.add_argument(
         "--platform", default="tistory", choices=["tistory", "naver"],
@@ -354,6 +386,8 @@ def main() -> int:
         return 0
     os.chdir(PROJECT_ROOT)  # credentials.json 등 상대경로 설정 해석 (run_pipeline_b.sh와 동일)
     setup_logging(str(LOG_FILE))
+    if args.command == "hub":
+        return _serve_hub()
     return _serve(args.platform)
 
 

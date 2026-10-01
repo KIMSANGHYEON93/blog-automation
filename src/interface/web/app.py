@@ -406,3 +406,21 @@ def _register_edit_routes(app: Flask, editor: EditPostUseCase) -> None:
             abort(409, description="발행실패·보류 글만 되돌릴 수 있습니다")
         flash("발행대기로 되돌렸습니다.", "success")
         return redirect(url_for("post_detail", row_index=row_index))
+
+    @app.post("/posts/<int:row_index>/regenerate")
+    def regenerate_post(row_index: int):  # type: ignore[no-untyped-def]
+        try:
+            editor.regenerate(row_index)
+        except (PostNotEditableError, InvalidStatusTransitionError):
+            abort(409, description="발행된 적 없는 발행대기·보류·발행실패 글만 다시 생성합니다")
+        flash("대기로 돌렸습니다. '지금 생성'을 누르면 같은 키워드로 글을 새로 씁니다.", "success")
+        return redirect(url_for("post_detail", row_index=row_index))
+
+    @app.post("/posts/<int:row_index>/archive")
+    def archive_post(row_index: int):  # type: ignore[no-untyped-def]
+        try:
+            editor.archive(row_index)
+        except (PostNotEditableError, InvalidStatusTransitionError):
+            abort(409, description="발행대기 글만 보관합니다")
+        flash("보류로 보관했습니다. '발행대기로 되돌리기'로 다시 살릴 수 있습니다.", "success")
+        return redirect(url_for("post_detail", row_index=row_index))

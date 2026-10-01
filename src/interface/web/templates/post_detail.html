@@ -71,6 +71,20 @@
     <button type="submit">발행대기로 되돌리기</button>
   </form>
   {% endif %}
+  {% if editing_enabled and post.can_regenerate %}
+  <form method="post" action="{{ url_for('regenerate_post', row_index=post.row_index) }}" class="restore">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit">다시 생성</button>
+    <span class="sub">대기로 돌립니다. '지금 생성'이 같은 키워드로 새로 씁니다.</span>
+  </form>
+  {% endif %}
+  {% if editing_enabled and post.can_archive %}
+  <form method="post" action="{{ url_for('archive_post', row_index=post.row_index) }}" class="restore">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit">보관</button>
+    <span class="sub">발행 대상에서 뺍니다(보류). 되돌릴 수 있습니다.</span>
+  </form>
+  {% endif %}
 </section>
 
 {% if editing_enabled and post.can_edit %}

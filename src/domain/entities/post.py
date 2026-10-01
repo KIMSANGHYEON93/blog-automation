@@ -89,6 +89,17 @@ class Post:
         self.status = PostStatus.PENDING
         self.error_message = ""
 
+    def reset_for_regeneration(self) -> None:
+        """PENDING·HOLD·FAILED → WAITING. 대시보드 '다시 생성' — n8n이 같은 키워드로 다시 쓴다.
+
+        발행된 적 있는 글은 거부한다. 새 글로 다시 발행되면 중복 글이 생긴다.
+        """
+        allowed = (PostStatus.PENDING, PostStatus.HOLD, PostStatus.FAILED)
+        if self.status not in allowed or self.published_url or self.entry_id:
+            raise InvalidStatusTransitionError(self.status, PostStatus.WAITING)
+        self.status = PostStatus.WAITING
+        self.error_message = ""
+
     def is_publishable(self) -> bool:
         """True only when PENDING + quality body + sufficient length + quality_score."""
         return (

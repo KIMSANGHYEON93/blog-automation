@@ -1,6 +1,7 @@
 """EditPostUseCase — 관리자가 발행 전 글을 고치고, 실패·보류 글을 발행대기로 되돌린다."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 
 from src.domain.entities.post import Post
@@ -51,6 +52,22 @@ class EditPostUseCase:
             post.release_hold()
         else:
             raise InvalidStatusTransitionError(post.status, PostStatus.PENDING)
+        self._repo.save(post)
+        return post
+
+    def regenerate(self, row_index: int) -> Post:
+        """미발행 글을 대기로 돌린다. 다음 '지금 생성'이 같은 키워드로 내용을 덮어쓴다."""
+        return self._transition(row_index, lambda post: post.reset_for_regeneration())
+
+    def archive(self, row_index: int) -> Post:
+        """발행대기 글을 보류로 빼 둔다. 시트 행은 남고 '되돌리기'로 다시 살린다."""
+        return self._transition(row_index, lambda post: post.mark_hold("대시보드에서 보관"))
+
+    def _transition(self, row_index: int, change: Callable[[Post], None]) -> Post:
+        post = self._find(row_index)
+        if post is None:
+            raise PostNotEditableError(f"{row_index}행이 없습니다")
+        change(post)
         self._repo.save(post)
         return post
 

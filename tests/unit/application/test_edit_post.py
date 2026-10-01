@@ -88,3 +88,28 @@ def test_실패와_보류는_발행대기로_되돌린다(status):
 def test_발행대기는_되돌릴_게_없다():
     with pytest.raises(InvalidStatusTransitionError):
         EditPostUseCase(_repo()).restore(5)
+
+
+@pytest.mark.parametrize("status", [PostStatus.PENDING, PostStatus.HOLD, PostStatus.FAILED])
+def test_발행_전_글은_다시_생성하도록_대기로_돌린다(status):
+    repo = _repo(status)
+    EditPostUseCase(repo).regenerate(5)
+    assert _get(repo).status == PostStatus.WAITING
+
+
+def test_발행된_적_있는_글은_다시_생성하지_않는다():
+    # 대기로 돌리면 n8n이 새 글을 만들고 또 발행돼 중복 글이 생긴다
+    repo = _repo(PostStatus.FAILED)
+    _get(repo).published_url = "https://blog.naver.com/b/1"
+    with pytest.raises(InvalidStatusTransitionError):
+        EditPostUseCase(repo).regenerate(5)
+    with pytest.raises(InvalidStatusTransitionError):
+        EditPostUseCase(_repo(PostStatus.PUBLISHED)).regenerate(5)
+
+
+def test_발행대기는_보관하면_보류():
+    repo = _repo()
+    EditPostUseCase(repo).archive(5)
+    assert _get(repo).status == PostStatus.HOLD
+    with pytest.raises(InvalidStatusTransitionError):
+        EditPostUseCase(repo).archive(5)

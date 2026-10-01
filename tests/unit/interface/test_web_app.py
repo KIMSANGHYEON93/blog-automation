@@ -748,3 +748,21 @@ class TestNaverLogin:
 def test_아침_점검_시각도_자동_실행으로_본다():
     found = automation_soon(datetime(2026, 9, 28, 7, 20))
     assert found is not None and found.strftime("%H:%M") == "07:30"
+
+
+def test_미발행_글은_다시_생성과_보관():
+    h = Harness()
+    h.login()
+    detail = h.client.get("/posts/2").get_data(as_text=True)
+    assert 'action="/posts/2/regenerate"' in detail and 'action="/posts/2/archive"' in detail
+    published = h.client.get("/posts/4").get_data(as_text=True)
+    assert "/regenerate" not in published and "/archive" not in published
+
+    h.client.post("/posts/2/archive", data={"csrf_token": h.csrf("/posts/2")})
+    assert next(p for p in h.repo.find_all() if p.row_index == 2).status == PostStatus.HOLD
+    h.client.post("/posts/2/regenerate", data={"csrf_token": h.csrf("/posts/2")})
+    assert next(p for p in h.repo.find_all() if p.row_index == 2).status == PostStatus.WAITING
+
+    resp = h.client.post("/posts/4/regenerate", data={"csrf_token": h.csrf("/posts/4")})
+    assert resp.status_code == 409
+    assert h.client.post("/posts/2/archive").status_code == 400  # CSRF 없음

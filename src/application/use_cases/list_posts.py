@@ -49,6 +49,15 @@ class PostSummary:
     def can_restore(self) -> bool:
         return self.status in (PostStatus.FAILED, PostStatus.HOLD)
 
+    @property
+    def can_regenerate(self) -> bool:
+        statuses = (PostStatus.PENDING, PostStatus.HOLD, PostStatus.FAILED)
+        return self.status in statuses and not self.published_url
+
+    @property
+    def can_archive(self) -> bool:
+        return self.status == PostStatus.PENDING
+
 
 @dataclass(frozen=True)
 class PostPage:

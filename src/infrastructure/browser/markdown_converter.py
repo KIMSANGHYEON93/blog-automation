@@ -5,7 +5,7 @@ import logging
 import re
 
 import markdown as md_lib
-from markdown.extensions.toc import slugify_unicode
+from markdown.extensions.toc import slugify_unicode  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 

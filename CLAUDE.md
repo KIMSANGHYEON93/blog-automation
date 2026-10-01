@@ -59,7 +59,8 @@ python -m src.interface.cli --publish-pages      # AdSense 필수 페이지
 ```bash
 python -m src.interface.web hash-password   # .env: DASHBOARD_ADMIN_PASSWORD_HASH='...'
 python -m src.interface.web gen-secret      # .env: DASHBOARD_SECRET_KEY=...
-make dashboard                              # = python -m src.interface.web → http://127.0.0.1:8787
+python -m src.interface.web hub            # 통합 대시보드 /naver/·/tistory/ (운영은 launchd가 8787에서 실행)
+DASHBOARD_PORT=8788 make dashboard         # 단독 실행(탭 없음) — hub가 8787을 잡고 있으면 다른 포트 필요
 python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 실행기 테스트
 ```
 
@@ -72,7 +73,7 @@ python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 �
 
 ### 네이버 블로그 (`--platform naver`)
 
-- 흐름: `naver_calendar` 탭 '대기' → n8n `workflow_naver.json` → '발행대기' → `python -m src.interface.web --platform naver`에서 사람이 1건씩 발행. 자동 발행 없음, 하루 1건. n8n 워크플로(ID `SGXJWwyw6GW5aN6w`)는 **비활성**이라 02:00 스케줄은 돌지 않고, 생성은 대시보드 '지금 생성'(n8n CLI execute)으로 한다(2026-09-29 확인). 프롬프트를 고치면 같은 ID로 `n8n import:workflow`해야 중복이 안 생긴다
+- 흐름: `naver_calendar` 탭 '대기' → n8n `workflow_naver.json` → '발행대기' → 통합 대시보드 `/naver/` 탭(단독 실행은 `--platform naver`)에서 사람이 1건씩 발행. 자동 발행 없음, 하루 1건. n8n 워크플로(ID `SGXJWwyw6GW5aN6w`)는 **비활성**이라 02:00 스케줄은 돌지 않고, 생성은 대시보드 '지금 생성'(n8n CLI execute)으로 한다(2026-09-29 확인). 프롬프트를 고치면 같은 ID로 `n8n import:workflow`해야 중복이 안 생긴다
 - 사람 검수 강제: 초안은 `[[직접 해 보니]]` 문단 하나를 남기고(prompt_naver_common.md), 이 표시가 남아 있으면 `publish_blockers`가 발행을 막는다 — 대시보드 편집에서 실제 경험으로 바꿔 써야 발행된다. 검증 프롬프트는 이 표시를 지어낸 경험으로 보지 않는다
 - **워크플로우 JSON은 손으로 고치지 않는다**: 노드 코드는 `n8n/code_nodes/naver/*.js`, 프롬프트는 `n8n/prompts/prompt_naver_*.md`가 원본이고 `python scripts/build_naver_workflow.py`가 `workflow_complete.json`을 복사해 넣는다. 원본을 고친 뒤 스크립트를 돌려 n8n에 다시 가져올 것. `make test-n8n`이 최신 여부를 검사한다
 - 로그인: 처음은 사람이 `python scripts/naver_blog.py login`('로그인 상태 유지' 체크), 세션은 `.browser_data_naver/`. 만료되면 대시보드 '네이버 다시 로그인'이 `.env`의 `NAVER_LOGIN_ID/PW`를 자동 입력하고 폰 네이버 앱 2단계 승인을 최대 300초 기다린다(`naver/login.py`). 버튼 1회에 제출 1회 — 비밀번호 오류·캡차는 즉시 중단(반복 실패는 보호조치). 07:30 launchd `com.blog-automation.naver-session-check`가 `check --notify`로 점검해 만료일 때만 새 봇(`NAVER_TELEGRAM_BOT_TOKEN`, 채팅 `TELEGRAM_CHAT_ID`)으로 알리고, 대시보드 발행·수정 발행이 로그인 실패로 끝나도 알린다. 07:30은 `AUTOMATION_TIMES`에도 들어 있다. `NAVER_BLOG_ID`는 로그인 아이디가 아니라 블로그 주소(`sangpedia`)

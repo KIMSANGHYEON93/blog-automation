@@ -389,7 +389,7 @@ def _status(config: Config) -> None:
 def _discover_keywords(
     config: Config, auto_register: bool = False, limit: int = 10,
     days: int | None = None,
-) -> None:
+) -> int:
     """GSC 검색 데이터에서 키워드 발굴."""
     config.validate()
 
@@ -422,8 +422,9 @@ def _discover_keywords(
             )
         if result.registered:
             logger.info(f"시트 자동 등록 완료: {result.registered}건 (대기 상태)")
-    else:
-        logger.error(f"키워드 발굴 실패: {result.error}")
+        return result.registered
+    logger.error(f"키워드 발굴 실패: {result.error}")
+    return 0
 
 
 def _recover_failed(config: Config, *, force_unknown: bool = False) -> None:
@@ -698,10 +699,16 @@ def _main_inner() -> None:
         return
 
     if args.discover_keywords:
-        _discover_keywords(
+        registered = _discover_keywords(
             config, auto_register=args.auto_register, limit=args.discover_limit,
             days=args.discover_days,
         )
+        # GSC 쿼리가 바닥나면(2026-09-27~ 매일 0건) 새 글이 끊긴다 — 볼트 용어로 같은 한도만큼 보충
+        if args.auto_register and registered == 0:
+            logger.info("GSC 발굴 0건 — AI-Brain 용어 키워드로 보충")
+            _generate_term_keywords(
+                config, auto_register=True, limit=args.discover_limit,
+            )
         return
 
     if args.generate_term_keywords:

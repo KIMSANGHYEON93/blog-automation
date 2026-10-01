@@ -28,6 +28,16 @@ def test_대기_키워드가_없어_새_글이_없으면_그렇게_알려준다(
     assert ok and "새로 만든 글 없음" in message
 
 
+def test_중복으로_건너뛴_키워드를_알려준다():
+    # 새 글이 없을 때 "'대기' 키워드가 있는지 확인"만 보이면 중복 판정을 알 수 없다
+    ok, message = summarize_run(
+        0, "Execution was successful:", pending_before=1, pending_after=1,
+        skipped=["Claude vs ChatGPT 업무용"],
+    )
+    assert ok and "중복으로 건너뜀 1건" in message and "Claude vs ChatGPT 업무용" in message
+    assert "'대기' 키워드가 있는지" not in message
+
+
 def test_실패하면_출력_끝부분을_사유로():
     ok, message = summarize_run(1, "...\nError: SerpAPI 429 Too Many Requests", 0, 0)
     assert not ok and "SerpAPI 429" in message

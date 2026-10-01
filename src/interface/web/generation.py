@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Callable
+from collections.abc import Callable, Sequence
 
 from src.application.use_cases.publish_selected_post import (
     ManualPublishOutcome,
@@ -30,22 +30,23 @@ def find_workflow_id(list_output: str, name: str) -> str:
 
 def summarize_run(
     returncode: int, stdout: str, pending_before: int, pending_after: int,
+    skipped: Sequence[str] = (),
 ) -> tuple[bool, str]:
     if returncode != 0 or "Execution was successful" not in stdout:
         tail = " ".join(stdout.strip().splitlines()[-3:])[-300:]
         return False, f"생성 실패 — {tail or f'n8n 종료 코드 {returncode}'}"
     added = pending_after - pending_before
+    note = f" · 중복으로 건너뜀 {len(skipped)}건: {', '.join(skipped)}" if skipped else ""
     if added <= 0:
-        return True, (
-            f"생성 완료 — 새로 만든 글 없음(발행대기 {pending_after}건). "
-            "'대기' 키워드가 있는지 확인하세요"
-        )
-    return True, f"생성 완료 — 발행대기 {pending_after}건 (+{added})"
+        hint = "" if skipped else ". '대기' 키워드가 있는지 확인하세요"
+        return True, f"생성 완료 — 새로 만든 글 없음(발행대기 {pending_after}건){note}{hint}"
+    return True, f"생성 완료 — 발행대기 {pending_after}건 (+{added}){note}"
 
 
 def build_generator(
-    container: str, workflow_name: str, count_pending: Callable[[], int],
+    container: str, workflow_name: str, snapshot: Callable[[], tuple[int, set[str]]],
 ) -> Callable[[int], ManualPublishResult]:
+    """snapshot() → (발행대기 수, 중복으로 건너뛴 키워드). 실행 전후 차이로 결과를 알린다."""
     def generate(_row_index: int) -> ManualPublishResult:
         listed = subprocess.run(
             ["docker", "exec", container, "n8n", "list:workflow"],
@@ -54,13 +55,15 @@ def build_generator(
         workflow_id = find_workflow_id(listed.stdout, workflow_name)
         if not workflow_id:
             return ManualPublishResult.failed(0, f"n8n에 '{workflow_name}' 워크플로가 없습니다")
-        before = count_pending()
+        pending_before, skipped_before = snapshot()
         run = subprocess.run(
             ["docker", "exec", container, "n8n", "execute", "--id", workflow_id],
             capture_output=True, text=True, timeout=N8N_TIMEOUT_SECONDS,
         )
+        pending_after, skipped_after = snapshot()
         ok, message = summarize_run(
-            run.returncode, run.stdout + run.stderr, before, count_pending(),
+            run.returncode, run.stdout + run.stderr, pending_before, pending_after,
+            sorted(skipped_after - skipped_before),
         )
         outcome = ManualPublishOutcome.GENERATED if ok else ManualPublishOutcome.FAILED
         return ManualPublishResult(outcome, 0, message)

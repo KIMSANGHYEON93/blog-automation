@@ -163,6 +163,15 @@ def _build_drafter(  # type: ignore[no-untyped-def]
     return draft
 
 
+def _generation_snapshot(repo: GoogleSheetsPostRepository) -> tuple[int, set[str]]:
+    """'지금 생성' 전후 비교용: 발행대기 수와 중복으로 건너뛴 키워드(시트 1회 읽기)."""
+    posts = repo.find_all()
+    pending = sum(1 for p in posts if p.status == PostStatus.PENDING)
+    # n8n 'Sheets Update (중복스킵)'이 남기는 사유 문구(상태값 '중복스킵'은 보류로 읽힌다)
+    skipped = {p.keyword for p in posts if p.error_message.startswith("중복 키워드")}
+    return pending, skipped
+
+
 def _build_reviser(  # type: ignore[no-untyped-def]
     config: Config, repo: GoogleSheetsPostRepository, profile: PlatformProfile,
 ):
@@ -306,7 +315,7 @@ def _serve(platform: str) -> int:
             generate=(
                 build_generator(
                     os.getenv("N8N_CONTAINER", DEFAULT_N8N_CONTAINER), NAVER_WORKFLOW_NAME,
-                    lambda: sum(1 for p in repo.find_all() if p.status == PostStatus.PENDING),
+                    lambda: _generation_snapshot(repo),
                 ) if profile.name == "naver" else None
             ),
         ),

@@ -125,13 +125,14 @@ def insert_summary_lead(html_text: str, summary: str) -> str:
 def append_faq_schema(body_markdown: str, faq_ld_json: str) -> str:
     """본문 하단에 FAQ LD+JSON 스키마를 추가.
 
-    JSON 유효성 검증 후 재직렬화하여 </script> 탈출 공격을 방지한다.
+    JSON 유효성 검증 후 재직렬화하고 `<`를 \\u003c로 바꿔(여전히 유효한 JSON),
+    답변에 든 `</script>`·`<!--`가 script 블록을 끝내고 본문에 HTML을 주입하지 못하게 한다.
     """
     import json
 
     try:
         parsed = json.loads(faq_ld_json)
-        safe_json = json.dumps(parsed, ensure_ascii=False)
+        safe_json = json.dumps(parsed, ensure_ascii=False).replace("<", "\\u003c")
     except (json.JSONDecodeError, TypeError) as e:
         logger.error(f"FAQ 스키마 JSON 파싱 실패 — 스키마 삽입 건너뜀: {e}")
         return body_markdown

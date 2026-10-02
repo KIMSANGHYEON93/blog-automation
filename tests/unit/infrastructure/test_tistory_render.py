@@ -6,7 +6,7 @@ from pathlib import Path
 from src.domain.entities.post import Post
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
-from src.infrastructure.browser.html_transformer import append_naver_cta
+from src.infrastructure.browser.html_transformer import append_faq_schema, append_naver_cta
 from src.infrastructure.browser.tistory_render import render_tistory_html
 
 GOLDEN = Path(__file__).resolve().parents[2] / "fixtures" / "tistory_render_golden.html"
@@ -76,3 +76,10 @@ def test_CTA가_없으면_골든_그대로():
     assert render_tistory_html(sample_post(), "kimsanghyeon", "") == GOLDEN.read_text(
         encoding="utf-8"
     )
+
+
+def test_FAQ_스키마의_script_닫는_태그는_본문을_깨지_못한다():
+    faq = '[{"question": "q", "answer": "</script><img src=x onerror=alert(1)>"}]'
+    out = append_faq_schema("본문", faq)
+    assert out.count("</script>") == 1
+    assert "<img" not in out

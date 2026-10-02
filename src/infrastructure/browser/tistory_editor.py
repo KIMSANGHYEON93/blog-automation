@@ -152,8 +152,9 @@ def publish_post(
         time.sleep(2)
 
         # 태그 입력
-        if content.tags:
-            form_filler.input_tags(sb, content.tag_list())
+        publish_tags = post.publish_tags()
+        if publish_tags:
+            form_filler.input_tags(sb, publish_tags)
             time.sleep(1)
 
         # 저장 전 콘텐츠 동기화 확인
@@ -246,7 +247,7 @@ def update_post(
 
         # API 호출로 수정 (entry_id 전달)
         title = content.title_or_fallback(post.keyword)
-        tags = ",".join(content.tag_list()) if content.tags else ""
+        tags = ",".join(post.publish_tags())
         thumbnail_url = content.thumbnail_url if content.thumbnail_url else ""
         if not thumbnail_url:
             thumbnail_url = html_transformer.extract_first_image_url(html_body)
@@ -299,7 +300,7 @@ def _publish_via_api(
     성공 시 (발행 URL, entry_id) 튜플 반환, 실패 시 None.
     """
     title = content.title_or_fallback(post.keyword)
-    tags = ",".join(content.tag_list()) if content.tags else ""
+    tags = ",".join(post.publish_tags())
     thumbnail_url = content.thumbnail_url if content.thumbnail_url else ""
     if not thumbnail_url:
         thumbnail_url = html_transformer.extract_first_image_url(html_body)

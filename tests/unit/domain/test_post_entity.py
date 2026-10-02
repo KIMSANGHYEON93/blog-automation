@@ -264,3 +264,43 @@ def test_보류가_아니면_해제할_수_없다():
     post = Post(row_index=2, keyword="k", status=PostStatus.PENDING)
     with pytest.raises(InvalidStatusTransitionError):
         post.release_hold()
+
+
+class TestPublishTags:
+    @staticmethod
+    def _post(keyword="Terraform", **content_kw):
+        return Post(
+            row_index=1, keyword=keyword,
+            content=PostContent(title="t", body_markdown="b", **content_kw),
+        )
+
+    def test_sheet_tags_unchanged_even_over_cap(self):
+        post = self._post(tags="a, b,c,d,e,f,g")
+        assert post.publish_tags() == ["a", "b", "c", "d", "e", "f", "g"]
+
+    def test_fallback_keyword_plus_internal_keywords_json(self):
+        post = self._post(internal_link_keywords='["IaC", "Ansible"]')
+        assert post.publish_tags() == ["Terraform", "IaC", "Ansible"]
+
+    def test_fallback_internal_keywords_comma_string(self):
+        post = self._post(internal_link_keywords="IaC, Ansible")
+        assert post.publish_tags() == ["Terraform", "IaC", "Ansible"]
+
+    def test_fallback_dedupes_case_insensitively(self):
+        post = self._post(internal_link_keywords='["terraform", "IaC", "IAC"]')
+        assert post.publish_tags() == ["Terraform", "IaC"]
+
+    def test_fallback_capped_at_five(self):
+        post = self._post(internal_link_keywords='["a","b","c","d","e","f"]')
+        assert post.publish_tags() == ["Terraform", "a", "b", "c", "d"]
+        assert len(post.publish_tags(max_tags=2)) == 2
+
+    def test_fallback_drops_blank_entries(self):
+        post = self._post(keyword="  K  ", internal_link_keywords='["", "  ", " x "]')
+        assert post.publish_tags() == ["K", "x"]
+
+    def test_fallback_keyword_only(self):
+        assert self._post().publish_tags() == ["Terraform"]
+
+    def test_no_content_returns_empty(self):
+        assert Post(row_index=1, keyword="k").publish_tags() == []

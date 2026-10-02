@@ -14,7 +14,7 @@
 </head>
 <body>
   <main>
-    <p class="note"><a href="{{ url_for('post_detail', row_index=post.row_index) }}">← {{ post.row_index }}행 게시물</a> · 블로그에 올라갈 본문 그대로입니다. '관련 글'과 내부 링크는 발행할 때 붙습니다.</p>
+    <p class="note">{{ post.row_index }}행 미리보기 · 블로그에 올라갈 본문 그대로입니다. '관련 글'과 내부 링크는 발행할 때 붙습니다. 돌아가려면 브라우저의 뒤로 가기를 쓰세요.</p>
     <h1>{{ post.title }}</h1>
     {{ body_html|safe }}
   </main>

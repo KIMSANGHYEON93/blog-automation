@@ -810,7 +810,8 @@ class TestRawPreview:
         assert csp.startswith("sandbox; default-src 'none'; style-src 'unsafe-inline'")
         html = resp.get_data(as_text=True)
         assert self.BODY in html
-        assert 'href="/posts/2"' in html  # 상세로 돌아가는 링크
+        assert "2행 미리보기" in html
+        assert 'href="/posts/2"' not in html  # 링크는 sandbox·SameSite=Strict로 로그인에 튕김
 
     def test_네이버_미리보기는_기존_CSP(self):
         h = Harness(preview=lambda post: "<p>본문</p>")

@@ -96,3 +96,10 @@ def test_링크와_폼에_접두어(client):
 def test_탭_키가_다르면_거부():
     with pytest.raises(ValueError):
         build_hub({"naver": _app("naver", LoginThrottle())})
+
+
+def test_파비콘_요청은_다른_앱으로_보내지_않는다(client):
+    # 루트 /favicon.ico를 /naver/로 보내면 티스토리 화면에서도 네이버 로그인 요청이 찍힌다
+    resp = client.get("/favicon.ico")
+    assert resp.status_code == 204
+    assert "Location" not in resp.headers

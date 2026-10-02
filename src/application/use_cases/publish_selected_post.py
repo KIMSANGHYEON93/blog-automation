@@ -36,7 +36,7 @@ class ManualPublishOutcome(Enum):
     DRAFTED = "drafted"  # 임시저장 시험만 함 — 시트 상태는 바뀌지 않는다
     GENERATED = "generated"  # 대시보드 '지금 생성'(n8n 실행) 성공
     REVISED = "revised"  # 발행된 글을 같은 URL에서 수정 발행
-    LOGGED_IN = "logged_in"  # 대시보드 '네이버 다시 로그인' 성공
+    LOGGED_IN = "logged_in"  # 대시보드 '다시 로그인'(네이버·카카오톡) 성공
 
 
 @dataclass(frozen=True)

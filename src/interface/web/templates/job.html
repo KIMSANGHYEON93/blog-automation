@@ -9,7 +9,7 @@
 <p><a href="{{ url_for('post_detail', row_index=job.row_index) }}">← {{ job.row_index }}행 게시물</a></p>
 {% endif %}
 <section class="card">
-  {% if running and job.kind == "login" %}<p class="notice notice-info">폰 네이버 앱에서 로그인을 승인하세요.</p>{% endif %}
+  {% if running and job.kind == "login" %}<p class="notice notice-info">{{ approve_hint }}</p>{% endif %}
   <h1>{{ job_label }}{% if job.kind not in ("generate", "login") %} — {{ job.row_index }}행{% endif %}</h1>
   <dl class="meta">
     <dt>시작</dt><dd>{{ job.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</dd>

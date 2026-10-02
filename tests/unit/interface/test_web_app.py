@@ -829,3 +829,48 @@ class TestRawPreview:
         h = Harness(preview=lambda post: self.BODY, preview_raw=True)
         h.login()
         assert "default-src 'self'" in h.client.get("/").headers["Content-Security-Policy"]
+
+
+class TestApproveHint:
+    """로그인 작업 화면의 승인 안내는 블로그마다 다르다 — 티스토리에 네이버가 나오면 안 된다."""
+
+    def _running_login_page(self, **app_kwargs):
+        release = threading.Event()
+
+        def login(row):
+            release.wait(5)
+            return ManualPublishResult(ManualPublishOutcome.LOGGED_IN, row, "완료")
+
+        runner = PublishJobRunner(
+            publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
+            login=login,
+        )
+        app = create_app(
+            authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
+            list_posts=ListPostsUseCase(InMemoryPostRepository([])),
+            job_runner=runner,
+            secret_key="test-secret-key-0123456789",
+            clock=lambda: NOON,
+            **app_kwargs,
+        )
+        app.config["TESTING"] = True
+        client = app.test_client()
+        html = client.get("/login").get_data(as_text=True)
+        token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+        client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
+        token = re.search(r'name="csrf_token" value="([^"]+)"',
+                          client.get("/").get_data(as_text=True)).group(1)
+        resp = client.post("/relogin", data={"csrf_token": token})
+        page = client.get(resp.headers["Location"]).get_data(as_text=True)
+        release.set()
+        return page
+
+    def test_앱이_정한_승인_안내가_나온다(self):
+        page = self._running_login_page(approve_hint="카카오톡에서 로그인 요청을 승인하세요.")
+        assert "카카오톡에서 로그인 요청을 승인하세요." in page
+        assert "네이버" not in page
+
+    def test_기본_안내는_특정_앱_이름을_쓰지_않는다(self):
+        page = self._running_login_page()
+        assert "승인하세요" in page
+        assert "네이버" not in page

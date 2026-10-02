@@ -39,16 +39,19 @@ class PlatformProfile:
     worksheet: str
     daily_limit: int
     relogin_label: str = "다시 로그인"
+    approve_hint: str = "휴대폰에서 로그인 요청을 승인하세요."
 
 
 def resolve_platform(name: str, config: Config) -> PlatformProfile:
     if name == "tistory":
         return PlatformProfile(
             "tistory", PORTAL_NAME, "", DEFAULT_DAILY_LIMIT, "카카오톡 다시 로그인",
+            "카카오톡에서 로그인 요청을 승인하세요.",
         )
     if name == "naver":
         return PlatformProfile(
             "naver", PORTAL_NAME, config.naver_sheet_tab, NAVER_DAILY_LIMIT, "네이버 다시 로그인",
+            "폰 네이버 앱에서 로그인을 승인하세요.",
         )
     raise ValueError(f"지원하지 않는 플랫폼: {name} (tistory 또는 naver)")
 

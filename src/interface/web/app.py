@@ -99,6 +99,7 @@ def create_app(
     allowed_hosts: frozenset[str] | None = None,
     brand_label: str = "통합 블로그 포탈",
     relogin_label: str = "다시 로그인",
+    approve_hint: str = "휴대폰에서 로그인 요청을 승인하세요.",
     edit_post: EditPostUseCase | None = None,
     preview: Callable[[PostSummary], str] | None = None,
     preview_raw: bool = False,
@@ -125,6 +126,7 @@ def create_app(
     login_throttle = throttle or LoginThrottle()
     _register_guards(app, allowed_hosts, brand_label)
     app.jinja_env.globals["relogin_label"] = relogin_label
+    app.jinja_env.globals["approve_hint"] = approve_hint
     app.jinja_env.globals["daily_limit"] = daily_limit  # 목록 상단 발행 현황(없으면 숨김)
     app.jinja_env.globals["hub_tabs"] = HUB_TABS if hub_tab else ()
     app.jinja_env.globals["hub_tab"] = hub_tab

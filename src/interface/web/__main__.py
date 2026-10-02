@@ -357,6 +357,7 @@ def _build_app(
         allowed_hosts=settings.allowed_hosts,
         brand_label=profile.label,
         relogin_label=profile.relogin_label,
+        approve_hint=profile.approve_hint,
         hub_tab=hub_tab,
     )
 

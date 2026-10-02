@@ -28,7 +28,6 @@ class JsonSiteProfileAdapter(SiteProfilePort):
                 tistory_id=c["tistory_id"],
                 aliases=tuple(c.get("aliases", [])),
                 keyword_patterns=tuple(c.get("keyword_patterns", [])),
-                view_channel=c.get("view_channel", ""),
             )
             for c in data.get("categories", [])
         )
@@ -50,7 +49,6 @@ class JsonSiteProfileAdapter(SiteProfilePort):
                 {
                     "name": c.name,
                     "tistory_id": c.tistory_id,
-                    "view_channel": c.view_channel,
                     "aliases": list(c.aliases),
                     "keyword_patterns": list(c.keyword_patterns),
                 }

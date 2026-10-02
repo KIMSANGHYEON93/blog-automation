@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 from src.domain.exceptions import DailyPublishLimitError
@@ -78,19 +79,32 @@ def call_tistory_post_api(
     return None
 
 
-# 수정 화면(/manage/newpost/<id>)의 window.Config.post.published = 원래 발행 시각.
-# 에디터는 수정 저장 때 이 값을 그대로 돌려보낸다. '1'은 '지금 발행'이라
-# 보내는 순간 발행일이 수정 시각으로 바뀌고 글이 RSS 맨 위로 올라간다(2026-10-01 실측).
+# 수정 저장 때 '1'(지금 발행)을 보내면 발행일이 수정 시각으로 바뀌고 글이 RSS 맨 위로
+# 올라간다(2026-10-01 실측). 그래서 수정 화면(/manage/newpost/<id>)에서 원래 발행 시각을 읽는다.
+# 1순위: window.Config.post.published — 2026-10-02 실측에서는 수정 화면에 Config가 없었다.
 _JS_ORIGINAL_PUBLISHED = """
 var p = (window.Config || {}).post || {};
 return (String(p.id) === String(arguments[0]) && p.published) ? String(p.published) : '';
 """
+_JS_PAGE_SOURCE = "return document.documentElement.outerHTML;"
+# 2순위: 페이지에 심긴 글 JSON의 "orgPublished":"1790825209"(유닉스 초). 따옴표가
+# 이스케이프된 형태(\"orgPublished\":\"…\")로 들어 있어 백슬래시를 허용한다.
+_ORG_PUBLISHED_RE = re.compile(r'orgPublished\\*"\s*:\s*\\*"(\d{9,13})\\*"')
+
+
+def parse_org_published(page_source: str) -> str:
+    """수정 화면 HTML에서 원래 발행 시각(유닉스 초) 문자열. 없거나 형식이 다르면 ''."""
+    match = _ORG_PUBLISHED_RE.search(page_source or "")
+    return match.group(1) if match else ""
 
 
 def _original_published(sb, entry_id: str) -> str:
     """수정 화면에 로드된 글의 원래 발행 시각. 다른 글이거나 못 읽으면 ''."""
     try:
-        return str(sb.execute_script(_JS_ORIGINAL_PUBLISHED, entry_id) or "")
+        published = str(sb.execute_script(_JS_ORIGINAL_PUBLISHED, entry_id) or "")
+        if published:
+            return published
+        return parse_org_published(str(sb.execute_script(_JS_PAGE_SOURCE) or ""))
     except Exception as e:
         logger.error(f"원래 발행일 조회 실패: {e}")
         return ""

@@ -126,3 +126,44 @@ class TestMismatchedEntryIsRejected:
 )
 def test_is_expected_entry(entry_id, returned, expected):
     assert api_publisher._is_expected_entry(returned, entry_id) is expected
+
+
+class TestOrgPublishedFromPageSource:
+    """수정 화면에는 window.Config가 없다 — 원래 발행 시각은 페이지 JSON의 orgPublished에 있다
+    (2026-10-02 실측: "published":0,"orgPublished":"1790825209")."""
+
+    ESCAPED = r'\"published\":0,\"orgPublished\":\"1790825209\",\"category\":\"9\"'
+    PLAIN = '{"published":0,"orgPublished":"1759100000","category":"1"}'
+
+    def test_이스케이프된_JSON에서_읽는다(self):
+        assert api_publisher.parse_org_published(self.ESCAPED) == "1790825209"
+
+    def test_일반_JSON에서도_읽는다(self):
+        assert api_publisher.parse_org_published(self.PLAIN) == "1759100000"
+
+    @pytest.mark.parametrize("html", [
+        "", "<html>없음</html>", '"orgPublished":"0"', '"orgPublished":""', '"orgPublished":"abc"',
+    ])
+    def test_없거나_유효하지_않으면_빈_문자열(self, html):
+        assert api_publisher.parse_org_published(html) == ""
+
+    def test_Config가_없으면_페이지_소스에서_읽는다(self):
+        class NoConfigSB:
+            def execute_script(self, _script, *args):
+                return "" if args else TestOrgPublishedFromPageSource.ESCAPED
+
+        assert api_publisher._original_published(NoConfigSB(), "528") == "1790825209"
+
+    def test_Config가_있으면_그_값을_먼저_쓴다(self):
+        class ConfigSB:
+            def execute_script(self, _script, *args):
+                return "1759100000" if args else TestOrgPublishedFromPageSource.ESCAPED
+
+        assert api_publisher._original_published(ConfigSB(), "528") == "1759100000"
+
+    def test_둘_다_못_읽으면_빈_문자열(self):
+        class EmptySB:
+            def execute_script(self, _script, *args):
+                return ""
+
+        assert api_publisher._original_published(EmptySB(), "528") == ""

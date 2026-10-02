@@ -100,6 +100,23 @@ class Post:
         self.status = PostStatus.WAITING
         self.error_message = ""
 
+    def publish_tags(self, max_tags: int = 5) -> list[str]:
+        """발행에 쓸 태그. n8n이 tags를 빠뜨리면 태그 없이 발행되던 문제 때문에,
+        시트 태그가 비면 키워드 + 내부 링크 키워드로 대신한다(시트 태그는 그대로)."""
+        if self.content is None:
+            return []
+        sheet_tags = self.content.tag_list()
+        if sheet_tags:
+            return sheet_tags
+        seen: set[str] = set()
+        tags: list[str] = []
+        for raw in [self.keyword, *self.content.internal_keyword_list()]:
+            tag = (raw or "").strip()
+            if tag and tag.lower() not in seen:
+                seen.add(tag.lower())
+                tags.append(tag)
+        return tags[:max_tags]
+
     def is_publishable(self) -> bool:
         """True only when PENDING + quality body + sufficient length + quality_score."""
         return (

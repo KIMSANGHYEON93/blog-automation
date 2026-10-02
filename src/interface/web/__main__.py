@@ -65,6 +65,7 @@ from src.interface.web.hub import build_hub
 from src.interface.web.jobs import PublishJobRunner
 from src.interface.web.platform import (
     PlatformProfile,
+    build_kakao_relogin,
     build_relogin,
     dashboard_url,
     make_browser,
@@ -328,7 +329,11 @@ def _build_app(
             revise=_build_reviser(config, repo, profile) if profile.name == "naver" else None,
             login=(
                 build_relogin(config, PROJECT_ROOT, DirectoryPipelineLock(LOCK_DIR))
-                if profile.name == "naver" else None
+                if profile.name == "naver"
+                else build_kakao_relogin(
+                    config, PROJECT_ROOT, DirectoryPipelineLock(LOCK_DIR),
+                    _load_site_profile(config), build_notification(),
+                )
             ),
             generate=(
                 build_generator(
@@ -351,6 +356,7 @@ def _build_app(
         secure_cookies=settings.secure_cookies,
         allowed_hosts=settings.allowed_hosts,
         brand_label=profile.label,
+        relogin_label=profile.relogin_label,
         hub_tab=hub_tab,
     )
 

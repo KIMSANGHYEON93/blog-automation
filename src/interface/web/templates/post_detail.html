@@ -79,7 +79,7 @@
   </form>
   {% endif %}
   {% if editing_enabled and post.can_archive %}
-  <form method="post" action="{{ url_for('archive_post', row_index=post.row_index) }}" class="restore">
+  <form method="post" action="{{ url_for('archive_post', row_index=post.row_index) }}" class="restore restore-danger">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit">보관</button>
     <span class="sub">발행 대상에서 뺍니다(보류). 되돌릴 수 있습니다.</span>

@@ -17,6 +17,7 @@ from src.infrastructure.config import Config
 from src.infrastructure.notification.null_adapter import NullNotificationAdapter
 from src.infrastructure.notification.telegram_adapter import TelegramNotificationAdapter
 from src.interface.web.platform import (
+    build_kakao_relogin,
     build_relogin,
     dashboard_url,
     make_browser,
@@ -46,7 +47,14 @@ def test_naver는_별도_탭과_쿼터_1건(config):
     profile = resolve_platform("naver", config)
     assert profile.worksheet == "naver_calendar"
     assert profile.daily_limit == 1
-    assert "네이버" in profile.label
+    assert profile.relogin_label == "네이버 다시 로그인"
+
+
+def test_포탈_이름은_두_블로그가_같다(config):
+    assert resolve_platform("naver", config).label == "통합 블로그 포탈"
+    tistory = resolve_platform("tistory", config)
+    assert tistory.label == "통합 블로그 포탈"
+    assert tistory.relogin_label == "카카오톡 다시 로그인"
 
 
 def test_모르는_플랫폼은_거부(config):
@@ -147,3 +155,56 @@ def test_재로그인은_락이_잡혀_있으면_거부(config, tmp_path, monkey
     )
     result = build_relogin(config, tmp_path, _Lock(free=False))(0)
     assert result.outcome is ManualPublishOutcome.REJECTED and called == []
+
+
+class _KakaoBrowser:
+    def __init__(self, ok=True, error=None):
+        self.ok, self.error, self.stopped = ok, error, False
+
+    def start(self):
+        pass
+
+    def login(self):
+        if self.error:
+            raise self.error
+        return self.ok
+
+    def stop(self):
+        self.stopped = True
+
+
+def _kakao(config, tmp_path, monkeypatch, browser, lock):
+    monkeypatch.setattr(
+        "src.interface.web.platform.make_browser", lambda *args, **kwargs: browser,
+    )
+    return build_kakao_relogin(config, tmp_path, lock, None, None)(0)
+
+
+def test_카카오_재로그인_성공(config, tmp_path, monkeypatch):
+    browser, lock = _KakaoBrowser(), _Lock()
+    result = _kakao(config, tmp_path, monkeypatch, browser, lock)
+    assert result.outcome is ManualPublishOutcome.LOGGED_IN
+    assert browser.stopped and lock.released
+
+
+def test_카카오_재로그인_실패는_브라우저를_닫고_락을_푼다(config, tmp_path, monkeypatch):
+    browser, lock = _KakaoBrowser(ok=False), _Lock()
+    result = _kakao(config, tmp_path, monkeypatch, browser, lock)
+    assert result.outcome is ManualPublishOutcome.FAILED
+    assert "승인" in result.message and browser.stopped and lock.released
+
+
+def test_카카오_재로그인_중_예외도_결과로_돌려주고_락을_푼다(config, tmp_path, monkeypatch):
+    browser, lock = _KakaoBrowser(error=RuntimeError("chrome 실패")), _Lock()
+    result = _kakao(config, tmp_path, monkeypatch, browser, lock)
+    assert result.outcome is ManualPublishOutcome.FAILED
+    assert "RuntimeError" in result.message and browser.stopped and lock.released
+
+
+def test_카카오_재로그인은_락이_잡혀_있으면_브라우저를_열지_않는다(config, tmp_path, monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("브라우저를 열면 안 된다")
+
+    monkeypatch.setattr("src.interface.web.platform.make_browser", forbidden)
+    result = build_kakao_relogin(config, tmp_path, _Lock(free=False), None, None)(0)
+    assert result.outcome is ManualPublishOutcome.REJECTED

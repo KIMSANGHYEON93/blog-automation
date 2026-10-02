@@ -82,7 +82,7 @@ class KeywordDesk(Protocol):
 
 KEYWORD_MAX_LENGTH = 60
 JOB_LABELS = {"publish": "수동 발행", "draft": "임시저장 시험", "generate": "글 생성",
-              "revise": "수정 발행", "login": "네이버 로그인"}
+              "revise": "수정 발행", "login": "다시 로그인"}
 # 통합 대시보드(hub) 탭: (플랫폼, 표시 이름, 마운트 주소) — hub.py가 이 주소로 앱을 붙인다
 HUB_TABS = (("naver", "네이버", "/naver/"), ("tistory", "티스토리", "/tistory/"))
 
@@ -97,7 +97,8 @@ def create_app(
     secure_cookies: bool = False,
     session_hours: int = 8,
     allowed_hosts: frozenset[str] | None = None,
-    brand_label: str = "블로그 관리자",
+    brand_label: str = "통합 블로그 포탈",
+    relogin_label: str = "다시 로그인",
     edit_post: EditPostUseCase | None = None,
     preview: Callable[[PostSummary], str] | None = None,
     preview_raw: bool = False,
@@ -123,6 +124,7 @@ def create_app(
     )
     login_throttle = throttle or LoginThrottle()
     _register_guards(app, allowed_hosts, brand_label)
+    app.jinja_env.globals["relogin_label"] = relogin_label
     app.jinja_env.globals["daily_limit"] = daily_limit  # 목록 상단 발행 현황(없으면 숨김)
     app.jinja_env.globals["hub_tabs"] = HUB_TABS if hub_tab else ()
     app.jinja_env.globals["hub_tab"] = hub_tab
@@ -323,8 +325,8 @@ def _register_check_routes(
             return redirect(url_for("index"))
         return redirect(url_for("job_status", job_id=job_id))
 
-    @app.post("/naver/login")
-    def naver_login():  # type: ignore[no-untyped-def]
+    @app.post("/relogin")
+    def relogin():  # type: ignore[no-untyped-def]
         if not runner.enabled("login"):
             abort(404)
         if _refuse_near_automation(clock):

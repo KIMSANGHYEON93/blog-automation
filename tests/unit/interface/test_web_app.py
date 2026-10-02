@@ -283,11 +283,11 @@ def test_brand_label이_화면에_표시된다():
             publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
         ),
         secret_key="test-secret-key-0123456789",
-        brand_label="네이버 블로그 관리자",
+        brand_label="통합 블로그 포탈",
     )
     app.config["TESTING"] = True
     html = app.test_client().get("/login").get_data(as_text=True)
-    assert re.search(r"<title>[^<]*네이버 블로그 관리자[^<]*</title>", html)
+    assert re.search(r"<title>[^<]*통합 블로그 포탈[^<]*</title>", html)
 
 
 def test_상세_화면에_본문이_이스케이프되어_보인다():
@@ -719,16 +719,22 @@ class TestNaverLogin:
 
     def test_네이버_대시보드에만_버튼이_있다(self):
         client, _ = self._client([])
-        assert 'action="/naver/login"' in client.get("/").get_data(as_text=True)
+        assert 'action="/relogin"' in client.get("/").get_data(as_text=True)
         h = Harness()
         h.login()
-        assert 'action="/naver/login"' not in h.client.get("/").get_data(as_text=True)
-        assert h.client.post("/naver/login", data={"csrf_token": h.csrf("/")}).status_code == 404
+        assert 'action="/relogin"' not in h.client.get("/").get_data(as_text=True)
+        assert h.client.post("/relogin", data={"csrf_token": h.csrf("/")}).status_code == 404
+
+    def test_버튼_문구는_앱이_정한다(self):
+        client, _ = self._client([])
+        html = client.get("/").get_data(as_text=True)
+        assert "다시 로그인</button>" in html
+        assert 'class="actions"' in html
 
     def test_로그인은_작업으로_돈다(self):
         calls: list[int] = []
         client, runner = self._client(calls)
-        resp = client.post("/naver/login", data={"csrf_token": self._token(client)})
+        resp = client.post("/relogin", data={"csrf_token": self._token(client)})
         job_id = resp.headers["Location"].rsplit("/", 1)[-1]
         job = runner.wait(job_id, timeout=5)
         assert job.result.outcome is ManualPublishOutcome.LOGGED_IN and calls == [0]
@@ -738,13 +744,13 @@ class TestNaverLogin:
     def test_CSRF_없으면_거부(self):
         calls: list[int] = []
         client, _ = self._client(calls)
-        assert client.post("/naver/login").status_code == 400
+        assert client.post("/relogin").status_code == 400
         assert calls == []
 
     def test_자동_실행_직전에는_거부(self):
         calls: list[int] = []
         client, _ = self._client(calls, now=datetime(2026, 9, 28, 8, 50))
-        resp = client.post("/naver/login", data={"csrf_token": self._token(client)},
+        resp = client.post("/relogin", data={"csrf_token": self._token(client)},
                            follow_redirects=True)
         assert "09:00 자동 실행" in resp.get_data(as_text=True) and calls == []
 

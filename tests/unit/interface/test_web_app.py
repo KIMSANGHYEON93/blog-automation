@@ -36,7 +36,8 @@ def _post(row, keyword, status=PostStatus.PENDING, body_len=3500):
 
 
 class Harness:
-    def __init__(self, publish=None, allowed_hosts=None, now=NOON, revise=None, hub_tab=None):
+    def __init__(self, publish=None, allowed_hosts=None, now=NOON, revise=None, hub_tab=None,
+                 preview=None, preview_raw=False):
         self.published_rows: list[int] = []
         published = _post(4, "Kafka 입문", PostStatus.PUBLISHED)
         published.published_url = "https://blog.tistory.com/4"
@@ -68,6 +69,8 @@ class Harness:
             edit_post=EditPostUseCase(repo),
             clock=lambda: now,
             hub_tab=hub_tab,
+            preview=preview,
+            preview_raw=preview_raw,
         )
         app.config["TESTING"] = True
         self.client = app.test_client()
@@ -792,3 +795,30 @@ class TestHubTabs:
     def test_세션_쿠키는_루트_경로(self, h):
         cookie = h.login().headers["Set-Cookie"]
         assert re.search(r"Path=/(;|$)", cookie), cookie
+
+
+class TestRawPreview:
+    BODY = ('<div class="naver-cta" style="background:#f8f9fa">'
+            '<a href="https://blog.naver.com/x">네이버 블로그 이웃 추가</a></div>')
+
+    def test_티스토리_미리보기는_sandbox_CSP로_최종_HTML을_그대로(self):
+        h = Harness(preview=lambda post: self.BODY, preview_raw=True)
+        h.login()
+        resp = h.client.get("/posts/2/preview")
+        assert resp.status_code == 200
+        csp = resp.headers["Content-Security-Policy"]
+        assert csp.startswith("sandbox; default-src 'none'; style-src 'unsafe-inline'")
+        html = resp.get_data(as_text=True)
+        assert self.BODY in html
+        assert 'href="/posts/2"' in html  # 상세로 돌아가는 링크
+
+    def test_네이버_미리보기는_기존_CSP(self):
+        h = Harness(preview=lambda post: "<p>본문</p>")
+        h.login()
+        resp = h.client.get("/posts/2/preview")
+        assert "default-src 'self'" in resp.headers["Content-Security-Policy"]
+
+    def test_다른_페이지는_기존_CSP(self):
+        h = Harness(preview=lambda post: self.BODY, preview_raw=True)
+        h.login()
+        assert "default-src 'self'" in h.client.get("/").headers["Content-Security-Policy"]

@@ -170,12 +170,12 @@ class TestTocStyles:
         assert "border-radius:8px" in toc["style"]
 
     def test_toc_heading_style(self):
-        html = '<div class="toc-container"><h2>목차</h2></div>'
+        html = '<div class="toc-container"><p class="toc-title"><strong>목차</strong></p></div>'
         result = apply_inline_styles(html)
         soup = _parse(result)
-        h2 = soup.find("h2")
-        assert "margin-top:0" in h2["style"]
-        assert "font-size:18px" in h2["style"]
+        p = soup.find("p", class_="toc-title")
+        assert "margin-top:0" in p["style"]
+        assert "font-size:18px" in p["style"]
 
     def test_toc_link_style(self):
         html = '<div class="toc-container"><a href="#x">Link</a></div>'
@@ -215,17 +215,21 @@ class TestHeadingStyles:
         assert "font-size:20px" in h3["style"]
         assert "border-left:3px solid #4a90d9" in h3["style"]
 
-    def test_toc_h2_excluded_from_heading_style(self):
-        """TOC 내부 <h2>목차</h2>는 헤딩 스타일이 아닌 TOC 스타일이 적용됨."""
-        html = '<div class="toc-container"><h2>목차</h2></div><h2>Real Title</h2>'
+    def test_toc_title_paragraph_excluded_from_heading_style(self):
+        """TOC 내부 <p class="toc-title">는 단락 스타일이 아닌 TOC 스타일이 적용됨."""
+        html = (
+            '<div class="toc-container"><p class="toc-title"><strong>목차</strong></p></div>'
+            '<h2>Real Title</h2>'
+        )
         result = apply_inline_styles(html)
         soup = _parse(result)
-        h2s = soup.find_all("h2")
-        # TOC h2: TOC 스타일
-        assert "margin-top:0" in h2s[0]["style"]
-        assert "border-bottom:2px solid #4a90d9" not in h2s[0]["style"]
+        p = soup.find("p", class_="toc-title")
+        h2 = soup.find("h2")
+        # TOC p: TOC 스타일
+        assert "margin-top:0" in p["style"]
+        assert "line-height:1.8" not in p["style"]
         # Normal h2: 헤딩 스타일
-        assert "border-bottom:2px solid #4a90d9" in h2s[1]["style"]
+        assert "border-bottom:2px solid #4a90d9" in h2["style"]
 
 
 # ---------------------------------------------------------------------------
@@ -424,3 +428,16 @@ class TestFullPipeline:
         # HR styled
         hr = soup.find("hr")
         assert "border:none" in hr["style"]
+
+
+def test_목차_제목_문단에_스타일이_붙는다():
+    """TOC 제목 <p class="toc-title">에 인라인 스타일이 적용되는지 확인."""
+    html = (
+        '<div class="toc-container"><p class="toc-title"><strong>목차</strong></p>'
+        '<div class="toc"><ul><li><a href="#a">A</a></li></ul></div></div>'
+    )
+    out = apply_inline_styles(html)
+    start = out.find('<p class="toc-title"')
+    end = out.find("<strong>목차")
+    title = out[start:end]
+    assert "font-size:18px" in title

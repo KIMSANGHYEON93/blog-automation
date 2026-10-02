@@ -45,6 +45,7 @@ from src.domain.value_objects.site_profile import SiteProfile
 from src.infrastructure.browser.naver.adapter import DRAFT_ONLY_MESSAGE, MAX_IMAGES
 from src.infrastructure.browser.naver.preview import build_preview_html
 from src.infrastructure.browser.tistory_editor import set_site_profile
+from src.infrastructure.browser.tistory_render import render_tistory_html
 from src.infrastructure.config import Config
 from src.infrastructure.locking.directory_lock import DirectoryPipelineLock
 from src.infrastructure.logging_setup import setup_logging
@@ -64,6 +65,7 @@ from src.interface.web.hub import build_hub
 from src.interface.web.jobs import PublishJobRunner
 from src.interface.web.platform import (
     PlatformProfile,
+    build_kakao_relogin,
     build_relogin,
     dashboard_url,
     make_browser,
@@ -165,6 +167,14 @@ def _build_drafter(  # type: ignore[no-untyped-def]
         )
 
     return draft
+
+
+def _tistory_preview(repo: GoogleSheetsPostRepository, config: Config, row_index: int) -> str:
+    """티스토리 탭 미리보기 — 발행과 같은 변환으로 최종 HTML. 관련 글은 발행 때 붙는다."""
+    post = next((p for p in repo.find_all() if p.row_index == row_index), None)
+    if post is None or post.content is None or not post.content.body_markdown:
+        return "<p>본문이 없습니다.</p>"
+    return render_tistory_html(post, config.tistory_blog, config.naver_blog_url)
 
 
 def _generation_snapshot(repo: GoogleSheetsPostRepository) -> tuple[int, set[str]]:
@@ -319,7 +329,11 @@ def _build_app(
             revise=_build_reviser(config, repo, profile) if profile.name == "naver" else None,
             login=(
                 build_relogin(config, PROJECT_ROOT, DirectoryPipelineLock(LOCK_DIR))
-                if profile.name == "naver" else None
+                if profile.name == "naver"
+                else build_kakao_relogin(
+                    config, PROJECT_ROOT, DirectoryPipelineLock(LOCK_DIR),
+                    _load_site_profile(config), build_notification(),
+                )
             ),
             generate=(
                 build_generator(
@@ -331,8 +345,10 @@ def _build_app(
         edit_post=EditPostUseCase(repo),
         preview=(
             (lambda post: build_preview_html(post.keyword, post.body_markdown))
-            if profile.name == "naver" else None
+            if profile.name == "naver"
+            else (lambda post: _tistory_preview(repo, config, post.row_index))
         ),
+        preview_raw=profile.name != "naver",
         keywords=_build_keyword_desk(config, repo, profile),
         daily_limit=profile.daily_limit,
         secret_key=settings.secret_key,
@@ -340,6 +356,7 @@ def _build_app(
         secure_cookies=settings.secure_cookies,
         allowed_hosts=settings.allowed_hosts,
         brand_label=profile.label,
+        relogin_label=profile.relogin_label,
         hub_tab=hub_tab,
     )
 

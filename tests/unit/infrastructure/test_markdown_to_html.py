@@ -146,7 +146,8 @@ class TestConvertMarkdownToHtmlEnhanced:
         md = "## 첫 번째 섹션\n\n내용 1\n\n## 두 번째 섹션\n\n내용 2\n\n## 세 번째 섹션\n\n내용 3"
         html = convert_markdown_to_html(md)
         assert 'class="toc-container"' in html
-        assert "<h2>목차</h2>" in html
+        assert '<p class="toc-title"><strong>목차</strong></p>' in html
+        assert "<h2>목차</h2>" not in html
 
     def test_TOC_H2_앞_배치(self):
         """목차가 첫 번째 <h2> 앞에 위치하는지 확인."""
@@ -449,3 +450,11 @@ class TestVerifyFaqSchema:
             assert verify_faq_schema(f"http://127.0.0.1:{port}/test") is False
         finally:
             server.server_close()
+
+
+def test_한글_소제목은_읽히는_앵커가_되고_목차_링크와_맞는다():
+    """한글 소제목이 읽히는 앵커(#작동-원리)로 변환되는지 확인."""
+    html = convert_markdown_to_html("## 작동 원리\n\n본문\n\n## 장점과 한계\n\n본문")
+    assert 'id="작동-원리"' in html
+    assert 'href="#작동-원리"' in html
+    assert 'id="장점과-한계"' in html

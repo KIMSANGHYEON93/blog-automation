@@ -1,5 +1,6 @@
 """Config — Environment-based settings with fail-fast validation."""
 import os
+import re
 from dataclasses import dataclass
 
 
@@ -48,6 +49,14 @@ class Config:
             naver_telegram_bot_token=os.getenv("NAVER_TELEGRAM_BOT_TOKEN", ""),
             telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", ""),
         )
+
+    @property
+    def naver_blog_url(self) -> str:
+        """티스토리 글 끝 CTA 링크. 블로그 주소 형식이 아니면 빈 문자열(CTA 없음)."""
+        blog_id = self.naver_blog_id.strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", blog_id):
+            return ""
+        return f"https://blog.naver.com/{blog_id}"
 
     def validate(self) -> None:
         """필수 환경 변수 누락 시 즉시 중단 (Fail-fast)."""

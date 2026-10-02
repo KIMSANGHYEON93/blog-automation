@@ -182,9 +182,9 @@ def _style_tables(soup: BeautifulSoup) -> None:
 def _style_toc(soup: BeautifulSoup) -> None:
     for toc in soup.find_all("div", class_="toc-container"):
         _merge_style(toc, _TOC_WRAPPER_STYLE)
-        h2 = toc.find("h2")
-        if h2 and h2.get_text(strip=True) == "목차":
-            _merge_style(h2, _TOC_HEADING_STYLE)
+        title = toc.find("p", class_="toc-title")
+        if title is not None:
+            _merge_style(title, _TOC_HEADING_STYLE)
         for a in toc.find_all("a"):
             _merge_style(a, _TOC_LINK_STYLE)
 

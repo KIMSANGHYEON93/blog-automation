@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+from html import escape
 
 logger = logging.getLogger(__name__)
 
@@ -124,13 +125,14 @@ def insert_summary_lead(html_text: str, summary: str) -> str:
 def append_faq_schema(body_markdown: str, faq_ld_json: str) -> str:
     """본문 하단에 FAQ LD+JSON 스키마를 추가.
 
-    JSON 유효성 검증 후 재직렬화하여 </script> 탈출 공격을 방지한다.
+    JSON 유효성 검증 후 재직렬화하고 `<`를 \\u003c로 바꿔(여전히 유효한 JSON),
+    답변에 든 `</script>`·`<!--`가 script 블록을 끝내고 본문에 HTML을 주입하지 못하게 한다.
     """
     import json
 
     try:
         parsed = json.loads(faq_ld_json)
-        safe_json = json.dumps(parsed, ensure_ascii=False)
+        safe_json = json.dumps(parsed, ensure_ascii=False).replace("<", "\\u003c")
     except (json.JSONDecodeError, TypeError) as e:
         logger.error(f"FAQ 스키마 JSON 파싱 실패 — 스키마 삽입 건너뜀: {e}")
         return body_markdown
@@ -141,3 +143,27 @@ def append_faq_schema(body_markdown: str, faq_ld_json: str) -> str:
         '</script>'
     )
     return body_markdown + schema_block
+
+
+_CTA_TEXT = "IT·AI 실무 글을 네이버 블로그에도 올립니다. 이웃 추가하고 새 글 받아 보세요."
+_CTA_BOX_STYLE = (
+    "margin:48px 0 8px;padding:20px 24px;border:1px solid #e9ecef;"
+    "border-radius:8px;background:#f8f9fa;text-align:center"
+)
+_CTA_TEXT_STYLE = "margin:0 0 12px;font-size:16px;color:#1a1a2e"
+_CTA_BUTTON_STYLE = (
+    "display:inline-block;padding:10px 20px;border-radius:6px;background:#03c75a;"
+    "color:#fff;font-weight:700;text-decoration:none"
+)
+
+
+def append_naver_cta(html_text: str, url: str) -> str:
+    """글 맨 끝에 네이버 블로그 이웃 추가 블록. url이 비면 그대로(설정 없음)."""
+    if not url:
+        return html_text
+    return (
+        f'{html_text}\n<div class="naver-cta" style="{_CTA_BOX_STYLE}">'
+        f'<p style="{_CTA_TEXT_STYLE}">{_CTA_TEXT}</p>'
+        f'<a href="{escape(url)}" target="_blank" rel="noopener" style="{_CTA_BUTTON_STYLE}">'
+        f"네이버 블로그 이웃 추가</a></div>"
+    )

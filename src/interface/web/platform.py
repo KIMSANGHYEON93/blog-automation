@@ -29,6 +29,7 @@ from src.infrastructure.notification.null_adapter import NullNotificationAdapter
 from src.infrastructure.notification.telegram_adapter import TelegramNotificationAdapter
 
 NAVER_DAILY_LIMIT = 1
+PORTAL_NAME = "통합 블로그 포탈"  # 헤더·탭 제목·로그인 화면 이름 — 블로그 구분은 상단 탭이 한다
 
 
 @dataclass(frozen=True)
@@ -37,14 +38,17 @@ class PlatformProfile:
     label: str
     worksheet: str
     daily_limit: int
+    relogin_label: str = "다시 로그인"
 
 
 def resolve_platform(name: str, config: Config) -> PlatformProfile:
     if name == "tistory":
-        return PlatformProfile("tistory", "티스토리 블로그 관리자", "", DEFAULT_DAILY_LIMIT)
+        return PlatformProfile(
+            "tistory", PORTAL_NAME, "", DEFAULT_DAILY_LIMIT, "카카오톡 다시 로그인",
+        )
     if name == "naver":
         return PlatformProfile(
-            "naver", "네이버 블로그 관리자", config.naver_sheet_tab, NAVER_DAILY_LIMIT,
+            "naver", PORTAL_NAME, config.naver_sheet_tab, NAVER_DAILY_LIMIT, "네이버 다시 로그인",
         )
     raise ValueError(f"지원하지 않는 플랫폼: {name} (tistory 또는 naver)")
 
@@ -81,6 +85,7 @@ def make_browser(
         site_profile=site_profile,
         # 2FA가 뜨면 브라우저 앞에 사람이 없다 — 즉시 알려야 승인할 수 있다
         notifier=notifier,
+        cta_url=config.naver_blog_url,
     )
 
 
@@ -141,5 +146,47 @@ def build_relogin(
             lock.release()
         outcome = ManualPublishOutcome.LOGGED_IN if ok else ManualPublishOutcome.FAILED
         return ManualPublishResult(outcome, row_index, message)
+
+    return relogin
+
+
+def build_kakao_relogin(
+    config: Config,
+    project_root: Path,
+    lock: PipelineLockPort,
+    site_profile: SiteProfile | None,
+    notifier: NotificationPort | None,
+) -> Callable[[int], ManualPublishResult]:
+    """티스토리 탭의 작업 종류 'login'. 저장된 세션을 먼저 쓰고, 죽었을 때만 카카오 승인을 탄다."""
+    profile = resolve_platform("tistory", config)
+
+    def relogin(row_index: int) -> ManualPublishResult:
+        if not lock.acquire():
+            return ManualPublishResult.rejected(
+                row_index, "자동 파이프라인이 실행 중 — 끝난 뒤 다시 시도하세요",
+            )
+        try:
+            browser = make_browser(profile, config, project_root, notifier, site_profile)
+            browser.start()
+            try:
+                ok = browser.login()
+            finally:
+                browser.stop()
+        except Exception as e:  # 브라우저 기동·카카오 화면 오류도 화면에 이유를 남긴다
+            return ManualPublishResult(
+                ManualPublishOutcome.FAILED, row_index,
+                f"카카오 로그인 중 오류: {type(e).__name__}: {e}",
+            )
+        finally:
+            lock.release()
+        if ok:
+            return ManualPublishResult(
+                ManualPublishOutcome.LOGGED_IN, row_index,
+                "카카오 로그인 성공 — 티스토리 세션을 저장했습니다",
+            )
+        return ManualPublishResult(
+            ManualPublishOutcome.FAILED, row_index,
+            "카카오 로그인 실패 — 카카오톡 승인 시간(5분)이 지났거나 계정 확인이 필요합니다",
+        )
 
     return relogin

@@ -153,7 +153,15 @@ th:last-child, td:last-child { padding-right: 20px; }
 }
 .edit textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 .restore { margin-top: 12px; }
-.generate { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+/* 작업 버튼: 한 줄에 같은 폭·같은 높이로 나란히, 설명은 아래 한 줄 */
+.actions { display: flex; gap: 8px; margin-bottom: 6px; }
+.actions form { flex: 1 1 0; min-width: 0; }
+.actions button { width: 100%; height: 40px; }
+.hints { margin: 0 0 16px; }
+.hints span { display: block; }
+/* 되돌리기 어려운 동작(보관)은 다른 버튼과 떨어뜨려 눌러 잘못 누르지 않게 */
+.restore-danger { margin-top: 28px; padding-top: 16px; border-top: .5px solid var(--line); }
+.restore-danger button { color: var(--err); }
 .checks { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
 
 /* 네이버 모바일 글 모양 흉내 — 가운데 정렬 줄, 인용구 소제목, 사진 자리 */
@@ -197,9 +205,7 @@ th:last-child, td:last-child { padding-right: 20px; }
 @media (max-width: 640px) {
   .topbar { padding: 8px 20px 8px 16px; height: auto; min-height: 52px; flex-wrap: wrap; }
   .topbar nav.tabs { order: 3; width: 100%; }
-  .topbar nav.tabs a { flex: 1; text-align: center; padding: 8px 0; }
-  .generate { flex-direction: column; align-items: stretch; gap: 6px; }
-  .generate button { width: 100%; }
+  .topbar nav.tabs a { flex: 1; text-align: center; padding: 12px 0; }
   td { padding-top: 12px; padding-bottom: 12px; }
   .open { padding: 10px 4px 10px 16px; }
   .topbar::before { display: none; }
@@ -218,7 +224,7 @@ th:last-child, td:last-child { padding-right: 20px; }
 }
 /* 터치: 버튼 44px, 입력 16px(iOS는 16px 미만 입력칸에 포커스하면 화면을 확대한다) */
 @media (pointer: coarse) {
-  button, .search button { height: 44px; padding: 0 18px; font-size: 16px; }
+  button, .search button, .actions button { height: 44px; padding: 0 18px; font-size: 16px; }
   button.link { height: auto; padding: 0; font-size: 15px; }
   input { height: 44px; font-size: 16px; }
   .edit textarea { font-size: 16px; }

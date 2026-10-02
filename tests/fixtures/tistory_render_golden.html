@@ -1,0 +1,39 @@
+<head><meta content="width=device-width, initial-scale=1" name="viewport"/><link href="https://images.unsplash.com" rel="dns-prefetch"/><link href="https://kroki.io" rel="dns-prefetch"/><link crossorigin="" href="https://kroki.io" rel="preconnect"/><link crossorigin="" href="https://images.unsplash.com" rel="preconnect"/><link href="https://example.com" rel="preconnect"/><link as="image" fetchpriority="high" href="https://example.com/a.png" rel="preload"/></head><p class="post-summary" style="margin:16px 0;line-height:1.8;color:#333;word-break:keep-all">IaC 개념과 작동 원리를 정리했습니다.</p><div class="toc-container" style="background:#f8f9fa;border:1px solid #e9ecef;border-left:4px solid #4a90d9;border-radius:8px;padding:20px 24px;margin:24px 0"><p class="toc-title" style="margin-top:0;margin-bottom:12px;font-size:18px"><strong>목차</strong></p><div class="toc">
+<ul>
+<li><a href="#iac란" style="color:#4a90d9;text-decoration:none">IaC란?</a></li>
+<li><a href="#작동-원리" style="color:#4a90d9;text-decoration:none">작동 원리</a><ul>
+<li><a href="#선언형" style="color:#4a90d9;text-decoration:none">선언형</a></li>
+</ul>
+</li>
+<li><a href="#faq" style="color:#4a90d9;text-decoration:none">FAQ</a></li>
+</ul>
+</div>
+</div>
+<h2 id="iac란" style="font-size:24px;font-weight:700;color:#1a1a2e;margin:40px 0 16px;padding-bottom:8px;border-bottom:2px solid #4a90d9">IaC란?</h2>
+<p style="margin:16px 0;line-height:1.8;color:#333;word-break:keep-all">IaC는 인프라를 코드로 관리합니다. <a href="https://kimsanghyeon.tistory.com/100" style="color:#4a90d9;text-decoration:none">Terraform</a>을 많이 씁니다.</p>
+<p style="margin:16px 0;line-height:1.8;color:#333;word-break:keep-all"><img alt="다이어그램" decoding="async" fetchpriority="high" src="https://example.com/a.png" style="max-width:100%;height:auto"/></p>
+<h2 id="작동-원리" style="font-size:24px;font-weight:700;color:#1a1a2e;margin:40px 0 16px;padding-bottom:8px;border-bottom:2px solid #4a90d9">작동 원리</h2>
+<h3 id="선언형" style="font-size:20px;font-weight:600;color:#2d2d44;margin:32px 0 12px;padding-left:12px;border-left:3px solid #4a90d9">선언형</h3>
+<p style="margin:16px 0;line-height:1.8;color:#333;word-break:keep-all">원하는 상태를 적습니다. <a href="https://developer.hashicorp.com/terraform" rel="nofollow noopener" style="color:#4a90d9;text-decoration:none" target="_blank">공식 문서</a></p>
+<div class="highlight" style="background: #f8f8f8;background:#282c34;border-radius:8px;margin:20px 0;overflow-x:auto"><pre style="line-height: 125%;padding:16px 20px;margin:0;font-size:14px;line-height:1.5"><span></span><code><span style="color: #008000;">print</span>(<span style="color: #BA2121;">'hi'</span>)
+</code></pre></div>
+<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table style="width:100%;border-collapse:collapse;margin:24px 0;font-size:15px;line-height:1.6">
+<thead>
+<tr>
+<th style="background:#f8f9fa;border:1px solid #dee2e6;padding:12px 16px;text-align:left;font-weight:600">도구</th>
+<th style="background:#f8f9fa;border:1px solid #dee2e6;padding:12px 16px;text-align:left;font-weight:600">방식</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="border:1px solid #dee2e6;padding:10px 16px">Terraform</td>
+<td style="border:1px solid #dee2e6;padding:10px 16px">선언형</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="faq" style="font-size:24px;font-weight:700;color:#1a1a2e;margin:40px 0 16px;padding-bottom:8px;border-bottom:2px solid #4a90d9">FAQ</h2>
+<p style="margin:16px 0;line-height:1.8;color:#333;word-break:keep-all"><strong>Q. 어렵나요?</strong></p>
+<p style="margin:16px 0;line-height:1.8;color:#333;word-break:keep-all">아닙니다.</p>
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "어렵나요?", "acceptedAnswer": {"@type": "Answer", "text": "아닙니다."}}]}
+</script>

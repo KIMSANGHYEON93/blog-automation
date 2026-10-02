@@ -16,6 +16,7 @@ from flask import (
     Flask,
     abort,
     flash,
+    make_response,
     redirect,
     render_template,
     request,
@@ -49,6 +50,12 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
 }
+# 티스토리 미리보기: 블로그에 들어갈 HTML을 인라인 스타일째 보여 준다.
+# sandbox라 스크립트·쿠키·폼은 막힌다
+PREVIEW_CSP = (
+    "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; "
+    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+)
 
 
 class PostReader(Protocol):
@@ -75,7 +82,7 @@ class KeywordDesk(Protocol):
 
 KEYWORD_MAX_LENGTH = 60
 JOB_LABELS = {"publish": "수동 발행", "draft": "임시저장 시험", "generate": "글 생성",
-              "revise": "수정 발행", "login": "네이버 로그인"}
+              "revise": "수정 발행", "login": "다시 로그인"}
 # 통합 대시보드(hub) 탭: (플랫폼, 표시 이름, 마운트 주소) — hub.py가 이 주소로 앱을 붙인다
 HUB_TABS = (("naver", "네이버", "/naver/"), ("tistory", "티스토리", "/tistory/"))
 
@@ -90,9 +97,11 @@ def create_app(
     secure_cookies: bool = False,
     session_hours: int = 8,
     allowed_hosts: frozenset[str] | None = None,
-    brand_label: str = "블로그 관리자",
+    brand_label: str = "통합 블로그 포탈",
+    relogin_label: str = "다시 로그인",
     edit_post: EditPostUseCase | None = None,
     preview: Callable[[PostSummary], str] | None = None,
+    preview_raw: bool = False,
     keywords: KeywordDesk | None = None,
     daily_limit: int | None = None,
     clock: Callable[[], datetime] = datetime.now,
@@ -115,6 +124,7 @@ def create_app(
     )
     login_throttle = throttle or LoginThrottle()
     _register_guards(app, allowed_hosts, brand_label)
+    app.jinja_env.globals["relogin_label"] = relogin_label
     app.jinja_env.globals["daily_limit"] = daily_limit  # 목록 상단 발행 현황(없으면 숨김)
     app.jinja_env.globals["hub_tabs"] = HUB_TABS if hub_tab else ()
     app.jinja_env.globals["hub_tab"] = hub_tab
@@ -122,7 +132,7 @@ def create_app(
     _register_dashboard_routes(app, list_posts, job_runner, clock)
     if edit_post is not None:
         _register_edit_routes(app, edit_post)
-    _register_check_routes(app, list_posts, job_runner, preview, clock)
+    _register_check_routes(app, list_posts, job_runner, preview, preview_raw, clock)
     if keywords is not None:
         _register_keyword_routes(app, keywords)
     return app
@@ -283,6 +293,7 @@ def _register_check_routes(
     reader: PostReader,
     runner: PublishJobRunner,
     preview: Callable[[PostSummary], str] | None,
+    preview_raw: bool,
     clock: Callable[[], datetime],
 ) -> None:
     """발행 전 점검: 미리보기(변환 HTML)와 임시저장 시험(실제 에디터, 시트 변경 없음)."""
@@ -314,8 +325,8 @@ def _register_check_routes(
             return redirect(url_for("index"))
         return redirect(url_for("job_status", job_id=job_id))
 
-    @app.post("/naver/login")
-    def naver_login():  # type: ignore[no-untyped-def]
+    @app.post("/relogin")
+    def relogin():  # type: ignore[no-untyped-def]
         if not runner.enabled("login"):
             abort(404)
         if _refuse_near_automation(clock):
@@ -331,6 +342,13 @@ def _register_check_routes(
         post = reader.get(row_index)
         if preview is None or post is None:
             abort(404)
+        if preview_raw:
+            # 본문은 markdown_converter가 bleach로 정리한 HTML — 그래도 sandbox로 격리
+            response = make_response(
+                render_template("preview_raw.html", post=post, body_html=preview(post)),
+            )
+            response.headers["Content-Security-Policy"] = PREVIEW_CSP
+            return response
         # preview는 허용 태그만 남긴 HTML을 돌려준다(naver/preview.py) — 그래서 safe로 렌더
         return render_template("preview.html", post=post, body_html=preview(post))
 

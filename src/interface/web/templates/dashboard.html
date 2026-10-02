@@ -5,19 +5,25 @@
   {{ job_labels[active_job.kind] }}{% if active_job.kind not in ("generate", "login") %}({{ active_job.row_index }}행){% endif %} 진행 중 —
   <a href="{{ url_for('job_status', job_id=active_job.job_id) }}">진행 상황 보기</a>
 </div>
-{% elif generate_enabled %}
-<form method="post" action="{{ url_for('generate_posts') }}" class="generate">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <button type="submit" class="primary">지금 글 생성하기</button>
-  <span class="sub">'대기' 키워드로 n8n 글 생성을 지금 실행합니다(키워드마다 1~3분).</span>
-</form>
-{% endif %}
-{% if login_enabled and not active_job %}
-<form method="post" action="{{ url_for('naver_login') }}" class="generate">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <button type="submit" class="primary">네이버 다시 로그인</button>
-  <span class="sub">세션이 만료됐을 때만. 누른 뒤 폰 네이버 앱에서 승인하세요(최대 5분).</span>
-</form>
+{% elif generate_enabled or login_enabled %}
+<div class="actions">
+  {% if generate_enabled %}
+  <form method="post" action="{{ url_for('generate_posts') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="primary">지금 글 생성하기</button>
+  </form>
+  {% endif %}
+  {% if login_enabled %}
+  <form method="post" action="{{ url_for('relogin') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit">{{ relogin_label }}</button>
+  </form>
+  {% endif %}
+</div>
+<p class="sub hints">
+  {% if generate_enabled %}<span>글 생성: '대기' 키워드로 n8n을 지금 실행합니다(키워드마다 1~3분).</span>{% endif %}
+  {% if login_enabled %}<span>다시 로그인: 세션이 만료됐을 때만 누르고, 폰에서 승인하세요(최대 5분).</span>{% endif %}
+</p>
 {% endif %}
 
 {% if daily_limit %}

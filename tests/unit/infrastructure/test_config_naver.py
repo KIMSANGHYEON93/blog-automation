@@ -64,3 +64,13 @@ def test_네이버_로그인_설정_기본값(monkeypatch):
         monkeypatch.delenv(key, raising=False)
     config = Config.from_env()
     assert config.naver_login_id == config.naver_login_pw == config.naver_telegram_bot_token == ""
+
+
+@pytest.mark.parametrize("blog_id, expected", [
+    ("sangpedia", "https://blog.naver.com/sangpedia"),
+    ("", ""),
+    ("bad/../id", ""),
+])
+def test_네이버_블로그_주소(monkeypatch, blog_id, expected):
+    monkeypatch.setenv("NAVER_BLOG_ID", blog_id)
+    assert Config.from_env().naver_blog_url == expected

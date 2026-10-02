@@ -36,7 +36,8 @@ def _post(row, keyword, status=PostStatus.PENDING, body_len=3500):
 
 
 class Harness:
-    def __init__(self, publish=None, allowed_hosts=None, now=NOON, revise=None, hub_tab=None):
+    def __init__(self, publish=None, allowed_hosts=None, now=NOON, revise=None, hub_tab=None,
+                 preview=None, preview_raw=False):
         self.published_rows: list[int] = []
         published = _post(4, "Kafka 입문", PostStatus.PUBLISHED)
         published.published_url = "https://blog.tistory.com/4"
@@ -68,6 +69,8 @@ class Harness:
             edit_post=EditPostUseCase(repo),
             clock=lambda: now,
             hub_tab=hub_tab,
+            preview=preview,
+            preview_raw=preview_raw,
         )
         app.config["TESTING"] = True
         self.client = app.test_client()
@@ -280,11 +283,11 @@ def test_brand_label이_화면에_표시된다():
             publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
         ),
         secret_key="test-secret-key-0123456789",
-        brand_label="네이버 블로그 관리자",
+        brand_label="통합 블로그 포탈",
     )
     app.config["TESTING"] = True
     html = app.test_client().get("/login").get_data(as_text=True)
-    assert re.search(r"<title>[^<]*네이버 블로그 관리자[^<]*</title>", html)
+    assert re.search(r"<title>[^<]*통합 블로그 포탈[^<]*</title>", html)
 
 
 def test_상세_화면에_본문이_이스케이프되어_보인다():
@@ -716,16 +719,22 @@ class TestNaverLogin:
 
     def test_네이버_대시보드에만_버튼이_있다(self):
         client, _ = self._client([])
-        assert 'action="/naver/login"' in client.get("/").get_data(as_text=True)
+        assert 'action="/relogin"' in client.get("/").get_data(as_text=True)
         h = Harness()
         h.login()
-        assert 'action="/naver/login"' not in h.client.get("/").get_data(as_text=True)
-        assert h.client.post("/naver/login", data={"csrf_token": h.csrf("/")}).status_code == 404
+        assert 'action="/relogin"' not in h.client.get("/").get_data(as_text=True)
+        assert h.client.post("/relogin", data={"csrf_token": h.csrf("/")}).status_code == 404
+
+    def test_버튼_문구는_앱이_정한다(self):
+        client, _ = self._client([])
+        html = client.get("/").get_data(as_text=True)
+        assert "다시 로그인</button>" in html
+        assert 'class="actions"' in html
 
     def test_로그인은_작업으로_돈다(self):
         calls: list[int] = []
         client, runner = self._client(calls)
-        resp = client.post("/naver/login", data={"csrf_token": self._token(client)})
+        resp = client.post("/relogin", data={"csrf_token": self._token(client)})
         job_id = resp.headers["Location"].rsplit("/", 1)[-1]
         job = runner.wait(job_id, timeout=5)
         assert job.result.outcome is ManualPublishOutcome.LOGGED_IN and calls == [0]
@@ -735,13 +744,13 @@ class TestNaverLogin:
     def test_CSRF_없으면_거부(self):
         calls: list[int] = []
         client, _ = self._client(calls)
-        assert client.post("/naver/login").status_code == 400
+        assert client.post("/relogin").status_code == 400
         assert calls == []
 
     def test_자동_실행_직전에는_거부(self):
         calls: list[int] = []
         client, _ = self._client(calls, now=datetime(2026, 9, 28, 8, 50))
-        resp = client.post("/naver/login", data={"csrf_token": self._token(client)},
+        resp = client.post("/relogin", data={"csrf_token": self._token(client)},
                            follow_redirects=True)
         assert "09:00 자동 실행" in resp.get_data(as_text=True) and calls == []
 
@@ -792,3 +801,31 @@ class TestHubTabs:
     def test_세션_쿠키는_루트_경로(self, h):
         cookie = h.login().headers["Set-Cookie"]
         assert re.search(r"Path=/(;|$)", cookie), cookie
+
+
+class TestRawPreview:
+    BODY = ('<div class="naver-cta" style="background:#f8f9fa">'
+            '<a href="https://blog.naver.com/x">네이버 블로그 이웃 추가</a></div>')
+
+    def test_티스토리_미리보기는_sandbox_CSP로_최종_HTML을_그대로(self):
+        h = Harness(preview=lambda post: self.BODY, preview_raw=True)
+        h.login()
+        resp = h.client.get("/posts/2/preview")
+        assert resp.status_code == 200
+        csp = resp.headers["Content-Security-Policy"]
+        assert csp.startswith("sandbox; default-src 'none'; style-src 'unsafe-inline'")
+        html = resp.get_data(as_text=True)
+        assert self.BODY in html
+        assert "2행 미리보기" in html
+        assert 'href="/posts/2"' not in html  # 링크는 sandbox·SameSite=Strict로 로그인에 튕김
+
+    def test_네이버_미리보기는_기존_CSP(self):
+        h = Harness(preview=lambda post: "<p>본문</p>")
+        h.login()
+        resp = h.client.get("/posts/2/preview")
+        assert "default-src 'self'" in resp.headers["Content-Security-Policy"]
+
+    def test_다른_페이지는_기존_CSP(self):
+        h = Harness(preview=lambda post: self.BODY, preview_raw=True)
+        h.login()
+        assert "default-src 'self'" in h.client.get("/").headers["Content-Security-Policy"]

@@ -49,6 +49,20 @@ def test_발행_중이거나_수정_중인_글은_고칠_수_없다(status):
     assert _get(repo).content.title == "옛 제목"
 
 
+def test_사진을_올리면_본문에_표시를_넣는다():
+    repo = _repo()
+    EditPostUseCase(repo).add_photo(5, "a1.jpg")
+    post = _get(repo)
+    assert post.content.body_markdown == "옛 본문\n\n[[사진:a1.jpg]]"
+    assert post.content.title == "옛 제목"  # 다른 필드는 그대로
+
+
+def test_발행된_글에_사진을_올리면_수정대기가_된다():
+    repo = _repo(PostStatus.PUBLISHED)
+    EditPostUseCase(repo).add_photo(5, "a1.jpg")
+    assert _get(repo).status == PostStatus.REVISION_PENDING
+
+
 def test_발행된_글을_고치면_수정대기가_된다():
     # 시트만 고치면 블로그 글과 어긋난다 — 수정대기로 돌려 '수정 발행'을 기다린다
     repo = _repo(PostStatus.PUBLISHED)

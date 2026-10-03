@@ -130,3 +130,26 @@ class TestLayoutBlocks:
 
         md = "도입.\n\n" + "\n\n".join(f"## h{i}\n\n본문{i}." for i in range(6))
         assert sum(1 for kind, _ in layout_blocks(md, max_images=5) if kind == "image") == 5
+
+    def test_사진_설명_주석이_있으면_그_장면을_그린다(self):
+        from src.infrastructure.browser.naver.content import layout_blocks
+
+        md = "## 첫째\n\n<!-- 사진: a person at a laptop -->\n가."
+        assert layout_blocks(md, max_images=5) == [
+            ("text", "## 첫째"), ("image", "a person at a laptop"), ("text", "가."),
+        ]
+
+    def test_직접_올린_사진은_표시_자리에_넣는다(self):
+        from src.infrastructure.browser.naver.content import layout_blocks
+
+        md = "## 둘째\n\n나.\n\n[[사진:a1.jpg]]\n\n다."
+        assert layout_blocks(md, max_images=5) == [
+            ("text", "## 둘째"), ("image", "둘째"), ("text", "나."),
+            ("photo", "a1.jpg"), ("text", "다."),
+        ]
+
+    def test_직접_올린_사진은_AI_사진_상한과_따로_센다(self):
+        from src.infrastructure.browser.naver.content import layout_blocks
+
+        md = "## 둘째\n\n[[사진:a1.jpg]]"
+        assert layout_blocks(md, max_images=0) == [("text", "## 둘째"), ("photo", "a1.jpg")]

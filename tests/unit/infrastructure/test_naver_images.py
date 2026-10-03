@@ -3,7 +3,24 @@ import io
 
 from PIL import Image
 
-from src.infrastructure.browser.naver.images import image_prompt, reencode_jpeg
+from src.infrastructure.browser.naver.images import image_prompt, reencode_jpeg, save_photo
+
+
+def test_직접_올린_사진은_회전을_반영하고_EXIF를_빼서_저장한다(tmp_path):
+    # 폰 사진은 EXIF에 위치(GPS)가 있을 수 있고, 회전 정보를 버리면 옆으로 누운 채 올라간다
+    buf = io.BytesIO()
+    exif = Image.Exif()
+    exif[0x0112] = 6  # Orientation: 시계 방향 90도
+    Image.new("RGB", (40, 20), (10, 20, 30)).save(buf, "JPEG", exif=exif)
+    name = save_photo(buf.getvalue(), tmp_path)
+    saved = (tmp_path / name).read_bytes()
+    assert b"Exif" not in saved[:40]
+    assert Image.open(io.BytesIO(saved)).size == (20, 40)
+
+
+def test_이미지가_아니면_저장하지_않는다(tmp_path):
+    assert save_photo(b"not an image", tmp_path) is None
+    assert list(tmp_path.iterdir()) == []
 
 
 def _jpeg_with_exif() -> bytes:

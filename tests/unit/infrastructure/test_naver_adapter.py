@@ -37,6 +37,20 @@ def _post(body: str = "## 소제목\n\n본문", tags: str = "API, #쿠버네티�
     return Post(row_index=2, keyword="키워드", content=content)
 
 
+def test_직접_올린_사진은_사진_폴더에서_읽어_붙인다(calls, tmp_path):
+    (tmp_path / "a1.jpg").write_bytes(b"jpeg")
+    NaverBrowserAdapter("myblog", photo_dir=str(tmp_path)).publish(
+        _post("## 소제목\n\n본문\n\n[[사진:a1.jpg]]"))
+    assert ("image", b"jpeg") in calls
+
+
+def test_사진_파일이_없으면_건너뛰고_계속한다(calls, tmp_path):
+    result = NaverBrowserAdapter("myblog", draft_only=False, photo_dir=str(tmp_path)).publish(
+        _post("## 소제목\n\n본문\n\n[[사진:gone.jpg]]"))
+    assert result.success
+    assert not any(c[0] == "image" for c in calls)
+
+
 def test_draft_only_saves_and_reports_not_published(calls):
     result = NaverBrowserAdapter("myblog").publish(_post())
     assert not result.success

@@ -1,6 +1,7 @@
 """관리자 대시보드 라우트 — 인증, CSRF, 목록/상세, 수동 발행 작업."""
 from __future__ import annotations
 
+import io
 import re
 import threading
 from datetime import datetime
@@ -37,7 +38,7 @@ def _post(row, keyword, status=PostStatus.PENDING, body_len=3500):
 
 class Harness:
     def __init__(self, publish=None, allowed_hosts=None, now=NOON, revise=None, hub_tab=None,
-                 preview=None, preview_raw=False):
+                 preview=None, preview_raw=False, photo_store=None):
         self.published_rows: list[int] = []
         published = _post(4, "Kafka 입문", PostStatus.PUBLISHED)
         published.published_url = "https://blog.tistory.com/4"
@@ -71,6 +72,7 @@ class Harness:
             hub_tab=hub_tab,
             preview=preview,
             preview_raw=preview_raw,
+            photo_store=photo_store,
         )
         app.config["TESTING"] = True
         self.client = app.test_client()
@@ -311,6 +313,39 @@ def test_상세_화면에_본문이_이스케이프되어_보인다():
     html = client.get("/posts/2").get_data(as_text=True)
     assert re.search(r'<pre class="body">## 소제목\n\n본문 &lt;img', html)
     assert "<img src=x" not in html
+
+
+class TestPhotoUpload:
+    def _upload(self, h, data=b"img"):
+        return h.client.post("/posts/2/photo", content_type="multipart/form-data", data={
+            "csrf_token": h.csrf("/posts/2"), "photo": (io.BytesIO(data), "p.jpg"),
+        })
+
+    def test_사진을_올리면_본문에_표시가_들어간다(self):
+        saved: list[bytes] = []
+        h = Harness(photo_store=lambda data: saved.append(data) or "a1.jpg")
+        h.login()
+        resp = self._upload(h)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/posts/2"
+        assert saved == [b"img"]
+        body = next(p for p in h.repo.find_all() if p.row_index == 2).content.body_markdown
+        assert body.endswith("[[사진:a1.jpg]]")
+
+    def test_이미지가_아니면_거부한다(self):
+        h = Harness(photo_store=lambda data: None)
+        h.login()
+        assert self._upload(h, b"not image").status_code == 400
+
+    def test_편집_화면에_업로드_폼이_있다(self):
+        h = Harness(photo_store=lambda data: "a1.jpg")
+        h.login()
+        html = h.client.get("/posts/2").get_data(as_text=True)
+        assert 'action="/posts/2/photo"' in html and 'enctype="multipart/form-data"' in html
+
+    def test_사진_저장소가_없으면_업로드도_없다(self, h):
+        h.login()
+        assert 'action="/posts/2/photo"' not in h.client.get("/posts/2").get_data(as_text=True)
+        assert self._upload(h).status_code == 404
 
 
 class TestEditPost:

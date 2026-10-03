@@ -21,7 +21,11 @@ from src.domain.ports.pipeline_lock_port import PipelineLockPort
 from src.domain.services.quota_manager import DEFAULT_DAILY_LIMIT
 from src.domain.value_objects.credentials import Credentials
 from src.domain.value_objects.site_profile import SiteProfile
-from src.infrastructure.browser.naver.adapter import DEFAULT_PROFILE_DIR, NaverBrowserAdapter
+from src.infrastructure.browser.naver.adapter import (
+    DEFAULT_PHOTO_DIR,
+    DEFAULT_PROFILE_DIR,
+    NaverBrowserAdapter,
+)
 from src.infrastructure.browser.naver.images import pollinations_image_fn, title_thumbnail
 from src.infrastructure.browser.selenium_adapter import SeleniumBrowserAdapter
 from src.infrastructure.config import Config
@@ -75,6 +79,7 @@ def make_browser(
             screenshot_dir=str(project_root / "logs" / "naver"),
             image_fn=pollinations_image_fn(os.getenv("POLLINATIONS_API_KEY", "")),
             thumbnail_fn=partial(title_thumbnail, brand=os.getenv("NAVER_THUMBNAIL_BRAND", "")),
+            photo_dir=str(project_root / DEFAULT_PHOTO_DIR),
         )
     credentials = Credentials(
         kakao_id=config.kakao_id, kakao_pw=config.kakao_pw, tistory_blog=config.tistory_blog,

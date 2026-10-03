@@ -19,6 +19,7 @@ from typing import Callable
 
 from src.domain.entities.post import Post
 from src.domain.ports.browser_port import BrowserPort
+from src.domain.services.photo_markers import PHOTO_LINE
 from src.domain.value_objects.publish_result import PublishResult
 from src.infrastructure.browser.naver import editor, login
 from src.infrastructure.browser.naver.content import (
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 # 티스토리 .browser_data 와 분리 — 두 파이프라인이 같은 프로필 락을 두고 다투지 않게
 DEFAULT_PROFILE_DIR = ".browser_data_naver"
+DEFAULT_PHOTO_DIR = "uploads/naver"
 DRAFT_ONLY_MESSAGE = "임시저장만 완료(draft_only) — 네이버 글쓰기 > 임시저장에서 확인"
 
 
@@ -46,7 +48,8 @@ class NaverBrowserAdapter(BrowserPort):
                  headless: bool = False, draft_only: bool = True,
                  min_delay: int = 300, max_delay: int = 900,
                  screenshot_dir: str = "logs/naver", image_fn: ImageFn | None = None,
-                 thumbnail_fn: Callable[[str, bytes, str], bytes] | None = None):
+                 thumbnail_fn: Callable[[str, bytes, str], bytes] | None = None,
+                 photo_dir: str = DEFAULT_PHOTO_DIR):
         # headless 기본 False: 네이버는 헤드리스 탐지가 강하다(참고 저장소 공통 권고)
         self._blog_id = blog_id
         self._profile_dir = os.path.abspath(profile_dir)
@@ -57,6 +60,7 @@ class NaverBrowserAdapter(BrowserPort):
         self._screenshot_dir = Path(screenshot_dir)
         self._image_fn = image_fn
         self._thumbnail_fn = thumbnail_fn  # 첫 사진(대표)에 제목을 얹는다
+        self._photo_dir = Path(photo_dir)  # 대시보드에서 직접 올린 사진
         self.images_uploaded = 0  # 마지막 글에서 업로드가 확인된 사진 수(임시저장 시험 보고용)
         self._sb = None
         self._sb_context = None
@@ -183,7 +187,8 @@ class NaverBrowserAdapter(BrowserPort):
         headings = sum(1 for heading, _ in split_sections(markdown) if heading)
         warnings = check_published(
             stats, category=category, tag_count=tag_count, heading_count=headings,
-            max_images=MAX_IMAGES if self._image_fn else 0,
+            max_images=(MAX_IMAGES if self._image_fn else 0)
+            + len(PHOTO_LINE.findall(markdown)),  # 직접 올린 사진은 상한과 따로
         )
         for warning in warnings:
             logger.warning(f"발행 후 점검: {warning} — {url}")
@@ -198,10 +203,22 @@ class NaverBrowserAdapter(BrowserPort):
             if kind == "text":
                 editor.paste_html(self._sb, build_naver_html(value), value)
                 continue
+            if kind == "photo":
+                if self._insert_photo(value):
+                    self.images_uploaded += 1
+                continue
             # 첫 사진은 네이버가 대표(썸네일)로 쓴다 — 거기에만 제목을 얹는다
             if self._insert_image(keyword, value, title if first_image else ""):
                 self.images_uploaded += 1
             first_image = False
+
+    def _insert_photo(self, filename: str) -> bool:
+        """직접 올린 사진을 붙인다. 파일이 없으면 그 자리만 비우고 계속한다."""
+        path = self._photo_dir / filename
+        if not path.is_file():
+            logger.warning(f"올린 사진 파일이 없음 — 사진 없이 계속: {path}")
+            return False
+        return editor.paste_image(self._sb, path.read_bytes())
 
     def _insert_image(self, keyword: str, heading: str, thumbnail_title: str = "") -> bool:
         """사진 자리 하나를 채운다. 생성에 실패하면 그 자리는 비운다.

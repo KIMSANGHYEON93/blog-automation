@@ -7,6 +7,7 @@ from dataclasses import replace
 from src.domain.entities.post import Post
 from src.domain.exceptions import InvalidStatusTransitionError
 from src.domain.ports.post_repository import PostRepository
+from src.domain.services.photo_markers import insert_photo_marker
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
 
@@ -39,6 +40,17 @@ class EditPostUseCase:
             post.mark_revision_pending("대시보드에서 수정 — 수정 발행 대기")
             self._repo.save(post)
         return post
+
+    def add_photo(self, row_index: int, filename: str) -> Post:
+        """올린 사진 표시를 본문에 넣는다. 저장 규칙(상태 검사·수정대기 전환)은 edit와 같다."""
+        post = self._find(row_index)
+        if post is None or post.content is None:
+            raise PostNotEditableError(f"{row_index}행은 편집할 수 없는 상태입니다")
+        return self.edit(
+            row_index, title=post.content.title or "", tags=post.content.tags,
+            body=insert_photo_marker(post.content.body_markdown or "", filename),
+            category=post.category,
+        )
 
     def restore(self, row_index: int) -> Post:
         post = self._find(row_index)

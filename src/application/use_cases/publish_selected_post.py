@@ -16,6 +16,7 @@ from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.pipeline_lock_port import PipelineLockPort
 from src.domain.ports.post_repository import PostRepository
 from src.domain.services.keyword_matcher import find_duplicate
+from src.domain.services.photo_markers import strip_photo_markers
 from src.domain.services.quota_manager import QuotaManager
 from src.domain.value_objects.post_status import PostStatus
 
@@ -61,10 +62,11 @@ def publish_blockers(post: Post) -> list[str]:
     if post.status != PostStatus.PENDING:
         reasons.append(f"발행대기 상태가 아님 (현재: {post.status.value})")
     body = (post.content.body_markdown or "") if post.content else ""
-    if not body.strip():
+    visible = strip_photo_markers(body)  # 사진 표시는 블로그에 보이지 않는다
+    if not visible.strip():
         reasons.append("본문 없음")
-    elif len(body) < MIN_CONTENT_LENGTH:
-        reasons.append(f"본문 {len(body)}자 < 최소 {MIN_CONTENT_LENGTH}자")
+    elif len(visible) < MIN_CONTENT_LENGTH:
+        reasons.append(f"본문 {len(visible)}자 < 최소 {MIN_CONTENT_LENGTH}자")
     if EXPERIENCE_PLACEHOLDER in body:
         reasons.append(f"'{EXPERIENCE_PLACEHOLDER}' 자리를 실제 경험으로 채우지 않음")
     if post.quality_score < MIN_QUALITY_SCORE:

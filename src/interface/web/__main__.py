@@ -42,7 +42,12 @@ from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.quota_manager import QuotaManager
 from src.domain.value_objects.post_status import PostStatus
 from src.domain.value_objects.site_profile import SiteProfile
-from src.infrastructure.browser.naver.adapter import DRAFT_ONLY_MESSAGE, MAX_IMAGES
+from src.infrastructure.browser.naver.adapter import (
+    DEFAULT_PHOTO_DIR,
+    DRAFT_ONLY_MESSAGE,
+    MAX_IMAGES,
+)
+from src.infrastructure.browser.naver.images import save_photo
 from src.infrastructure.browser.naver.preview import build_preview_html
 from src.infrastructure.browser.tistory_editor import set_site_profile
 from src.infrastructure.browser.tistory_render import render_tistory_html
@@ -359,6 +364,11 @@ def _build_app(
         relogin_label=profile.relogin_label,
         approve_hint=profile.approve_hint,
         hub_tab=hub_tab,
+        # 사진 첨부는 네이버만 — 경험 문단 규칙이 네이버에만 있다
+        photo_store=(
+            (lambda data: save_photo(data, PROJECT_ROOT / DEFAULT_PHOTO_DIR))
+            if profile.name == "naver" else None
+        ),
     )
 
 

@@ -8,16 +8,20 @@ import hashlib
 import io
 import logging
 import urllib.parse
+import uuid
+from pathlib import Path
 from typing import Callable, Optional
 
 import requests
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 logger = logging.getLogger(__name__)
 
 ImageFn = Callable[[str], Optional[bytes]]
 
 _BASE_URL = "https://gen.pollinations.ai/image"
+# 올린 사진 픽셀 상한(폰 사진 약 1,200만 화소의 3배) — 넘으면 디코딩하지 않는다(압축 폭탄)
+MAX_PHOTO_PIXELS = 40_000_000
 # macOS 기본 한글 글꼴(ExtraBold=14번 face). 발행은 이 맥에서만 돌아 저장소에 넣지 않는다
 THUMBNAIL_FONT = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
 THUMBNAIL_FONT_INDEX = 14
@@ -153,6 +157,26 @@ def reencode_jpeg(data: bytes) -> bytes | None:
     out = io.BytesIO()
     image.save(out, "JPEG", quality=90)
     return out.getvalue()
+
+
+def save_photo(data: bytes, directory: str | Path) -> str | None:
+    """대시보드에서 올린 사진을 저장하고 파일 이름을 돌려준다. 이미지가 아니면 None.
+
+    폰 사진은 EXIF에 위치(GPS)가 있을 수 있어 빼고 저장한다. 회전 정보도 함께 사라지므로
+    먼저 픽셀에 반영한다(안 하면 아이폰 사진이 옆으로 누운 채 올라간다).
+    """
+    try:
+        image = Image.open(io.BytesIO(data))
+        if image.width * image.height > MAX_PHOTO_PIXELS:
+            return None
+        upright = ImageOps.exif_transpose(image).convert("RGB")
+    except Exception:
+        return None
+    folder = Path(directory)
+    folder.mkdir(parents=True, exist_ok=True)
+    name = f"{uuid.uuid4().hex}.jpg"  # 서버가 정한 이름 — 사용자 입력은 경로에 쓰지 않는다
+    upright.save(folder / name, "JPEG", quality=90)
+    return name
 
 
 def pollinations_image_fn(api_key: str) -> ImageFn:

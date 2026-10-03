@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from bs4 import BeautifulSoup
 
+from src.domain.services.photo_markers import PHOTO_LINE, SCENE_COMMENT
 from src.infrastructure.browser.markdown_converter import convert_markdown_to_html
 
 # 네이버 블로그 글 하나에 붙일 수 있는 태그 수 상한
@@ -64,18 +65,33 @@ def build_naver_html(markdown: str) -> str:
 def layout_blocks(markdown: str, max_images: int) -> list[tuple[str, str]]:
     """붙여넣는 순서: 대표 사진 → 도입부 → (소제목 → 사진 → 본문)…
 
-    ('image', 소제목) / ('text', 마크다운). 발행과 미리보기가 같은 순서를 쓰게 한 곳에 둔다.
+    ('image', 사진 설명 주석 또는 소제목) / ('photo', 직접 올린 파일) / ('text', 마크다운).
+    발행과 미리보기가 같은 순서를 쓰게 한 곳에 둔다. 직접 올린 사진은 max_images와 따로 센다.
     """
     blocks: list[tuple[str, str]] = []
     images_left = max_images
     for heading, body in split_sections(markdown):
         if heading:
             blocks.append(("text", f"## {heading}"))
+        scene = SCENE_COMMENT.search(body)
         if images_left:
-            blocks.append(("image", heading))
+            blocks.append(("image", scene.group(1) if scene else heading))
             images_left -= 1
-        if body:
-            blocks.append(("text", body))
+        blocks.extend(_body_blocks(SCENE_COMMENT.sub("", body)))
+    return blocks
+
+
+def _body_blocks(body: str) -> list[tuple[str, str]]:
+    """본문을 [[사진:파일]] 줄에서 잘라 글·사진 블록으로."""
+    blocks: list[tuple[str, str]] = []
+    start = 0
+    for match in PHOTO_LINE.finditer(body):
+        if body[start:match.start()].strip():
+            blocks.append(("text", body[start:match.start()].strip()))
+        blocks.append(("photo", match.group(1)))
+        start = match.end()
+    if body[start:].strip():
+        blocks.append(("text", body[start:].strip()))
     return blocks
 
 

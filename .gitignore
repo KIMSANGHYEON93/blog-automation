@@ -21,3 +21,4 @@ credentials.json
 .gstack/
 .playwright-mcp/
 .browser_data_naver
+uploads/

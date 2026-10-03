@@ -107,6 +107,7 @@ def create_app(
     daily_limit: int | None = None,
     clock: Callable[[], datetime] = datetime.now,
     hub_tab: str | None = None,
+    photo_store: Callable[[bytes], str | None] | None = None,
 ) -> Flask:
     if len(secret_key) < 16:
         raise ValueError("secret_key는 16자 이상이어야 합니다")
@@ -120,8 +121,9 @@ def create_app(
         SESSION_COOKIE_SECURE=secure_cookies,
         SESSION_COOKIE_PATH="/",
         PERMANENT_SESSION_LIFETIME=timedelta(hours=session_hours),
-        # 본문 편집 폼: 한글은 URL 인코딩 시 글자당 9바이트 — 3만 자 본문도 들어가게
-        MAX_CONTENT_LENGTH=512 * 1024,
+        # 폰 사진 업로드(보통 2~5MB)가 들어가게. 본문 폼은 한글 3만 자도 1MB 미만
+        # ponytail: 전체 요청 공통 한도 — 로그인 폼도 15MB까지 받는다. 127.0.0.1·tailnet 전용이라 둠
+        MAX_CONTENT_LENGTH=15 * 1024 * 1024,
     )
     login_throttle = throttle or LoginThrottle()
     _register_guards(app, allowed_hosts, brand_label)
@@ -134,6 +136,8 @@ def create_app(
     _register_dashboard_routes(app, list_posts, job_runner, clock)
     if edit_post is not None:
         _register_edit_routes(app, edit_post)
+        if photo_store is not None:
+            _register_photo_route(app, edit_post, photo_store)
     _register_check_routes(app, list_posts, job_runner, preview, preview_raw, clock)
     if keywords is not None:
         _register_keyword_routes(app, keywords)
@@ -177,6 +181,7 @@ def _register_guards(
     app.jinja_env.globals["csrf_token"] = _csrf_token
     app.jinja_env.globals["brand_label"] = brand_label
     app.jinja_env.globals["editing_enabled"] = False
+    app.jinja_env.globals["photo_upload_enabled"] = False
     app.jinja_env.globals["preview_enabled"] = False
     app.jinja_env.globals["draft_enabled"] = False
     app.jinja_env.globals["keywords_enabled"] = False
@@ -451,4 +456,28 @@ def _register_edit_routes(app: Flask, editor: EditPostUseCase) -> None:
         except (PostNotEditableError, InvalidStatusTransitionError):
             abort(409, description="발행대기 글만 보관합니다")
         flash("보류로 보관했습니다. '발행대기로 되돌리기'로 다시 살릴 수 있습니다.", "success")
+        return redirect(url_for("post_detail", row_index=row_index))
+
+
+def _register_photo_route(
+    app: Flask, editor: EditPostUseCase, photo_store: Callable[[bytes], str | None],
+) -> None:
+    """편집 화면 '사진 올리기' — 저장한 파일 표시([[사진:…]])를 경험 문단 아래에 넣는다."""
+    app.jinja_env.globals["photo_upload_enabled"] = True
+
+    @app.post("/posts/<int:row_index>/photo")
+    def upload_photo(row_index: int):  # type: ignore[no-untyped-def]
+        upload = request.files.get("photo")
+        filename = photo_store(upload.read()) if upload else None
+        if filename is None:
+            abort(400, description="사진 파일(JPEG·PNG)만 올릴 수 있습니다")
+        try:
+            post = editor.add_photo(row_index, filename)
+        except PostNotEditableError:
+            abort(409, description="발행·수정 중인 글에는 사진을 넣을 수 없습니다")
+        flash("사진을 넣었습니다. 본문의 [[사진:…]] 줄이 사진 자리이고, "
+              "줄을 옮기면 위치가 바뀝니다.", "success")
+        if post.status == PostStatus.REVISION_PENDING:
+            flash("발행된 글이라 수정대기로 바꿨습니다. "
+                  "'수정 발행'을 눌러야 반영됩니다.", "success")
         return redirect(url_for("post_detail", row_index=row_index))

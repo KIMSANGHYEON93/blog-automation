@@ -76,6 +76,19 @@ test('구조 검사: 좋은 글은 통과', () => {
   assert.equal(r.passed, true);
 });
 
+test('구조 검사: 사진 설명 주석은 길이·문단 검사에서 뺀다', () => {
+  // 주석은 블로그에 보이지 않는다 — 3,000자를 채우거나 첫 문단을 긴 문단으로 만들면 안 된다
+  const kw = '노션 AI 사용법';
+  const scene = `<!-- 사진: ${'a person working at a desk '.repeat(12)}-->`;
+  const short = goodContent(kw).slice(0, 2900);
+  const r = structure.validateNaverStructure({
+    title: `${kw} 정리`, content: `${short}\n${scene}`, keyword: kw,
+    tags: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
+  });
+  assert.match(r.issues.join(' | '), /본문 길이 부족/);
+  assert.doesNotMatch(r.issues.join(' | '), /긴 문단/);
+});
+
 test('구조 검사: 키워드 반복 과다·외부 링크 과다·긴 문단·태그 부족을 잡는다', () => {
   const kw = '노션 AI 사용법';
   const content = goodContent(kw)

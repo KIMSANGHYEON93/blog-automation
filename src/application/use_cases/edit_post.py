@@ -31,6 +31,8 @@ class EditPostUseCase:
         post = self._find(row_index)
         if post is None or post.status not in EDITABLE_STATUSES:
             raise PostNotEditableError(f"{row_index}행은 편집할 수 없는 상태입니다")
+        # 브라우저 textarea는 \r\n을 보낸다 — 줄 단위 표시([[사진:…]])를 알아보도록 \n으로 통일
+        body = body.replace("\r\n", "\n")
         post.content = replace(
             post.content or PostContent(), title=title, body_markdown=body, tags=tags,
         )

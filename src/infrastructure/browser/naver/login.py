@@ -86,7 +86,11 @@ def auto_login(sb, login_id: str, login_pw: str, timeout: float = APPROVAL_TIMEO
             return LoginOutcome.UNKNOWN
     if not sb.execute_script(_CHECK_KEEP_JS, sel.LOGIN_KEEP):
         logger.warning("'로그인 상태 유지' 체크박스를 찾지 못함 — 세션이 짧게 끝날 수 있음")
-    sb.click(sel.LOGIN_SUBMIT)
+    submit = next((s for s in sel.LOGIN_SUBMIT if sb.is_element_visible(s)), None)
+    if submit is None:
+        logger.error(f"로그인 버튼을 찾지 못함 — selectors 확인: {sel.LOGIN_SUBMIT}")
+        return LoginOutcome.UNKNOWN
+    sb.click(submit)
     logger.info("네이버 로그인 제출 — 폰 승인 대기")
 
     deadline = clock() + timeout

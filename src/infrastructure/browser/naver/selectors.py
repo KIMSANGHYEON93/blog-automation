@@ -92,7 +92,8 @@ PUBLISH_CONFIRM = [
 # --- 로그인 페이지 (nid.naver.com) — 자동 로그인(login.py) 전용 ---
 LOGIN_ID_INPUT = "input#id"
 LOGIN_PW_INPUT = "input#pw"
-LOGIN_SUBMIT = "#log\\.login"
+# 2026-10-06 로그인 화면 개편: 화면 배치에 따라 column/row 중 하나만 보인다. 옛 버튼은 남겨 둔다
+LOGIN_SUBMIT = ["#loginBtn_column", "#loginBtn_row", "#log\\.login"]
 LOGIN_CAPTCHA = "#captcha"
 # '로그인 상태 유지' — 없으면 경고만 하고 진행한다
 LOGIN_KEEP = ["input#keep", "input[name='nvlong']"]

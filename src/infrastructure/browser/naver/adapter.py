@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 # 티스토리 .browser_data 와 분리 — 두 파이프라인이 같은 프로필 락을 두고 다투지 않게
 DEFAULT_PROFILE_DIR = ".browser_data_naver"
 DEFAULT_PHOTO_DIR = "uploads/naver"
+PAGE_LOAD_TIMEOUT = 30  # 초
 DRAFT_ONLY_MESSAGE = "임시저장만 완료(draft_only) — 네이버 글쓰기 > 임시저장에서 확인"
 
 
@@ -75,6 +76,8 @@ class NaverBrowserAdapter(BrowserPort):
         )
         self._sb = context.__enter__()
         self._sb_context = context
+        # 드라이버 응답 한도(120초)보다 짧게 — 넘으면 editor._open이 로딩을 멈추고 계속한다
+        self._sb.driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
         logger.info("네이버 브라우저 시작")
 
     def stop(self) -> None:

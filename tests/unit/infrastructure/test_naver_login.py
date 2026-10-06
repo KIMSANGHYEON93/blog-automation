@@ -45,7 +45,7 @@ class _FakeSb:
     """제출 뒤 화면을 states 순서대로 돌려주는 가짜 브라우저."""
 
     def __init__(self, states, missing=(), visible_submit="#loginBtn_row"):
-        self.visible_submit = visible_submit  # 네이버 로그인 버튼은 화면 배치에 따라 둘 중 하나만 보인다
+        self.visible_submit = visible_submit  # 로그인 버튼은 화면 배치에 따라 하나만 보인다
         self.states = list(states)  # [(url, text, captcha), ...] — 폴링마다 하나씩, 마지막은 유지
         self.current = self.states[0]
         self.missing = set(missing)

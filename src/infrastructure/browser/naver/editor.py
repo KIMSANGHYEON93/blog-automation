@@ -15,6 +15,8 @@ import logging
 import sys
 import time
 
+from selenium.common.exceptions import TimeoutException
+
 from src.infrastructure.browser.naver import selectors as sel
 from src.infrastructure.browser.naver.content import BLOG_HOST, parse_blog_id, parse_log_no
 
@@ -273,11 +275,34 @@ def collect_post_stats(sb, url: str) -> dict:
 
 
 def _open(sb, url: str) -> None:
-    """이동 전에 남은 확인창(beforeunload 등)을 수락한다. 떠 있으면 이후 명령이 전부 막힌다."""
+    """이동 전에 남은 확인창(beforeunload 등)을 수락한다. 떠 있으면 이후 명령이 전부 막힌다.
+
+    로드가 끝나지 않는 리소스(광고·추적) 하나 때문에 페이지 로드 제한에 걸리면 로딩만 멈추고
+    계속한다 — 이후 단계는 URL·요소를 따로 기다린다
+    (2026-10-02·10-05 MyBlog.naver에서 발행 전체가 죽음).
+    """
     sb.switch_to_default_content()
     _accept_alert(sb)
-    sb.open(url)
+    try:
+        sb.open(url)
+    except Exception as e:
+        # SeleniumBase는 TimeoutException을 한 번 재시도한 뒤 일반 Exception으로 바꿔 던진다
+        if not isinstance(e, TimeoutException) and "timed out" not in str(e).lower():
+            raise
+        logger.warning(f"페이지 로드 제한 초과 — 로딩을 멈추고 계속: {url}")
+        _save_stall_screenshot(sb)
+        sb.execute_script("window.stop();")
     _accept_alert(sb)
+
+
+def _save_stall_screenshot(sb) -> None:
+    """로드가 멈춘 화면을 남긴다 — 탭이 통째로 멈춘 건지 리소스 하나가 늦은 건지 보려고."""
+    path = f"logs/naver/pageload_stall_{time.strftime('%Y%m%d_%H%M%S')}.png"
+    try:
+        sb.save_screenshot(path)
+        logger.warning(f"로드 멈춤 화면 저장: {path}")
+    except Exception as e:
+        logger.warning(f"로드 멈춤 화면 저장 실패: {e}")
 
 
 def _accept_alert(sb) -> None:

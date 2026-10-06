@@ -44,7 +44,8 @@ def test_모든_결과에_안내_문구가_있다():
 class _FakeSb:
     """제출 뒤 화면을 states 순서대로 돌려주는 가짜 브라우저."""
 
-    def __init__(self, states, missing=()):
+    def __init__(self, states, missing=(), visible_submit="#loginBtn_row"):
+        self.visible_submit = visible_submit  # 로그인 버튼은 화면 배치에 따라 하나만 보인다
         self.states = list(states)  # [(url, text, captcha), ...] — 폴링마다 하나씩, 마지막은 유지
         self.current = self.states[0]
         self.missing = set(missing)
@@ -75,10 +76,14 @@ class _FakeSb:
         return selector == sel.LOGIN_CAPTCHA and self.current[2]
 
     def is_element_visible(self, selector):
-        return selector == sel.LOGIN_DEVICE_REGISTER
+        return selector in (sel.LOGIN_DEVICE_REGISTER, self.visible_submit)
 
     def click(self, selector):
         self.clicks.append(selector)
+
+
+def _submits(sb):
+    return sum(c in sel.LOGIN_SUBMIT for c in sb.clicks)
 
 
 def _run(sb, timeout=300):
@@ -99,20 +104,20 @@ def test_입력하고_한_번_제출한다():
     assert _run(sb) is LoginOutcome.SUCCESS
     assert sb.opened == [login_mod.LOGIN_URL]
     assert sb.filled == {sel.LOGIN_ID_INPUT: "my-id", sel.LOGIN_PW_INPUT: "secret-pw"}
-    assert sb.clicks.count(sel.LOGIN_SUBMIT) == 1
+    assert _submits(sb) == 1
 
 
 def test_이미_로그인돼_있으면_입력하지_않고_성공():
     sb = _FakeSb([("https://www.naver.com/", "", False)])
     assert _run(sb) is LoginOutcome.SUCCESS
-    assert sb.filled == {} and sel.LOGIN_SUBMIT not in sb.clicks
+    assert sb.filled == {} and _submits(sb) == 0
 
 
 def test_승인을_기다렸다가_성공():
     wait = ("https://nid.naver.com/login/ext/deviceConfirm", "2단계 인증 알림을 보냈습니다", False)
     sb = _FakeSb([wait, wait, ("https://www.naver.com/", "", False)])
     assert _run(sb) is LoginOutcome.SUCCESS
-    assert sb.clicks.count(sel.LOGIN_SUBMIT) == 1
+    assert _submits(sb) == 1
 
 
 def test_비밀번호_오류와_캡차는_즉시_중단():
@@ -122,7 +127,7 @@ def test_비밀번호_오류와_캡차는_즉시_중단():
     ]:
         sb = _FakeSb([("https://nid.naver.com/nidlogin.login", text, captcha)])
         assert _run(sb) is expected
-        assert sb.clicks.count(sel.LOGIN_SUBMIT) == 1
+        assert _submits(sb) == 1
 
 
 def test_승인_대기가_끝나지_않으면_시간_초과():
@@ -153,7 +158,7 @@ def test_입력란이_없으면_제출하지_않는다():
     sb = _FakeSb([("https://nid.naver.com/nidlogin.login", "", False)],
                  missing={sel.LOGIN_PW_INPUT})
     assert _run(sb) is LoginOutcome.UNKNOWN
-    assert sel.LOGIN_SUBMIT not in sb.clicks
+    assert _submits(sb) == 0
 
 
 def test_비밀번호와_아이디가_로그에_남지_않는다(caplog):
@@ -162,3 +167,19 @@ def test_비밀번호와_아이디가_로그에_남지_않는다(caplog):
     _run(_FakeSb([("https://www.naver.com/", "", False)]))
     assert "secret-pw" not in caplog.text
     assert "my-id" not in caplog.text
+
+
+def test_보이는_로그인_버튼을_누른다():
+    # 2026-10-06 네이버 로그인 화면 개편: #log.login → #loginBtn_column / #loginBtn_row
+    sb = _FakeSb([
+        ("https://nid.naver.com/nidlogin.login", "", False),
+        ("https://www.naver.com/", "", False),
+    ], visible_submit="#loginBtn_column")
+    assert _run(sb) is LoginOutcome.SUCCESS
+    assert sb.clicks == ["#loginBtn_column"]
+
+
+def test_로그인_버튼이_안_보이면_제출하지_않는다():
+    sb = _FakeSb([("https://nid.naver.com/nidlogin.login", "", False)], visible_submit="")
+    assert _run(sb) is LoginOutcome.UNKNOWN
+    assert sb.clicks == []

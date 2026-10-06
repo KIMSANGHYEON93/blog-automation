@@ -183,6 +183,13 @@ class TestManualPublishFailure:
         assert lock.released is True
 
 
+def test_사진_표시는_본문_길이에서_뺀다():
+    # 사진 설명 주석·첨부 표시는 블로그에 보이지 않는다 — 3000자 기준을 부풀리면 안 된다
+    body = "x" * 2950 + "\n<!-- 사진: " + "y" * 100 + " -->\n[[사진:a1.jpg]]"
+    post = _post(content=PostContent(title="제목", body_markdown=body))
+    assert any("최소" in reason for reason in publish_blockers(post))
+
+
 def test_직접_해_보니_자리_표시가_남아_있으면_발행하지_않는다():
     # 사람 검수를 건너뛴 AI 초안이 그대로 나가지 않게(네이버 AI 콘텐츠 가이드 2026-05)
     body = "## 본문\n" + "x" * 3000 + f"\n\n{EXPERIENCE_PLACEHOLDER} 해 본 결과를 적어 주세요."

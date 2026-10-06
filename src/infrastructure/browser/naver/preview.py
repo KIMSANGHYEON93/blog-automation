@@ -24,7 +24,9 @@ def build_preview_html(keyword: str, markdown: str) -> str:
     parts = []
     first_image = True
     for kind, value in layout_blocks(markdown, MAX_IMAGES):
-        if kind == "image":
+        if kind == "photo":
+            parts.append('<div class="photo">직접 올린 사진</div>')
+        elif kind == "image":
             if first_image:
                 parts.append('<div class="photo">대표 썸네일 · 제목이 들어간 사진</div>')
             else:

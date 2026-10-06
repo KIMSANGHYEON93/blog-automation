@@ -43,8 +43,12 @@ function titleHasKeyword(title, keyword) {
   return tokens.length > 0 && tokens.every((tok) => t.includes(tok));
 }
 
+// 소제목 아래 AI 사진 설명 — 블로그에 보이지 않으므로 길이·문단 검사에서 뺀다
+// (src/domain/services/photo_markers.py SCENE_COMMENT와 같은 형식)
+const SCENE_COMMENT = /<!--\s*사진:[\s\S]*?-->/g;
+
 function validateNaverStructure({ title, content, keyword, tags }) {
-  const text = String(content || '');
+  const text = String(content || '').replace(SCENE_COMMENT, '');
   const issues = [];
   const h2 = (text.match(/^## /gm) || []).length;
   const keywordCount = countOccurrences(text, keyword);

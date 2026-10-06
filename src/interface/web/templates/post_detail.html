@@ -98,6 +98,14 @@
     <label>본문 <textarea name="body" rows="24" maxlength="30000" required>{{ post.body_markdown }}</textarea></label>
     <button type="submit" class="primary">저장</button>
   </form>
+  {% if photo_upload_enabled %}
+  <form method="post" action="{{ url_for('upload_photo', row_index=post.row_index) }}" enctype="multipart/form-data" class="edit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>사진 올리기 (자주 묻는 질문 앞에 들어갑니다 · 본문을 고쳤다면 먼저 저장하세요)
+      <input type="file" name="photo" accept="image/*" required></label>
+    <button type="submit">사진 올리기</button>
+  </form>
+  {% endif %}
 </section>
 {% else %}
 <section class="card">

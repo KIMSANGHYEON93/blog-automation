@@ -49,6 +49,14 @@ def test_발행_중이거나_수정_중인_글은_고칠_수_없다(status):
     assert _get(repo).content.title == "옛 제목"
 
 
+def test_브라우저가_보낸_CRLF_줄바꿈은_LF로_저장한다():
+    # 아이폰 textarea는 \r\n을 보낸다 — 그대로 두면 [[사진:…]] 줄을 못 알아본다(2026-10-06)
+    repo = _repo()
+    EditPostUseCase(repo).edit(5, title="t", body="가.\r\n\r\n[[사진:a1.jpg]]\r\n", tags="",
+                               category="c")
+    assert _get(repo).content.body_markdown == "가.\n\n[[사진:a1.jpg]]\n"
+
+
 def test_사진을_올리면_본문에_표시를_넣는다():
     repo = _repo()
     EditPostUseCase(repo).add_photo(5, "a1.jpg")

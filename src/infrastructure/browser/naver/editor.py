@@ -285,10 +285,24 @@ def _open(sb, url: str) -> None:
     _accept_alert(sb)
     try:
         sb.open(url)
-    except TimeoutException:
+    except Exception as e:
+        # SeleniumBase는 TimeoutException을 한 번 재시도한 뒤 일반 Exception으로 바꿔 던진다
+        if not isinstance(e, TimeoutException) and "timed out" not in str(e).lower():
+            raise
         logger.warning(f"페이지 로드 제한 초과 — 로딩을 멈추고 계속: {url}")
+        _save_stall_screenshot(sb)
         sb.execute_script("window.stop();")
     _accept_alert(sb)
+
+
+def _save_stall_screenshot(sb) -> None:
+    """로드가 멈춘 화면을 남긴다 — 탭이 통째로 멈춘 건지 리소스 하나가 늦은 건지 보려고."""
+    path = f"logs/naver/pageload_stall_{time.strftime('%Y%m%d_%H%M%S')}.png"
+    try:
+        sb.save_screenshot(path)
+        logger.warning(f"로드 멈춤 화면 저장: {path}")
+    except Exception as e:
+        logger.warning(f"로드 멈춤 화면 저장 실패: {e}")
 
 
 def _accept_alert(sb) -> None:

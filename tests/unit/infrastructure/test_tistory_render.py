@@ -83,3 +83,24 @@ def test_FAQ_스키마의_script_닫는_태그는_본문을_깨지_못한다():
     out = append_faq_schema("본문", faq)
     assert out.count("</script>") == 1
     assert "<img" not in out
+
+
+def _post_with_photo() -> Post:
+    post = sample_post()
+    post.content = PostContent(
+        title="t", body_markdown="본문입니다.\n\n[[사진:a1.jpg]]\n\n출처: https://x.com (캡처 2026-10-08)",
+    )
+    post.internal_link_map = {}
+    return post
+
+
+def test_업로더가_없으면_사진_표시_대신_자리_표시를_보인다():
+    # 미리보기 — 업로드하지 않는다
+    html = render_tistory_html(_post_with_photo(), "kimsanghyeon")
+    assert "[[사진" not in html and "발행할 때" in html
+
+
+def test_업로더가_있으면_치환자를_넣는다():
+    html = render_tistory_html(_post_with_photo(), "kimsanghyeon",
+                               photo=lambda name: f"[##_Image|kage@k/{name}|CDM|1.3|{{}}_##]")
+    assert "[##_Image|kage@k/a1.jpg" in html and "[[사진" not in html

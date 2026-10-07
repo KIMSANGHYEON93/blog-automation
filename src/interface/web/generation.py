@@ -16,6 +16,9 @@ from src.application.use_cases.publish_selected_post import (
 N8N_TIMEOUT_SECONDS = 900  # 대기 키워드 여러 건이면 LLM 호출이 길다
 # scripts/build_naver_workflow.py 의 WORKFLOW_NAME과 같아야 한다(테스트가 확인)
 NAVER_WORKFLOW_NAME = "Blog Automation Pipeline A — Naver"
+TISTORY_WORKFLOW_NAME = "Blog Automation Pipeline A — Content Generation"
+# n8n Check Duplicate 노드가 이 값의 비고가 있는 행만 처리한다(둘 다 같은 문자열)
+GENERATE_REQUEST = "생성요청"
 DEFAULT_N8N_CONTAINER = "blog-automation-n8n-1"
 
 
@@ -45,9 +48,23 @@ def summarize_run(
 
 def build_generator(
     container: str, workflow_name: str, snapshot: Callable[[], tuple[int, set[str]]],
+    mark: Callable[[int, str], None] | None = None,
 ) -> Callable[[int], ManualPublishResult]:
-    """snapshot() → (발행대기 수, 중복으로 건너뛴 키워드). 실행 전후 차이로 결과를 알린다."""
-    def generate(_row_index: int) -> ManualPublishResult:
+    """snapshot() → (발행대기 수, 중복으로 건너뛴 키워드). 실행 전후 차이로 결과를 알린다.
+
+    row_index > 0이면 그 글 하나만 생성한다 — 비고에 '생성요청'을 달면 n8n 중복 검사 노드가
+    그 행만 처리한다. 표시가 남으면 다음 예약 실행도 그 행만 처리하므로 반드시 지운다.
+    """
+    def generate(row_index: int) -> ManualPublishResult:
+        if row_index <= 0 or mark is None:
+            return _run(0)
+        mark(row_index, GENERATE_REQUEST)
+        try:
+            return _run(row_index)
+        finally:
+            mark(row_index, "")
+
+    def _run(row_index: int) -> ManualPublishResult:
         listed = subprocess.run(
             ["docker", "exec", container, "n8n", "list:workflow"],
             capture_output=True, text=True, timeout=60,
@@ -66,6 +83,6 @@ def build_generator(
             sorted(skipped_after - skipped_before),
         )
         outcome = ManualPublishOutcome.GENERATED if ok else ManualPublishOutcome.FAILED
-        return ManualPublishResult(outcome, 0, message)
+        return ManualPublishResult(outcome, row_index, message)
 
     return generate

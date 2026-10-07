@@ -274,6 +274,10 @@ class GoogleSheetsPostRepository(PostRepository):
         self._sheet.update_cells(cells)
         logger.debug(f"CWV 기록: row={row_index}, LCP={lcp:.2f}, CLS={cls_score:.3f}")
 
+    def set_note(self, row_index: int, note: str) -> None:
+        """비고(Y열) — 대시보드 '본문 생성'이 n8n에 그 행만 생성하라고 표시할 때 쓴다."""
+        self._sheet.update_cell(row_index, COL["note"], note)
+
     def save_category(self, row_index: int, category: str) -> None:
         self._sheet.update_cell(row_index, COL["category"], category)
         logger.debug(f"카테고리 저장: row={row_index}, category={category}")

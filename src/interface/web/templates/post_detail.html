@@ -26,7 +26,8 @@
 
 {% set revising = revise_enabled and post.status.name == "REVISION_PENDING" %}
 <section class="card">
-  <h2>{% if revising %}수정 발행{% else %}수동 발행{% endif %}</h2>
+  {% set waiting = post.status.name == 'WAITING' and generate_enabled %}
+  <h2>{% if revising %}수정 발행{% elif waiting %}본문 생성{% else %}수동 발행{% endif %}</h2>
   {% if revising %}
     {% if active_job %}
     <p class="notice notice-info">{{ active_job.row_index }}행 작업이 진행 중입니다. 끝난 뒤 수정할 수 있습니다.</p>
@@ -35,6 +36,16 @@
     <form method="post" action="{{ url_for('revise_post', row_index=post.row_index) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="primary">수정 발행</button>
+    </form>
+    {% endif %}
+  {% elif waiting %}
+    {% if active_job %}
+    <p class="notice notice-info">진행 중인 작업이 있습니다. 끝난 뒤 생성할 수 있습니다.</p>
+    {% else %}
+    <p>이 키워드 하나만 본문을 생성합니다(1~3분). 끝나면 발행대기로 바뀝니다.</p>
+    <form method="post" action="{{ url_for('generate_one', row_index=post.row_index) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="primary">본문 생성</button>
     </form>
     {% endif %}
   {% elif post.can_publish %}

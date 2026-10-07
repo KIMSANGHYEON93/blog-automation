@@ -65,6 +65,7 @@ from src.interface.web.auth import AdminAuthenticator, LoginThrottle
 from src.interface.web.generation import (
     DEFAULT_N8N_CONTAINER,
     NAVER_WORKFLOW_NAME,
+    TISTORY_WORKFLOW_NAME,
     build_generator,
 )
 from src.interface.web.hub import build_hub
@@ -341,11 +342,12 @@ def _build_app(
                     _load_site_profile(config), build_notification(),
                 )
             ),
-            generate=(
-                build_generator(
-                    os.getenv("N8N_CONTAINER", DEFAULT_N8N_CONTAINER), NAVER_WORKFLOW_NAME,
-                    lambda: _generation_snapshot(repo),
-                ) if profile.name == "naver" else None
+            # 두 블로그 모두 — 글 상세의 '본문 생성'은 비고 표시로 그 글 하나만 생성한다
+            generate=build_generator(
+                os.getenv("N8N_CONTAINER", DEFAULT_N8N_CONTAINER),
+                NAVER_WORKFLOW_NAME if profile.name == "naver" else TISTORY_WORKFLOW_NAME,
+                lambda: _generation_snapshot(repo),
+                mark=repo.set_note,
             ),
         ),
         edit_post=EditPostUseCase(repo),

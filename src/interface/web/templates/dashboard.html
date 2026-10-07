@@ -90,7 +90,7 @@
           </td>
           <td>
             <a class="open" href="{{ url_for('post_detail', row_index=post.row_index) }}">
-              {% if post.can_publish %}<strong>발행하기</strong>{% else %}<span class="chev" aria-label="상세">›</span>{% endif %}
+              {% if post.can_publish %}<strong>발행하기</strong>{% elif post.status.name == 'WAITING' and generate_enabled %}<strong>본문 생성</strong>{% else %}<span class="chev" aria-label="상세">›</span>{% endif %}
             </a>
           </td>
         </tr>

@@ -37,8 +37,14 @@ function findDuplicate(keyword, existingKeywords, threshold = OVERLAP_THRESHOLD)
   };
 }
 
+// 대시보드 '본문 생성'은 그 행의 비고에 '생성요청'을 단다 — 있으면 그 행만, 없으면(예약 실행) 전부
+function pickRequested(items) {
+  const requested = items.filter((i) => String(i.json['비고'] || '').trim() === '생성요청');
+  return requested.length > 0 ? requested : items;
+}
+
 if (typeof $input === 'undefined') {
-  module.exports = { keywordOverlap, findDuplicate };
+  module.exports = { keywordOverlap, findDuplicate, pickRequested };
   return;
 }
 
@@ -50,6 +56,6 @@ const existing = [
   ...keywordsOf('Sheets Read (Naver Published)'),     // 네이버 탭
 ];
 
-return $input.all().map((item) => ({
+return pickRequested($input.all()).map((item) => ({
   json: { ...item.json, duplicate_check: findDuplicate(item.json['키워드'] || '', existing) },
 }));

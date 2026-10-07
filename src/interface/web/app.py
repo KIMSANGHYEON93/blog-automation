@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
 from typing import Callable, Protocol
 from urllib.parse import urlsplit
@@ -81,6 +81,9 @@ class KeywordDesk(Protocol):
 
 
 KEYWORD_MAX_LENGTH = 60
+# 잠깐 지나가는 진행 상태 — 대시보드 표·상태 칸에서 숨긴다
+IN_PROGRESS = frozenset({PostStatus.GENERATING, PostStatus.PUBLISHING, PostStatus.REVISING})
+
 JOB_LABELS = {"publish": "수동 발행", "draft": "임시저장 시험", "generate": "글 생성",
               "revise": "수정 발행", "login": "다시 로그인"}
 # 통합 대시보드(hub) 탭: (플랫폼, 표시 이름, 마운트 주소) — hub.py가 이 주소로 앱을 붙인다
@@ -265,8 +268,12 @@ def _register_dashboard_routes(
         status = _parse_status(request.args.get("status", ""))
         search = request.args.get("q", "")[:100]
         page = reader.execute(PostQuery(status=status, search=search))
+        # 생성중·발행중·수정중은 잠깐 지나가는 상태라 표와 상태 칸에서 뺀다
+        # (끊겨 남은 글은 자동 발행 전 고스트 복구가 되돌린다)
+        page = replace(page, items=tuple(p for p in page.items if p.status not in IN_PROGRESS))
         return render_template(
-            "dashboard.html", page=page, statuses=list(PostStatus),
+            "dashboard.html", page=page,
+            statuses=[s for s in PostStatus if s not in IN_PROGRESS],
             selected_status=status, search=search,
             active_job=runner.active_job(), recent_jobs=runner.recent()[:5],
         )
@@ -321,6 +328,19 @@ def _register_check_routes(
         if _refuse_near_automation(clock):
             return redirect(url_for("post_detail", row_index=row_index))
         job_id = runner.submit(row_index, kind="revise")
+        if job_id is None:
+            flash("이미 진행 중인 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")
+            return redirect(url_for("post_detail", row_index=row_index))
+        return redirect(url_for("job_status", job_id=job_id))
+
+    @app.post("/posts/<int:row_index>/generate")
+    def generate_one(row_index: int):  # type: ignore[no-untyped-def]
+        post = reader.get(row_index)
+        if not runner.enabled("generate") or post is None:
+            abort(404)
+        if post.status != PostStatus.WAITING:
+            abort(409, description="대기 상태인 글만 본문을 생성합니다")
+        job_id = runner.submit(row_index, kind="generate")
         if job_id is None:
             flash("이미 진행 중인 작업이 있습니다. 끝난 뒤 다시 시도하세요.", "error")
             return redirect(url_for("post_detail", row_index=row_index))

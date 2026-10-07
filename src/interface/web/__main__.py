@@ -47,6 +47,7 @@ from src.infrastructure.browser.naver.adapter import (
     DRAFT_ONLY_MESSAGE,
     MAX_IMAGES,
 )
+from src.infrastructure.browser.naver.doc_capture import capture_official_docs
 from src.infrastructure.browser.naver.images import save_photo
 from src.infrastructure.browser.naver.preview import build_preview_html
 from src.infrastructure.browser.tistory_editor import set_site_profile
@@ -367,6 +368,10 @@ def _build_app(
         # 사진 첨부는 네이버만 — 경험 문단 규칙이 네이버에만 있다
         photo_store=(
             (lambda data: save_photo(data, PROJECT_ROOT / DEFAULT_PHOTO_DIR))
+            if profile.name == "naver" else None
+        ),
+        doc_capture=(
+            (lambda urls: capture_official_docs(urls, PROJECT_ROOT / DEFAULT_PHOTO_DIR))
             if profile.name == "naver" else None
         ),
     )

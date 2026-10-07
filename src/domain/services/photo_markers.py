@@ -22,9 +22,12 @@ def strip_photo_markers(markdown: str) -> str:
     return PHOTO_LINE.sub("", SCENE_COMMENT.sub("", markdown))
 
 
-def insert_photo_marker(markdown: str, filename: str) -> str:
-    """자주 묻는 질문 바로 앞(경험 문단 아래)에 넣고, 없으면 끝에 붙인다."""
-    marker = photo_marker(filename)
+def insert_photo_marker(markdown: str, filename: str, caption: str = "") -> str:
+    """자주 묻는 질문 바로 앞(경험 문단 아래)에 넣고, 없으면 끝에 붙인다.
+
+    caption은 사진 바로 아래 문단(공식 문서 캡처의 출처·날짜).
+    """
+    marker = photo_marker(filename) + (f"\n\n{caption}" if caption else "")
     at = markdown.find(_FAQ_HEADING)
     if at < 0:
         return f"{markdown.rstrip()}\n\n{marker}"

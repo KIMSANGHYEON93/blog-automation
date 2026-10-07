@@ -106,6 +106,13 @@
     <button type="submit">사진 올리기</button>
   </form>
   {% endif %}
+  {% if doc_capture_enabled %}
+  <form method="post" action="{{ url_for('capture_docs', row_index=post.row_index) }}" class="edit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="sub">참고자료의 공식 문서를 최대 2장 찍어 출처·날짜와 함께 자주 묻는 질문 앞에 넣습니다(30초~1분). 본문을 고쳤다면 먼저 저장하세요.</p>
+    <button type="submit">공식 문서 캡처 넣기</button>
+  </form>
+  {% endif %}
 </section>
 {% else %}
 <section class="card">

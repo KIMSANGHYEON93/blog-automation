@@ -108,6 +108,7 @@ def create_app(
     clock: Callable[[], datetime] = datetime.now,
     hub_tab: str | None = None,
     photo_store: Callable[[bytes], str | None] | None = None,
+    doc_capture: Callable[[list[str]], list[tuple[str, str]]] | None = None,
 ) -> Flask:
     if len(secret_key) < 16:
         raise ValueError("secret_key는 16자 이상이어야 합니다")
@@ -138,6 +139,8 @@ def create_app(
         _register_edit_routes(app, edit_post)
         if photo_store is not None:
             _register_photo_route(app, edit_post, photo_store)
+        if doc_capture is not None:
+            _register_doc_capture_route(app, edit_post, doc_capture, clock)
     _register_check_routes(app, list_posts, job_runner, preview, preview_raw, clock)
     if keywords is not None:
         _register_keyword_routes(app, keywords)
@@ -182,6 +185,7 @@ def _register_guards(
     app.jinja_env.globals["brand_label"] = brand_label
     app.jinja_env.globals["editing_enabled"] = False
     app.jinja_env.globals["photo_upload_enabled"] = False
+    app.jinja_env.globals["doc_capture_enabled"] = False
     app.jinja_env.globals["preview_enabled"] = False
     app.jinja_env.globals["draft_enabled"] = False
     app.jinja_env.globals["keywords_enabled"] = False
@@ -480,4 +484,27 @@ def _register_photo_route(
         if post.status == PostStatus.REVISION_PENDING:
             flash("발행된 글이라 수정대기로 바꿨습니다. "
                   "'수정 발행'을 눌러야 반영됩니다.", "success")
+        return redirect(url_for("post_detail", row_index=row_index))
+
+
+def _register_doc_capture_route(
+    app: Flask, editor: EditPostUseCase,
+    doc_capture: Callable[[list[str]], list[tuple[str, str]]], clock: Callable[[], datetime],
+) -> None:
+    """편집 화면 '공식 문서 캡처 넣기' — 참고자료 주소를 찍어 출처·날짜와 함께 넣는다."""
+    app.jinja_env.globals["doc_capture_enabled"] = True
+
+    @app.post("/posts/<int:row_index>/doc-capture")
+    def capture_docs(row_index: int):  # type: ignore[no-untyped-def]
+        # ponytail: 요청 안에서 바로 찍는다(주소 2개 30초~1분) — 길어지면 작업 실행기로 옮긴다
+        try:
+            added = editor.add_doc_captures(row_index, doc_capture, today=f"{clock():%Y-%m-%d}")
+        except PostNotEditableError:
+            abort(409, description="발행·수정 중인 글에는 캡처를 넣을 수 없습니다")
+        if added:
+            flash(f"공식 문서 캡처 {added}장을 출처와 함께 넣었습니다. "
+                  "미리보기로 확인하세요.", "success")
+        else:
+            flash("넣은 캡처가 없습니다 — 참고자료 주소가 없거나 "
+                  "정상으로 열리지 않았습니다.", "error")
         return redirect(url_for("post_detail", row_index=row_index))

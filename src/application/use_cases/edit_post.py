@@ -19,6 +19,10 @@ EDITABLE_STATUSES = frozenset({
 })
 
 
+# 공식 문서 캡처는 글 하나에 2장까지 — 더 넣으면 사진이 본문을 덮는다
+MAX_DOC_CAPTURES = 2
+
+
 class PostNotEditableError(Exception):
     pass
 
@@ -53,6 +57,27 @@ class EditPostUseCase:
             body=insert_photo_marker(post.content.body_markdown or "", filename),
             category=post.category,
         )
+
+    def add_doc_captures(
+        self, row_index: int, capture: Callable[[list[str]], list[tuple[str, str]]], today: str,
+    ) -> int:
+        """참고자료의 공식 문서를 앞에서 MAX_DOC_CAPTURES개까지 캡처해 출처와 함께 넣는다.
+
+        capture는 열리지 않거나 다른 사이트로 넘어가는 주소를 빼고 (주소, 파일) 목록을 돌려준다.
+        """
+        post = self._find(row_index)
+        if post is None or post.content is None:
+            raise PostNotEditableError(f"{row_index}행은 편집할 수 없는 상태입니다")
+        urls = post.content.reference_urls()[:MAX_DOC_CAPTURES]
+        captured = capture(urls) if urls else []
+        if not captured:
+            return 0
+        body = post.content.body_markdown or ""
+        for url, filename in captured:
+            body = insert_photo_marker(body, filename, caption=f"출처: {url} (캡처 {today})")
+        self.edit(row_index, title=post.content.title or "", body=body,
+                  tags=post.content.tags, category=post.category)
+        return len(captured)
 
     def restore(self, row_index: int) -> Post:
         post = self._find(row_index)

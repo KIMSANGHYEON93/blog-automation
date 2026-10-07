@@ -88,6 +88,7 @@ class GoogleSheetsPostRepository(PostRepository):
                 tags=get("tags"),
                 thumbnail_url=get("thumbnail_url"),
                 internal_link_keywords=get("internal_links"),
+                references=get("references"),
             )
 
         # verified 컬럼(R열) JSON에서 quality_score 추출

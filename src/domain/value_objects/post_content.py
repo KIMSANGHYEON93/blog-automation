@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+_URL = re.compile(r"https?://[^\s\"',\]]+")
 
 
 @dataclass(frozen=True)
@@ -17,6 +20,11 @@ class PostContent:
     tags: str = ""
     thumbnail_url: str = ""
     internal_link_keywords: str = ""
+    references: str = ""  # 시트 '참고자료' — n8n이 쓴 공식 문서 주소 JSON 목록
+
+    def reference_urls(self) -> list[str]:
+        """참고자료 칸에서 주소만 뽑는다(JSON 목록이든 줄바꿈이든)."""
+        return _URL.findall(self.references or "")
 
     def has_body(self) -> bool:
         return bool(self.body_markdown and self.body_markdown.strip())

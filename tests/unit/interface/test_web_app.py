@@ -354,7 +354,8 @@ class TestDocCapture:
     def test_공식_문서_캡처를_넣는다(self):
         h = Harness(doc_capture=lambda urls: [(urls[0], "d1.jpg")] if urls else [])
         post = next(p for p in h.repo.find_all() if p.row_index == 2)
-        post.content = PostContent(title="t", body_markdown="본문", references='["https://a.com/doc"]')
+        post.content = PostContent(title="t", body_markdown="본문",
+                                   references='["https://a.com/doc"]')
         h.login()
         assert 'action="/posts/2/doc-capture"' in h.client.get("/posts/2").get_data(as_text=True)
         resp = h.client.post("/posts/2/doc-capture", data={"csrf_token": h.csrf("/posts/2")})
@@ -364,7 +365,8 @@ class TestDocCapture:
 
     def test_캡처_기능이_없으면_버튼도_없다(self, h):
         h.login()
-        assert 'action="/posts/2/doc-capture"' not in h.client.get("/posts/2").get_data(as_text=True)
+        html = h.client.get("/posts/2").get_data(as_text=True)
+        assert 'action="/posts/2/doc-capture"' not in html
 
 
 class TestEditPost:

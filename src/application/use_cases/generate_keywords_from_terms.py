@@ -10,6 +10,7 @@ GSC 발굴(DiscoverKeywordsUseCase)은 '이미 노출된 쿼리'만 돌려주므
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 from src.application.use_cases.discover_keywords import (
@@ -25,6 +26,15 @@ from src.domain.value_objects.keyword_suggestion import KeywordSuggestion
 logger = logging.getLogger(__name__)
 
 DEFAULT_TOP_N = 10
+
+# 구체적인 AI 모델 버전명 — 볼트 혼동 포인트의 모델은 금방 낡아 '2026년 o1 비교' 같은
+# 글이 생긴다(2026-10-07). GSC 발굴은 실제 검색 수요라 이 필터를 쓰지 않는다.
+# ponytail: 이름 목록 기반 — 새 모델 계열이 나오면 여기에 추가
+VERSIONED_MODEL = re.compile(
+    r"(?<![a-z0-9])(?:o[1-9](?:-\w+)?|gpt-?\d[\w.]*|claude\s?\d[\d.]*|클로드\s?\d[\d.]*"
+    r"|gemini\s?\d[\d.]*|제미나이\s?\d[\d.]*|llama\s?\d[\d.]*|deepseek-?[rv]\d)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -75,13 +85,16 @@ class GenerateKeywordsFromTermsUseCase:
         terms = sorted(terms, key=lambda t: (-t.priority(), t.name))
 
         kept: list[str] = []
-        gate_dup = gate_b2c = 0
+        gate_dup = gate_b2c = gate_versioned = 0
         for t in terms:
             for kw in t.keyword_candidates():
                 if kw in kept:
                     continue
                 if is_b2c_noise(kw.lower().strip(), self._blocked):
                     gate_b2c += 1
+                    continue
+                if VERSIONED_MODEL.search(kw):
+                    gate_versioned += 1
                     continue
                 # 이미 등록한 후보도 중복 판정에 넣어야 같은 배치 안에서 유사
                 # 키워드가 둘 다 통과하는 일이 없다.
@@ -94,7 +107,7 @@ class GenerateKeywordsFromTermsUseCase:
 
         logger.info(
             f"용어 키워드 생성: 용어 {len(terms)}건 → 후보 {len(kept)}건 "
-            f"(중복 제외 {gate_dup}, B2C 제외 {gate_b2c})"
+            f"(중복 제외 {gate_dup}, B2C 제외 {gate_b2c}, 모델 버전명 제외 {gate_versioned})"
         )
 
         suggestions = [KeywordSuggestion(keyword=k) for k in kept[: self._top_n]]

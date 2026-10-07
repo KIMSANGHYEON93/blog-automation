@@ -91,6 +91,17 @@ class TestFiltering:
         assert "MCP란" in kws
         assert not any("기프트카드" in k for k in kws)
 
+    def test_AI_모델_버전명이_든_키워드는_제외(self):
+        # 볼트 혼동 포인트의 모델은 금방 낡는다 — 'o1' 비교 글이 2026년에 생성됐다(2026-10-07)
+        uc = make_use_case([
+            term("확장 사고", "확장 사고 ≠ 블랙박스 o1. 설명"),
+            term("추론 모델", "추론 모델 ≠ GPT-4o. 설명"),
+            term("하이브리드", "하이브리드 ≠ Claude 3.7. 설명"),
+        ])
+        kws = [s.keyword for s in uc.execute().suggestions]
+        assert "확장 사고란" in kws and "추론 모델이란" in kws
+        assert not any(m in k for k in kws for m in ("o1", "GPT-4o", "Claude 3.7"))
+
     def test_같은_키워드가_두_번_나오지_않는다(self):
         uc = make_use_case([term("MCP"), term("MCP")])
         kws = [s.keyword for s in uc.execute().suggestions]

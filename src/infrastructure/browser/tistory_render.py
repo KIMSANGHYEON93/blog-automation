@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from src.domain.entities.post import Post
 from src.infrastructure.browser import html_transformer, markdown_converter
+from src.infrastructure.browser.tistory_photos import PREVIEW_PLACEHOLDER, replace_photo_markers
 from src.infrastructure.seo.html_optimizer import optimize_html
 from src.infrastructure.seo.inline_styler import apply_inline_styles
 from src.infrastructure.seo.internal_linker import inject_internal_links
@@ -18,11 +20,29 @@ class _LinkPost:
         self.published_url = url
 
 
-def render_tistory_html(post: Post, blog_name: str, cta_url: str = "") -> str:
-    """마크다운 본문 → 에디터에 넣을 최종 HTML. post.content가 있어야 한다."""
+def render_tistory_html(
+    post: Post, blog_name: str, cta_url: str = "",
+    photo: Callable[[str], str | None] | None = None,
+) -> str:
+    """마크다운 본문 → 에디터에 넣을 최종 HTML. post.content가 있어야 한다.
+
+    photo: 사진 표시 파일을 첨부 치환자로 바꾸는 함수(발행). 없으면(미리보기) 자리 표시만 보인다.
+    """
     content = post.content
     assert content is not None
-    html_body = markdown_converter.convert_markdown_to_html(content.body_markdown or "")
+    # 치환자의 '_'·'{}'가 마크다운에서 깨지지 않게 토큰으로 두었다가 HTML 변환 뒤에 바꾼다
+    tokens: dict[str, str] = {}
+
+    def _token(filename: str) -> str:
+        token = f"TISTORYPHOTO{len(tokens)}"
+        tokens[token] = filename
+        return token
+
+    markdown = replace_photo_markers(content.body_markdown or "", _token)
+    html_body = markdown_converter.convert_markdown_to_html(markdown)
+    for token, filename in tokens.items():
+        replaced = photo(filename) if photo else PREVIEW_PLACEHOLDER
+        html_body = html_body.replace(f"<p>{token}</p>", f"<p>{replaced}</p>" if replaced else "")
     # 요약 문단: Tistory는 본문 첫 텍스트로 meta description을 자동 생성
     html_body = html_transformer.insert_summary_lead(html_body, content.meta_description)
     html_body = html_transformer.add_lazy_loading(html_body)

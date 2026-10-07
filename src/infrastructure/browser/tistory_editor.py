@@ -28,6 +28,7 @@ from src.infrastructure.browser.dom_selectors import (
     TITLE_SELECTORS,
     find_element,
 )
+from src.infrastructure.browser.tistory_photos import make_uploader
 from src.infrastructure.browser.tistory_render import render_tistory_html
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,11 @@ def _resolve_category_id(category_name: str, profile: SiteProfile | None = None)
     return _get_profile(profile).resolve_category_id(category_name)
 
 
+def _photo_uploader(sb, blog_name: str):  # type: ignore[no-untyped-def]
+    """대시보드에서 넣은 사진(공식 문서 캡처)을 로그인된 세션으로 첨부 업로드한다."""
+    return make_uploader(sb.driver.get_cookies(), blog_name)
+
+
 def publish_post(
     sb, post: Post, blog_name: str, profile: SiteProfile | None = None, cta_url: str = "",
 ) -> PublishResult:
@@ -133,7 +139,9 @@ def publish_post(
             return PublishResult.fail("제목 입력 실패")
         time.sleep(0.5)
 
-        html_body = render_tistory_html(post, blog_name, cta_url)
+        html_body = render_tistory_html(
+            post, blog_name, cta_url, photo=_photo_uploader(sb, blog_name),
+        )
 
         # [마크다운 모드 전환 — 비활성화: WYSIWYG 기본모드 사용]
         # sb.execute_script("window.confirm = function() { return true; };")
@@ -243,7 +251,9 @@ def update_post(
         with contextlib.suppress(Exception):
             sb.driver.set_script_timeout(120)
 
-        html_body = render_tistory_html(post, blog_name, cta_url)
+        html_body = render_tistory_html(
+            post, blog_name, cta_url, photo=_photo_uploader(sb, blog_name),
+        )
 
         # API 호출로 수정 (entry_id 전달)
         title = content.title_or_fallback(post.keyword)

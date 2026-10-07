@@ -88,7 +88,8 @@ def test_FAQ_스키마의_script_닫는_태그는_본문을_깨지_못한다():
 def _post_with_photo() -> Post:
     post = sample_post()
     post.content = PostContent(
-        title="t", body_markdown="본문입니다.\n\n[[사진:a1.jpg]]\n\n출처: https://x.com (캡처 2026-10-08)",
+        title="t",
+        body_markdown="본문입니다.\n\n[[사진:a1.jpg]]\n\n출처: https://x.com (캡처 2026-10-08)",
     )
     post.internal_link_map = {}
     return post

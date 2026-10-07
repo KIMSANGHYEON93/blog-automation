@@ -370,10 +370,8 @@ def _build_app(
             (lambda data: save_photo(data, PROJECT_ROOT / DEFAULT_PHOTO_DIR))
             if profile.name == "naver" else None
         ),
-        doc_capture=(
-            (lambda urls: capture_official_docs(urls, PROJECT_ROOT / DEFAULT_PHOTO_DIR))
-            if profile.name == "naver" else None
-        ),
+        # 공식 문서 캡처는 두 블로그 모두 — 티스토리는 발행 때 첨부로 올려 치환자로 바꾼다
+        doc_capture=lambda urls: capture_official_docs(urls, PROJECT_ROOT / DEFAULT_PHOTO_DIR),
     )
 
 

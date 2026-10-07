@@ -163,3 +163,9 @@ test('중복 검사: 두 탭 키워드와 비교한다', () => {
   assert.equal(dup.findDuplicate('MCP란', existing).is_duplicate, true);
   assert.equal(dup.findDuplicate('RAG 쉽게', existing).is_duplicate, false);
 });
+
+test('중복 검사: 대시보드 생성요청 행이 있으면 그 행만 처리', () => {
+  const items = [{ json: { 키워드: 'a', 비고: '' } }, { json: { 키워드: 'b', 비고: '생성요청' } }];
+  assert.deepEqual(dup.pickRequested(items).map((i) => i.json.키워드), ['b']);
+  assert.equal(dup.pickRequested([{ json: { 키워드: 'a' } }]).length, 1);  // 표시 없으면 전부
+});

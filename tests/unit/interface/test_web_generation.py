@@ -41,3 +41,50 @@ def test_중복으로_건너뛴_키워드를_알려준다():
 def test_실패하면_출력_끝부분을_사유로():
     ok, message = summarize_run(1, "...\nError: SerpAPI 429 Too Many Requests", 0, 0)
     assert not ok and "SerpAPI 429" in message
+
+
+class _Run:
+    def __init__(self, stdout=""):
+        self.returncode, self.stdout, self.stderr = 0, stdout, ""
+
+
+def _fake_n8n(monkeypatch, fail=False):
+    from src.interface.web import generation
+
+    def run(cmd, **kwargs):
+        if "execute" in cmd and fail:
+            raise TimeoutError("n8n 응답 없음")
+        return _Run("ID1|wf\n" if "list:workflow" in cmd else "")
+
+    monkeypatch.setattr(generation.subprocess, "run", run)
+
+
+def test_글_하나만_생성할_때는_생성요청_표시를_달았다가_지운다(monkeypatch):
+    from src.interface.web.generation import build_generator
+
+    _fake_n8n(monkeypatch)
+    marks: list[tuple[int, str]] = []
+    build_generator("c", "wf", lambda: (0, set()), mark=lambda r, v: marks.append((r, v)))(7)
+    assert marks == [(7, "생성요청"), (7, "")]
+
+
+def test_전체_생성은_표시하지_않는다(monkeypatch):
+    from src.interface.web.generation import build_generator
+
+    _fake_n8n(monkeypatch)
+    marks: list[tuple[int, str]] = []
+    build_generator("c", "wf", lambda: (0, set()), mark=lambda r, v: marks.append((r, v)))(0)
+    assert marks == []
+
+
+def test_실행이_실패해도_표시를_지운다(monkeypatch):
+    # 남은 표시는 다음 예약 실행이 그 행만 처리하게 만든다
+    import pytest
+
+    from src.interface.web.generation import build_generator
+
+    _fake_n8n(monkeypatch, fail=True)
+    marks: list[tuple[int, str]] = []
+    with pytest.raises(TimeoutError):
+        build_generator("c", "wf", lambda: (0, set()), mark=lambda r, v: marks.append((r, v)))(7)
+    assert marks[-1] == (7, "")

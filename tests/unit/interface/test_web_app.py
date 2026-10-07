@@ -39,7 +39,7 @@ def _post(row, keyword, status=PostStatus.PENDING, body_len=3500):
 class Harness:
     def __init__(self, publish=None, allowed_hosts=None, now=NOON, revise=None, hub_tab=None,
                  preview=None, preview_raw=False, photo_store=None,
-                 doc_capture=None):
+                 doc_capture=None, generate=None):
         self.published_rows: list[int] = []
         published = _post(4, "Kafka 입문", PostStatus.PUBLISHED)
         published.published_url = "https://blog.tistory.com/4"
@@ -60,7 +60,8 @@ class Harness:
             return ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "발행 완료",
                                        url=f"https://blog.tistory.com/{row}")
 
-        self.runner = PublishJobRunner(publish=publish or default_publish, revise=revise)
+        self.runner = PublishJobRunner(publish=publish or default_publish, revise=revise,
+                                       generate=generate)
         app = create_app(
             authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
             list_posts=ListPostsUseCase(repo),
@@ -348,6 +349,36 @@ class TestPhotoUpload:
         h.login()
         assert 'action="/posts/2/photo"' not in h.client.get("/posts/2").get_data(as_text=True)
         assert self._upload(h).status_code == 404
+
+
+class TestInProgressHidden:
+    def test_진행_중_상태는_목록과_상태_칸에서_숨긴다(self, h):
+        next(p for p in h.repo.find_all() if p.row_index == 6).status = PostStatus.PUBLISHING
+        h.login()
+        html = h.client.get("/").get_data(as_text=True)
+        assert "실패 글" not in html
+        assert not any(f"stat-{s}" in html for s in ("generating", "publishing", "revising"))
+
+
+class TestGenerateOne:
+    def _harness(self, status):
+        h = Harness(generate=lambda row: ManualPublishResult(
+            ManualPublishOutcome.GENERATED, row, "생성 완료"))
+        next(p for p in h.repo.find_all() if p.row_index == 2).status = status
+        h.login()
+        return h
+
+    def test_대기_글에는_본문_생성_버튼이_있고_그_글만_생성한다(self):
+        h = self._harness(PostStatus.WAITING)
+        assert 'action="/posts/2/generate"' in h.client.get("/posts/2").get_data(as_text=True)
+        resp = h.client.post("/posts/2/generate", data={"csrf_token": h.csrf("/posts/2")})
+        assert resp.status_code == 302 and "/jobs/" in resp.headers["Location"]
+
+    def test_대기가_아니면_본문_생성이_없다(self):
+        h = self._harness(PostStatus.PENDING)
+        assert 'action="/posts/2/generate"' not in h.client.get("/posts/2").get_data(as_text=True)
+        assert h.client.post("/posts/2/generate",
+                             data={"csrf_token": h.csrf("/posts/2")}).status_code == 409
 
 
 class TestDocCapture:

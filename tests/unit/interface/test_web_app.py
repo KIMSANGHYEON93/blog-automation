@@ -38,7 +38,8 @@ def _post(row, keyword, status=PostStatus.PENDING, body_len=3500):
 
 class Harness:
     def __init__(self, publish=None, allowed_hosts=None, now=NOON, revise=None, hub_tab=None,
-                 preview=None, preview_raw=False, photo_store=None):
+                 preview=None, preview_raw=False, photo_store=None,
+                 doc_capture=None):
         self.published_rows: list[int] = []
         published = _post(4, "Kafka 입문", PostStatus.PUBLISHED)
         published.published_url = "https://blog.tistory.com/4"
@@ -73,6 +74,7 @@ class Harness:
             preview=preview,
             preview_raw=preview_raw,
             photo_store=photo_store,
+            doc_capture=doc_capture,
         )
         app.config["TESTING"] = True
         self.client = app.test_client()
@@ -346,6 +348,23 @@ class TestPhotoUpload:
         h.login()
         assert 'action="/posts/2/photo"' not in h.client.get("/posts/2").get_data(as_text=True)
         assert self._upload(h).status_code == 404
+
+
+class TestDocCapture:
+    def test_공식_문서_캡처를_넣는다(self):
+        h = Harness(doc_capture=lambda urls: [(urls[0], "d1.jpg")] if urls else [])
+        post = next(p for p in h.repo.find_all() if p.row_index == 2)
+        post.content = PostContent(title="t", body_markdown="본문", references='["https://a.com/doc"]')
+        h.login()
+        assert 'action="/posts/2/doc-capture"' in h.client.get("/posts/2").get_data(as_text=True)
+        resp = h.client.post("/posts/2/doc-capture", data={"csrf_token": h.csrf("/posts/2")})
+        assert resp.status_code == 302
+        body = next(p for p in h.repo.find_all() if p.row_index == 2).content.body_markdown
+        assert "[[사진:d1.jpg]]" in body and "출처: https://a.com/doc" in body
+
+    def test_캡처_기능이_없으면_버튼도_없다(self, h):
+        h.login()
+        assert 'action="/posts/2/doc-capture"' not in h.client.get("/posts/2").get_data(as_text=True)
 
 
 class TestEditPost:

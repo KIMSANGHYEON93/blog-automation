@@ -135,3 +135,28 @@ def test_발행대기는_보관하면_보류():
     assert _get(repo).status == PostStatus.HOLD
     with pytest.raises(InvalidStatusTransitionError):
         EditPostUseCase(repo).archive(5)
+
+
+def test_공식_문서_캡처를_출처와_함께_넣는다():
+    repo = _repo()
+    post = _get(repo)
+    post.content = PostContent(title="t", body_markdown="본문", references='["https://a.com/doc","https://b.com","https://c.com"]')
+    seen: list[list[str]] = []
+
+    def capture(urls):
+        seen.append(urls)
+        return [("https://a.com/doc", "a.jpg")]  # b.com은 열리지 않아 빠졌다
+
+    added = EditPostUseCase(repo).add_doc_captures(5, capture, today="2026-10-08")
+    assert added == 1
+    assert seen == [["https://a.com/doc", "https://b.com"]]  # 최대 2개만 시도
+    assert _get(repo).content.body_markdown == (
+        "본문\n\n[[사진:a.jpg]]\n\n출처: https://a.com/doc (캡처 2026-10-08)"
+    )
+
+
+def test_캡처할_참고자료가_없으면_본문을_바꾸지_않는다():
+    repo = _repo()
+    added = EditPostUseCase(repo).add_doc_captures(5, lambda urls: [], today="2026-10-08")
+    assert added == 0
+    assert _get(repo).content.body_markdown == "옛 본문"

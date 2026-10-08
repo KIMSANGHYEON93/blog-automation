@@ -295,23 +295,23 @@ def _check_index(config: Config) -> None:
         logger.info("색인 점검 대상 포스트 없음")
         return
 
+    from collections import Counter
+
     checked = 0
-    indexed = 0
     marked = 0
+    categories: Counter[str] = Counter()
     for idx, post in enumerate(published):
         if idx > 0:
             _time.sleep(1)  # API rate limit 회피
         result = uc.execute(post)
         if result.success:
             checked += 1
-            if result.is_indexed:
-                indexed += 1
+            categories[result.category] += 1
             if result.marked_revision:
                 marked += 1
             logger.info(
-                f"색인 점검: {result.post_keyword} — "
-                f"indexed={result.is_indexed}, "
-                f"verdict={result.verdict}"
+                f"색인 점검: {result.post_keyword} — {result.category} "
+                f"(verdict={result.verdict}, {result.coverage_state})"
             )
         elif result.error:
             logger.warning(
@@ -323,7 +323,7 @@ def _check_index(config: Config) -> None:
 
     logger.info(
         f"색인 점검 완료: {checked}/{len(published)}건 점검, "
-        f"색인됨: {indexed}, 미색인→수정대기: {marked}"
+        f"분류: {dict(categories)}, 콘텐츠 문제→수정대기: {marked}"
     )
 
 

@@ -114,6 +114,10 @@ class GoogleSheetsPostRepository(PostRepository):
             with contextlib.suppress(ValueError, TypeError):
                 cwv_cls = float(raw_cls)
 
+        revision_count = 0
+        with contextlib.suppress(ValueError, TypeError):
+            revision_count = int(get("revision_count") or 0)
+
         post = Post(
             row_index=row_index,
             keyword=get("keyword"),
@@ -127,6 +131,8 @@ class GoogleSheetsPostRepository(PostRepository):
             quality_score=quality_score,
             cwv_lcp=cwv_lcp,
             cwv_cls=cwv_cls,
+            revision_count=revision_count,
+            revised_at=parse_sheet_datetime(get("revised_at")),
         )
 
         raw_links = get("internal_links")

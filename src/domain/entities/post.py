@@ -29,6 +29,8 @@ class Post:
     next_retry_at: datetime | None = None
     cwv_lcp: float | None = None
     cwv_cls: float | None = None
+    revision_count: int = 0
+    revised_at: datetime | None = None
 
     def mark_publishing(self) -> None:
         """PENDING → PUBLISHING (only from PENDING)."""

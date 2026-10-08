@@ -1,5 +1,8 @@
-"""Google Indexing API — 발행 후 즉시 크롤링 요청.
+"""Google Indexing API — URL 크롤링 요청(URL_UPDATED).
 
+지원 대상은 JobPosting·BroadcastEvent(VideoObject) 페이지뿐이며, 200 응답은 요청 접수일 뿐
+색인을 보장하지 않는다(https://developers.google.com/search/apis/indexing-api/v3/quickstart).
+그래서 cli는 INDEXING_API_ENABLED=true일 때만 이 어댑터를 쓴다.
 서비스 계정에 Search Console 소유자 권한이 있어야 함.
 환경변수: GOOGLE_CREDS (서비스 계정 JSON 키 경로)
 """

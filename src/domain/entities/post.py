@@ -9,6 +9,9 @@ from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
 
 MIN_CONTENT_LENGTH = 3000
+# 외부 발행 결과를 확인하지 못한 실패 표시. 이 사유가 남은 글은 자동 복구·재시도 대상이 아니다 —
+# 이미 올라갔을 수 있어 다시 발행하면 중복 글이 된다. 관리자가 블로그를 확인한 뒤 되돌린다
+PUBLISH_UNCONFIRMED = "발행 여부 수동 확인 필요"
 
 
 @dataclass

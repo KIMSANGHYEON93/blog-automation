@@ -89,3 +89,13 @@ class TestBatchRecoverNormal:
 
         assert result.total_failed == 0
         assert result.recovered == 0
+
+
+def test_발행_여부_불명은_강제_복구에서도_제외():
+    post = _make_failed_post(1, "AD란", "발행 여부 수동 확인 필요: 발행중에 중단됨")
+    repo = InMemoryPostRepository([post])
+
+    result = BatchRecoverUseCase(repo=repo).execute(force_unknown=True)
+
+    assert result.recovered == 0
+    assert repo.all()[0].status == PostStatus.FAILED

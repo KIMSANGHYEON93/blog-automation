@@ -17,6 +17,7 @@ import time
 
 from selenium.common.exceptions import TimeoutException
 
+from src.domain.entities.post import PUBLISH_UNCONFIRMED  # 자동 복구 제외 표시와 같은 문구
 from src.infrastructure.browser.naver import selectors as sel
 from src.infrastructure.browser.naver.content import BLOG_HOST, parse_blog_id, parse_log_no
 
@@ -26,7 +27,6 @@ EDITOR_TIMEOUT = 20
 PUBLISH_URL_TIMEOUT = 30
 
 # 발행 확인을 누른 뒤 URL을 못 받으면 실제로는 발행됐을 수 있다 — 재시도하면 중복 발행
-PUBLISH_UNCONFIRMED = "발행 여부 수동 확인 필요"
 
 # 합성 paste 이벤트. SmartEditor는 clipboardData의 text/html을 읽어 컴포넌트로 바꾼다.
 _PASTE_JS = """

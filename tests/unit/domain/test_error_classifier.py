@@ -57,3 +57,8 @@ class TestErrorClassifier:
 
         auth_err = self.classifier.classify("login failed")
         assert auth_err.should_auto_recover is False
+
+    def test_발행_여부_불명은_timeout이_섞여도_수동_확인(self):
+        err = self.classifier.classify("발행 여부 수동 확인 필요: TimeoutException: timed out")
+        assert err.error_type == PublishErrorType.UNCONFIRMED
+        assert err.should_auto_recover is False

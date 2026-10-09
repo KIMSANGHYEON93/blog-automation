@@ -5,13 +5,23 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from src.domain.exceptions import InvalidStatusTransitionError
+from src.domain.services.photo_markers import strip_photo_markers
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
 
 MIN_CONTENT_LENGTH = 3000
-# 외부 발행 결과를 확인하지 못한 실패 표시. 이 사유가 남은 글은 자동 복구·재시도 대상이 아니다 —
-# 이미 올라갔을 수 있어 다시 발행하면 중복 글이 된다. 관리자가 블로그를 확인한 뒤 되돌린다
+# 외부 발행 결과를 확인하지 못한 실패 표시. 이 사유가 남은 글은 자동 복구·재시도 대상이
+# 아니다 — 이미 올라갔을 수 있어 다시 발행하면 중복 글이 된다. 관리자가 블로그를 확인한 뒤 되돌린다
 PUBLISH_UNCONFIRMED = "발행 여부 수동 확인 필요"
+MIN_QUALITY_SCORE = 70
+# 네이버 초안(n8n prompt_naver_common.md)이 사람의 실제 경험을 채울 자리에 남기는 표시.
+# 남아 있으면 검수를 건너뛴 AI 글이라 어느 플랫폼에도 발행하지 않는다
+# (네이버 AI 콘텐츠 가이드 2026-05)
+EXPERIENCE_PLACEHOLDER = "[[직접 해 보니]]"
+# 블로그에 올라가 있거나 올라갔을 수 있는 상태 — 중복 키워드 판단의 기준
+_ON_BLOG_STATUSES = frozenset({
+    PostStatus.PUBLISHING, PostStatus.PUBLISHED, PostStatus.REVISION_PENDING, PostStatus.REVISING,
+})
 
 
 @dataclass
@@ -120,15 +130,54 @@ class Post:
                 tags.append(tag)
         return tags[:max_tags]
 
+    def publish_blockers(self) -> list[str]:
+        """새 글 발행을 막는 사유(비면 발행 가능). 자동·수동 발행과 대시보드 표시가 같이 쓴다.
+
+        길이는 블로그에 보이는 글자만 센다(사진 표시 제외). 자리표시를 채우거나 길이를
+        맞추는 일은 하지 않는다 — 막고 사유만 알린다.
+        """
+        reasons: list[str] = []
+        if self.status != PostStatus.PENDING:
+            reasons.append(f"발행대기 상태가 아님 (현재: {self.status.value})")
+        reasons += self._content_blockers()
+        visible = strip_photo_markers(self._body())
+        if visible.strip() and len(visible) < MIN_CONTENT_LENGTH:
+            reasons.append(f"본문 {len(visible)}자 < 최소 {MIN_CONTENT_LENGTH}자")
+        if self.quality_score < MIN_QUALITY_SCORE:
+            reasons.append(f"품질 점수 {self.quality_score} < {MIN_QUALITY_SCORE}")
+        return reasons
+
+    def _content_blockers(self) -> list[str]:
+        """새 발행·수정 발행 모두에 적용하는 본문 규칙."""
+        body = self._body()
+        reasons: list[str] = []
+        if not strip_photo_markers(body).strip():
+            reasons.append("본문 없음")
+        if EXPERIENCE_PLACEHOLDER in body:
+            reasons.append(f"'{EXPERIENCE_PLACEHOLDER}' 자리를 실제 경험으로 채우지 않음")
+        return reasons
+
+    def _body(self) -> str:
+        return (self.content.body_markdown or "") if self.content else ""
+
     def is_publishable(self) -> bool:
-        """True only when PENDING + quality body + sufficient length + quality_score."""
+        return not self.publish_blockers()
+
+    def may_be_on_blog(self) -> bool:
+        """블로그에 올라가 있거나 올라갔을 수 있는 글 — 같은 키워드를 또 발행하면 중복."""
         return (
-            self.status == PostStatus.PENDING
-            and self.content is not None
-            and self.content.has_body()
-            and len(self.content.body_markdown or "") >= MIN_CONTENT_LENGTH
-            and self.quality_score >= 70
+            self.status in _ON_BLOG_STATUSES
+            or bool(self.published_url or self.entry_id)
+            or self.is_publish_unconfirmed()
         )
+
+    def mark_publish_unconfirmed(self, detail: str) -> None:
+        """발행을 시도했지만 결과를 모른다 — 발행실패로 두고 관리자 확인을 요구한다."""
+        self.status = PostStatus.FAILED
+        self.error_message = f"{PUBLISH_UNCONFIRMED}: {detail}"[:200]
+
+    def is_publish_unconfirmed(self) -> bool:
+        return self.status == PostStatus.FAILED and PUBLISH_UNCONFIRMED in self.error_message
 
     def mark_revision_pending(self, reason: str = "") -> None:
         """PUBLISHED → REVISION_PENDING. reason을 error_message에 저장."""

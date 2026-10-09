@@ -1,6 +1,7 @@
 """자동 발행 안전 규칙 — 일일 한도·동일 배치 중복·앞쪽 불량 글·결과 불명 처리 회귀 테스트."""
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -199,7 +200,13 @@ class FailingSaveRepo(InMemoryPostRepository):
     def save(self, post: Post) -> None:
         if post.status == PostStatus.PUBLISHED:
             raise ConnectionError("Sheets 503")
-        super().save(post)
+        super().save(replace(post))  # 시트처럼 저장된 값만 남는다(메모리 객체 변경과 분리)
+
+    def find_all(self) -> list[Post]:
+        return [replace(p) for p in super().find_all()]
+
+    def find_stuck(self) -> list[Post]:
+        return [replace(p) for p in super().find_stuck()]
 
 
 class TestSaveFailureAfterPublish:

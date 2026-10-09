@@ -51,7 +51,6 @@ class ReviseSelectedPostUseCase:
             self._lock.release()
 
     def _revise(self, post: Post) -> ManualPublishResult:
-        first_published = post.published_at
         post.mark_revising()
         self._repo.save(post)
         try:
@@ -67,10 +66,7 @@ class ReviseSelectedPostUseCase:
             self._back_to_pending(post, f"수정 실패: {error}")
             return ManualPublishResult.failed(post.row_index, post.error_message)
 
-        post.mark_revised(result.url)
-        # mark_revised는 발행일을 지금으로 바꾼다 — 그러면 수정이 '오늘 발행'으로 세어져
-        # 하루 한도를 먹는다. 첫 발행일을 되돌리고, 수정 시각은 로그에만 남긴다
-        post.published_at = first_published
+        post.mark_revised(result.url)  # 첫 발행일 유지, 수정 시각·횟수는 따로 기록
         message = "수정 발행 완료"
         post.error_message = ""
         if result.warnings:

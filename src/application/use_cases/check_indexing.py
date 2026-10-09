@@ -79,7 +79,10 @@ class CheckIndexingUseCase:
 
         # 수정하면 published_at이 지금으로 바뀐다(mark_revised). 구글이 다시 수집할 시간을 주지 않고
         # 매일 점검하면 같은 글을 매일 수정하는 순환이 생긴다(2026-09-27~10-01 실측)
-        if post.published_at and self._clock() - post.published_at < REINDEX_GRACE:
+        # mark_revised는 이제 published_at(최초 발행일)을 두고 revised_at을 남기므로 둘 중 늦은 쪽 기준
+        # (seo-index 작업의 last_changed()와 같은 규칙 — 병합 시 그쪽 버전 사용)
+        changed = [d for d in (post.published_at, post.revised_at) if d]
+        if changed and self._clock() - max(changed) < REINDEX_GRACE:
             logger.info(f"최근 발행·수정 — 색인 점검 건너뜀: {post.keyword}")
             return IndexingCheckResult(
                 success=False, post_keyword=post.keyword, url=post.published_url,

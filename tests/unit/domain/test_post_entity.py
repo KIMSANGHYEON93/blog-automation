@@ -187,7 +187,7 @@ class TestMarkRevised:
         post.mark_revised("https://blog.tistory.com/123")
         assert post.status == PostStatus.PUBLISHED
         assert post.published_url == "https://blog.tistory.com/123"
-        assert isinstance(post.published_at, datetime)
+        assert isinstance(post.revised_at, datetime)  # 최초 발행일(published_at)은 건드리지 않음
 
     def test_non_revising_raises(self):
         post = Post(row_index=1, keyword="test", status=PostStatus.PUBLISHED)

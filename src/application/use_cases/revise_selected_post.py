@@ -27,16 +27,19 @@ class ReviseSelectedPostUseCase:
         self._lock = lock
 
     def execute(self, row_index: int) -> ManualPublishResult:
-        post = next((p for p in self._repo.find_all() if p.row_index == row_index), None)
-        if post is None or not post.is_revisable():
-            return ManualPublishResult.rejected(
-                row_index, "수정대기 상태이고 본문과 글 번호가 있는 글만 수정 발행할 수 있습니다",
-            )
         if not self._lock.acquire():
             return ManualPublishResult.rejected(
                 row_index, "다른 작업(자동 발행 등)이 실행 중 — 끝난 뒤 다시 시도하세요",
             )
         try:
+            # 잠금 뒤에 읽는다 — 그 사이 자동 수정이 끝냈을 수 있다
+            post = next((p for p in self._repo.find_all() if p.row_index == row_index), None)
+            if post is None or not post.is_revisable():
+                return ManualPublishResult.rejected(
+                    row_index,
+                    "수정대기 상태이고 본문과 글 번호가 있는 글만 수정 발행할 수 있습니다"
+                    + (f" ({', '.join(post.revision_blockers())})" if post else ""),
+                )
             self._browser.start()
             try:
                 if not self._browser.login():

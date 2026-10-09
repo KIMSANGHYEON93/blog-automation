@@ -207,11 +207,15 @@ class Post:
         self.status = PostStatus.REVISION_PENDING
         self.error_message = "이전 실행 중단으로 자동 복구됨"
 
+    def revision_blockers(self) -> list[str]:
+        """수정 발행을 막는 사유. 본문 규칙은 새 발행과 같고, 길이·품질 점수는 보지 않는다
+        (이미 올라간 예전 글은 점수 칸이 비어 있어 자동 수정이 모두 막힌다)."""
+        reasons: list[str] = []
+        if self.status != PostStatus.REVISION_PENDING:
+            reasons.append(f"수정대기 상태가 아님 (현재: {self.status.value})")
+        if not self.entry_id:
+            reasons.append("글 번호 없음")
+        return reasons + self._content_blockers()
+
     def is_revisable(self) -> bool:
-        """True when REVISION_PENDING + content has body + entry_id exists."""
-        return (
-            self.status == PostStatus.REVISION_PENDING
-            and self.content is not None
-            and self.content.has_body()
-            and bool(self.entry_id)
-        )
+        return not self.revision_blockers()

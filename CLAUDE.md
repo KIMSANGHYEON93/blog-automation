@@ -130,7 +130,7 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 
 ### Google Sheets 스키마
 
-컬럼 번호는 `src/infrastructure/persistence/column_map.py`의 `COL` dict에만 정의되어 있음(1-based, A~AL — AI~AL은 재시도횟수·다음재시도시각·검증본문지문·승인본문지문, 추가 절차는 `docs/SHEETS_GUIDE.md`). 시트 컬럼을 바꿀 때는 이 파일과 n8n 워크플로우의 Sheets 노드를 함께 수정해야 함.
+컬럼 번호는 `src/infrastructure/persistence/column_map.py`의 `COL` dict에만 정의되어 있음(1-based, A~AM — AI는 n8n이 쓰는 URL슬러그, AJ~AM은 재시도횟수·다음재시도시각·검증본문지문·승인본문지문, 추가 절차는 `docs/SHEETS_GUIDE.md`). 시트 컬럼을 바꿀 때는 이 파일과 n8n 워크플로우의 Sheets 노드를 함께 수정해야 함.
 
 ### Pipeline A (`n8n/`)
 

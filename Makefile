@@ -10,7 +10,7 @@ test-unit:
 
 # n8n 네이버 노드 순수 함수 테스트 + 생성된 워크플로우가 최신인지
 test-n8n:
-	node --test "n8n/code_nodes/naver/tests/*.test.js"
+	node --test "n8n/code_nodes/naver/tests/*.test.js" "n8n/code_nodes/tests/*.test.js"
 	python scripts/build_naver_workflow.py --check
 
 # Integration tests (requires real services)

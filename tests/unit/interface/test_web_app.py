@@ -470,6 +470,19 @@ class TestEditPost:
         post = self._row(h, 6)
         assert post.status == PostStatus.PENDING and post.error_message == ""
 
+    def test_본문을_고치면_검수_승인_버튼이_생기고_승인하면_발행_가능(self, h):
+        h.login()
+        self._edit(h, body="y" * 3500)
+        html = h.client.get("/posts/2").get_data(as_text=True)
+        assert "재검증 필요" in html
+        assert 'action="/posts/2/approve"' in html
+
+        resp = h.client.post("/posts/2/approve", data={"csrf_token": h.csrf("/posts/2")})
+
+        assert resp.status_code == 302
+        assert self._row(h, 2).publish_blockers() == []
+        assert 'action="/posts/2/approve"' not in h.client.get("/posts/2").get_data(as_text=True)
+
     def test_발행대기_글은_되돌리기_버튼이_없고_요청도_거부(self, h):
         h.login()
         assert 'action="/posts/2/restore"' not in h.client.get("/posts/2").get_data(as_text=True)

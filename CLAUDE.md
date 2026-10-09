@@ -135,7 +135,8 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 ### Pipeline A (`n8n/`)
 
 - `workflow_complete.json`이 메인 워크플로우, `workflow_keyword_research.json`은 키워드 리서치용
-- `code_nodes/*.js`는 Code 노드의 원본 소스이고, 워크플로우 JSON의 `jsCode` 필드에 **인라인 복사**되어 있음(동기화 스크립트 없음). `.js`만 고치면 n8n에 반영되지 않으므로 JSON도 같이 수정하거나 n8n UI에 다시 붙여넣을 것
+- `code_nodes/*.js`는 Code 노드의 원본 소스이고, 워크플로우 JSON의 `jsCode` 필드에 **인라인 복사**되어 있음(동기화 스크립트 없음). `.js`만 고치면 n8n에 반영되지 않으므로 JSON도 같이 수정하거나 n8n UI에 다시 붙여넣을 것. `make test-n8n`(`n8n/code_nodes/tests/workflow_sync.test.js`)이 둘의 일치와 jsCode 문법을 검사한다
+- **n8n 보안**: URL Validation·Fetch Official Docs는 내부 주소를 요청하지 않고 리다이렉트를 단계마다 검사한다. 컨테이너에는 `.env` 전체가 아니라 워크플로가 쓰는 `$env` 키만 넣는다 — 새 `$env` 키를 쓰면 `docker-compose.yml`에도 추가. 적용·롤백은 `docs/N8N_SECURITY.md`
 - 프롬프트(`prompts/`): 용어(a) / 비교(b) / 에러해결(c)은 `route_prompt.js`가 선택하고, 교차 검증은 d. `*_v1.md`는 이전 버전
 - **키워드 발굴 조회 기간**: `DEFAULT_LOOKBACK_DAYS = 90`. 저트래픽 블로그에서 28일 창은 쿼리별 노출이 흩어져 `min_impressions=5`를 아무도 못 넘긴다(2026-09-23 실측: 28일 0건 / 90일 10건). `--discover-days`로 조절
 - **로그인은 세션 재사용이 먼저다**: `SeleniumBrowserAdapter.login()`이 `.browser_data/tistory_session.json`(0600)의 쿠키를 주입해 관리 페이지 접근으로 검증하고, 실패할 때만 카카오 OAuth를 탄다. 매 실행이 OAuth를 타면 카카오 이상탐지가 2FA를 띄운다(2026-09-23 실측: 기동 7회에 2FA 3회). 세션 파일에는 티스토리 도메인 쿠키만 담는다 — 카카오 `_kau`는 유출 시 피해가 크고 tiara는 추적용이라 제외

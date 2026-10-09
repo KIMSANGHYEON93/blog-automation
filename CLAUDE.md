@@ -39,8 +39,8 @@ docker compose up -d            # localhost:5678
 python -m src.interface.cli                      # 기본: 고스트 복구 → 카테고리 자동분류 → 발행 → CWV 점검
 python -m src.interface.cli --revise             # 수정대기 → 기존 Tistory 글 업데이트
 python -m src.interface.cli --recover-failed [--force-reset]
-python -m src.interface.cli --check-index        # 미색인 발행완료 글 → 수정대기
-python -m src.interface.cli --submit-index       # Google Indexing API 제출
+python -m src.interface.cli --check-index        # 미색인 사유 기록, 콘텐츠 문제만 수정대기
+python -m src.interface.cli --submit-index       # Indexing API 요청 — INDEXING_API_ENABLED=false(기본)면 로그만
 python -m src.interface.cli --generate-sitemap
 python -m src.interface.cli --status             # (= --dashboard, crontab 호환 alias)
 python -m src.interface.cli --discover-keywords [--auto-register] [--discover-days N]
@@ -150,7 +150,7 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 ### 설정
 
 - `.env` (`.env.example` 참고) → `src/infrastructure/config.py`의 `Config.from_env()`. `config.validate()`는 기본 발행 모드에서만 호출됨
-- 기능 플래그: `CWV_CHECK`(기본 true), `RETRY_FAILED`(기본 false). 알림은 `SLACK_WEBHOOK_URL` 또는 `TELEGRAM_*` 중 하나
+- 기능 플래그: `CWV_CHECK`(기본 true), `RETRY_FAILED`(기본 false), `INDEXING_API_ENABLED`(기본 false — Indexing API는 JobPosting·BroadcastEvent 전용이라 일반 글에 안 씀, API 200은 요청 접수일 뿐 색인 완료 아님). 알림은 `SLACK_WEBHOOK_URL` 또는 `TELEGRAM_*` 중 하나
 - `site_profile.json`: 카테고리 매핑 + 키워드 분류 규칙. 파일이 없으면 기본값으로 동작
 
 ## Code Style

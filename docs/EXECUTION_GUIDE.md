@@ -216,15 +216,15 @@ python -m src.interface.cli --revise
 python -m src.interface.cli --check-index
 ```
 
-발행완료 포스트의 Google 색인 상태를 점검합니다. 미색인 글은 수정대기로 전환합니다.
+발행완료 포스트의 Google 색인 상태를 점검합니다. 미색인 사유(수집 지연·robots/noindex·canonical·접근 오류·콘텐츠 문제)를 T열에 기록하고, 콘텐츠 문제(크롤링됨-색인 안 됨, 발행·수정 30일 경과, 수정 이력 없음)만 수정대기로 전환합니다.
 
-### 색인 제출 (Google Indexing API)
+### Indexing API 크롤링 요청 (기본 꺼짐)
 
 ```bash
 python -m src.interface.cli --submit-index
 ```
 
-발행완료 포스트를 Google Indexing API에 색인 요청합니다.
+Google Indexing API는 JobPosting·BroadcastEvent(VideoObject) 페이지 전용이라 일반 블로그 글에는 쓰지 않습니다. `INDEXING_API_ENABLED=false`(기본)이면 아무것도 제출하지 않고 이유만 로그에 남깁니다. 새 글은 사이트맵(`--generate-sitemap`)으로 알리고, 색인 여부는 `--check-index`와 Search Console에서 확인합니다. 켜더라도 API 200 응답은 '요청 접수'이지 색인 완료가 아닙니다.
 
 ### 사이트맵 생성
 
@@ -319,7 +319,7 @@ python scripts/add_keywords.py
 | 09:00 | 티스토리 자동 발행 (메인) | `run_pipeline_b.sh` |
 | 10:00 | 수정대기 글 업데이트 | `run_pipeline_b.sh --revise` |
 | 14:00 | 색인 상태 점검 | `run_pipeline_b.sh --check-index` |
-| 14:30 | 미색인 글 색인 제출 | `run_pipeline_b.sh --submit-index` |
+| 14:30 | Indexing API 요청 (기본 꺼짐, 로그만) | `run_pipeline_b.sh --submit-index` |
 | 15:00 | 대시보드 업데이트 | `run_dashboard.sh` |
 | 월 02:00 | GSC 키워드 발굴 (주 1회) | `run_pipeline_b.sh --discover-keywords` |
 
@@ -346,7 +346,7 @@ crontab -e
 # 14:00 색인 상태 점검
 0 14 * * * "/path/to/blog-automation/run_pipeline_b.sh" --check-index
 
-# 14:30 미색인 글 색인 제출
+# 14:30 Indexing API 요청 (INDEXING_API_ENABLED=false면 로그만)
 30 14 * * * "/path/to/blog-automation/run_pipeline_b.sh" --submit-index
 
 # 15:00 성과 대시보드 업데이트

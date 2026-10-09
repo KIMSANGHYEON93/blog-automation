@@ -140,7 +140,7 @@ Google Search Console 등록 후 진행합니다.
 
 ## 5.7 GSC URL Inspection API 자동화 설정
 
-> **목적**: 발행 완료 포스트의 색인 상태를 자동 점검하고, 미색인 포스트를 수정대기로 전환하여 재발행
+> **목적**: 발행 완료 포스트의 색인 상태를 자동 점검하고, 미색인 사유를 분류해 기록한다. 콘텐츠 문제로 보이는 글만 수정대기 후보로 보낸다
 
 ### 사전 조건
 
@@ -189,15 +189,20 @@ python -m src.interface.cli --check-index
 ```
 발행완료(PUBLISHED) 포스트 조회
     ↓
+마지막 발행·수정 뒤 14일 안 → 점검 건너뜀 (API 호출 안 함)
+    ↓
 GSC URL Inspection API 호출 (포스트별)
     ↓
 색인됨 (verdict=PASS) → 상태 유지
-    ↓
-미색인 (verdict≠PASS) → 수정대기(REVISION_PENDING) 전환
-                         error_message에 사유 기록
-    ↓
-이후 --revise로 관련 기사 + 내부 링크 보강 후 재발행
+수집 지연 / robots·noindex / canonical·중복 / 접근 오류 / 미분류
+    → 상태 유지, T열(에러메시지)에 "색인 진단[범주]: 사유"만 기록
+콘텐츠 문제 (Crawled - currently not indexed)
+    → 마지막 발행·수정 뒤 30일 지났고 수정횟수(AC) 0회면 수정대기 전환
+    → 아니면 상태 유지 + "사람 확인 필요" 기록 (같은 글 반복 수정 방지)
 ```
+
+`--revise`는 본문을 새로 쓰지 않고 시트 본문을 다시 올린다. 콘텐츠 문제 글은 시트 본문을
+사람이 보강한 뒤 수정 발행해야 효과가 있다. 날짜만 바꿔 다시 올리는 것은 해결책이 아니다.
 
 ### API 제한
 
@@ -212,8 +217,8 @@ GSC URL Inspection API 호출 (포스트별)
 | 상태 | 의미 | 대응 |
 |------|------|------|
 | Submitted and indexed | 색인 완료 | 정상 |
-| Crawled - currently not indexed | 크롤링됨, 색인 미생성 | 콘텐츠 보강 후 재발행 |
-| Discovered - currently not indexed | 발견됨, 크롤링 미수행 | 내부 링크 보강 후 재발행 |
+| Crawled - currently not indexed | 크롤링됨, 색인 미생성 | 콘텐츠 문제 — 본문 보강 후 수정 발행 |
+| Discovered - currently not indexed | 발견됨, 크롤링 미수행 | 수집 지연 — 사이트맵·내부 링크 확인, 글 수정 불필요 |
 | Page with redirect | 리다이렉트 | URL 확인 |
 | Not found (404) | 페이지 없음 | URL/발행 상태 확인 |
 

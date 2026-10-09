@@ -42,6 +42,14 @@ COL = {
     "cwv_checked_at": 32, # AF: CWV점검일시
     "revised_at": 33,     # AG: 최종수정일시
     "revision_reason": 34,  # AH: 수정사유
+    # AI: URL슬러그 — n8n 'Sheets Update (발행대기)'가 머리글 이름으로 쓴다(Python은 안 읽음)
+    "url_slug": 35,
+    # === 발행 안전 컬럼 (AJ-AM, 2026-10 추가 — docs/SHEETS_GUIDE.md 마이그레이션) ===
+    # 열이 없는 예전 시트는 읽을 때 0/빈 값, 저장할 때는 격자 밖이면 건너뛴다
+    "retry_count": 36,          # AJ: 재시도횟수
+    "next_retry_at": 37,        # AK: 다음재시도시각
+    "verified_body_hash": 38,   # AL: 검증본문지문
+    "approved_body_hash": 39,   # AM: 승인본문지문
 }
 
 STATUS_WAITING = "대기"

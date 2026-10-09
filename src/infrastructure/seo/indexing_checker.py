@@ -78,6 +78,9 @@ class GscIndexingAdapter(IndexingPort):
                 indexing_state=indexing_state,
                 robots_txt_state=robots_txt_state,
                 last_crawl_time=last_crawl,
+                page_fetch_state=index_status.get("pageFetchState", ""),
+                google_canonical=index_status.get("googleCanonical", ""),
+                user_canonical=index_status.get("userCanonical", ""),
             )
         except (KeyError, TypeError) as e:
             logger.warning(f"GSC 응답 파싱 실패: {e}")

@@ -27,9 +27,21 @@ cd "$PROJECT_DIR"
 
 # --- Fix 1: 파이프라인 동시 실행 방지 (mkdir atomic lock) ---
 LOCK_DIR="${PROJECT_DIR}/.pipeline_b.lock"
+LOCK_OWNER="${LOCK_DIR}/owner"  # 잡은 프로세스 PID (대시보드 DirectoryPipelineLock과 같은 규약)
+lock_is_stale() {
+    local pid
+    pid="$(cat "$LOCK_OWNER" 2>/dev/null || true)"
+    if [[ -n "$pid" ]]; then
+        # 소유 프로세스가 죽었거나, 살아 있어도 하루가 넘으면(PID 재사용) 스테일
+        ! kill -0 "$pid" 2>/dev/null || find "$LOCK_DIR" -maxdepth 0 -mmin +1440 2>/dev/null | grep -q .
+    else
+        # 예전 형식(owner 없음): 5시간 이상 → 스테일
+        find "$LOCK_DIR" -maxdepth 0 -mmin +300 2>/dev/null | grep -q .
+    fi
+}
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    # 스테일 락 체크 (5시간 이상 → 강제 해제)
-    if find "$LOCK_DIR" -maxdepth 0 -mmin +300 2>/dev/null | grep -q .; then
+    if lock_is_stale; then
+        rm -f "$LOCK_OWNER"
         rmdir "$LOCK_DIR" 2>/dev/null || true
         mkdir "$LOCK_DIR" 2>/dev/null || { echo "[SKIP] 다른 파이프라인 실행 중 — ${TASK_NAME} 스킵" | tee -a "$LOG_FILE"; exit 0; }
     else
@@ -37,7 +49,8 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
         exit 0
     fi
 fi
-trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+echo $$ > "$LOCK_OWNER"
+trap 'rm -f "$LOCK_OWNER"; rmdir "$LOCK_DIR" 2>/dev/null' EXIT
 
 echo "=== Pipeline B [${TASK_NAME}] 시작: $(date '+%Y-%m-%d %H:%M:%S') ===" | tee "$LOG_FILE"
 

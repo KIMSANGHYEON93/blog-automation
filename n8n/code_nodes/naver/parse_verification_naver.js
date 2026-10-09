@@ -3,7 +3,9 @@
  * Mode: runOnceForEachItem
  * 입력: Normalize Response (Verify) 출력 { text } — 앞 노드 필드는 넘어오지 않으므로 $('노드')로 읽는다
  * 출력: verification { passed, quality_score, reason, llm_reason, 항목별 boolean }
- * 네이버 4개 항목은 LLM이 빠뜨리면 false로 본다(기존 티스토리 판정은 true로 봄 — 네이버는 엄격하게).
+ * 모든 항목은 명시적 boolean만 인정한다 — 누락·잘못된 타입은 null로 남기고 실패. 점수는 0~100 정수만.
+ * 스키마: BASE_CHECKS는 티스토리 parse_verification.js의 REQUIRED_CHECKS와 같아야 한다(테스트가 확인),
+ * NAVER_CHECKS는 네이버 검증 프롬프트(prompt_naver_h_verification.md)에만 있는 항목.
  */
 
 const BASE_CHECKS = ['is_accurate', 'is_logical', 'is_complete', 'is_useful', 'is_in_depth'];
@@ -56,12 +58,21 @@ function judgeNaver(result, { structurePassed, structureIssues, searchOk }) {
   const reasons = [];
   if (!searchOk) reasons.push('네이버 검색 결과 0건');
   if (!structurePassed) reasons.push(`구조 검사 실패: ${(structureIssues || []).join(', ')}`);
-  const failed = [...BASE_CHECKS, ...NAVER_CHECKS].filter((key) => result[key] !== true);
+  const allChecks = [...BASE_CHECKS, ...NAVER_CHECKS];
+  const malformed = allChecks.filter((key) => typeof result[key] !== 'boolean');
+  if (malformed.length) reasons.push(`검증 형식 오류(누락·boolean 아님): ${malformed.join(', ')}`);
+  const failed = allChecks.filter((key) => result[key] === false);
   if (failed.length) reasons.push(`검증 미통과: ${failed.join(', ')}`);
-  const score = typeof result.quality_score === 'number' ? result.quality_score : 0;
-  if (score < MIN_QUALITY_SCORE) reasons.push(`품질 점수 ${score}점 (최소 ${MIN_QUALITY_SCORE})`);
+  const raw = result.quality_score;
+  const scoreOk = Number.isInteger(raw) && raw >= 0 && raw <= 100;
+  const score = scoreOk ? raw : 0;
+  if (!scoreOk) reasons.push(`quality_score 형식 오류(0~100 정수 아님): ${String(raw)}`);
+  else if (score < MIN_QUALITY_SCORE) reasons.push(`품질 점수 ${score}점 (최소 ${MIN_QUALITY_SCORE})`);
 
-  const checks = Object.fromEntries([...BASE_CHECKS, ...NAVER_CHECKS].map((k) => [k, result[k] === true]));
+  // 누락·잘못된 타입은 false로 위장하지 않고 null로 남긴다
+  const checks = Object.fromEntries(
+    allChecks.map((k) => [k, typeof result[k] === 'boolean' ? result[k] : null]),
+  );
   return {
     passed: reasons.length === 0,
     quality_score: score,

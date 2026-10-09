@@ -37,6 +37,9 @@ class EditPostUseCase:
             raise PostNotEditableError(f"{row_index}행은 편집할 수 없는 상태입니다")
         # 브라우저 textarea는 \r\n을 보낸다 — 줄 단위 표시([[사진:…]])를 알아보도록 \n으로 통일
         body = body.replace("\r\n", "\n")
+        # 품질 점수는 n8n이 검증한 본문의 것이다 — 그 본문 지문을 남겨 두면, 바뀐 본문은
+        # 재검증(다시 생성)이나 관리자 승인 전까지 발행이 막힌다(Post.verification_stale)
+        post.record_verification_baseline()
         post.content = replace(
             post.content or PostContent(), title=title, body_markdown=body, tags=tags,
         )
@@ -44,7 +47,16 @@ class EditPostUseCase:
         self._repo.save_content(post)
         if post.status == PostStatus.PUBLISHED:
             post.mark_revision_pending("대시보드에서 수정 — 수정 발행 대기")
-            self._repo.save(post)
+        self._repo.save(post)  # 상태·검증 지문
+        return post
+
+    def approve(self, row_index: int) -> Post:
+        """관리자 검수 승인 — 바뀐 본문을 사람이 확인했다는 명시적 기록. 점수는 그대로."""
+        post = self._find(row_index)
+        if post is None or post.status not in EDITABLE_STATUSES or post.content is None:
+            raise PostNotEditableError(f"{row_index}행은 승인할 수 없는 상태입니다")
+        post.approve_current_body()
+        self._repo.save(post)
         return post
 
     def add_photo(self, row_index: int, filename: str) -> Post:

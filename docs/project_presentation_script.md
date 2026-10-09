@@ -188,9 +188,9 @@ execute() 호출 시:
 
 | 커맨드 | 기능 |
 |--------|------|
-| `--check-index` | 구글 색인 상태 확인, 미색인 포스트를 수정대기로 전환 |
+| `--check-index` | 구글 색인 상태 확인, 미색인 사유 기록(콘텐츠 문제만 수정대기) |
 | `--revise` | 수정대기 포스트를 Tistory에서 업데이트 |
-| `--submit-index` | 구글 Indexing API로 URL 제출 |
+| `--submit-index` | 구글 Indexing API 요청 (기본 꺼짐 — JobPosting·방송 영상 전용 API) |
 | `--check-cwv` | PageSpeed Insights로 Core Web Vitals 측정 |
 | `--generate-sitemap` | 발행된 포스트로 sitemap.xml 생성 |
 | `--discover-keywords` | Google Search Console 데이터로 키워드 발굴 |

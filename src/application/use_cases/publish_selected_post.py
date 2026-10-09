@@ -11,22 +11,26 @@ from dataclasses import dataclass
 from enum import Enum
 
 from src.application.services.internal_link_enricher import InternalLinkEnricher
-from src.domain.entities.post import MIN_CONTENT_LENGTH, Post
+from src.application.use_cases.publish_posts import is_platform_limit
+from src.domain.entities.post import (  # noqa: F401 — 기존 import 경로 유지
+    EXPERIENCE_PLACEHOLDER,
+    MIN_QUALITY_SCORE,
+    Post,
+)
+from src.domain.exceptions import DailyPublishLimitError
 from src.domain.ports.browser_port import BrowserPort
 from src.domain.ports.pipeline_lock_port import PipelineLockPort
 from src.domain.ports.post_repository import PostRepository
-from src.domain.services.keyword_matcher import find_duplicate
-from src.domain.services.photo_markers import strip_photo_markers
+from src.domain.services.publish_policy import (  # noqa: F401
+    DUPLICATE_THRESHOLD,
+    claimed_keywords,
+    duplicate_reason,
+)
 from src.domain.services.quota_manager import QuotaManager
 from src.domain.value_objects.post_status import PostStatus
 
 logger = logging.getLogger(__name__)
 
-MIN_QUALITY_SCORE = 70
-DUPLICATE_THRESHOLD = 0.7
-# 네이버 초안(n8n prompt_naver_common.md)이 사람의 실제 경험을 채울 자리에 남기는 표시.
-# 남아 있으면 검수를 건너뛴 AI 글이라 발행하지 않는다(네이버 AI 콘텐츠 가이드 2026-05)
-EXPERIENCE_PLACEHOLDER = "[[직접 해 보니]]"
 LOGIN_FAILED = "로그인 실패"
 
 
@@ -57,21 +61,8 @@ class ManualPublishResult:
 
 
 def publish_blockers(post: Post) -> list[str]:
-    """발행을 막는 사유 목록 (비어 있으면 발행 가능). 대시보드 표시에도 사용."""
-    reasons: list[str] = []
-    if post.status != PostStatus.PENDING:
-        reasons.append(f"발행대기 상태가 아님 (현재: {post.status.value})")
-    body = (post.content.body_markdown or "") if post.content else ""
-    visible = strip_photo_markers(body)  # 사진 표시는 블로그에 보이지 않는다
-    if not visible.strip():
-        reasons.append("본문 없음")
-    elif len(visible) < MIN_CONTENT_LENGTH:
-        reasons.append(f"본문 {len(visible)}자 < 최소 {MIN_CONTENT_LENGTH}자")
-    if EXPERIENCE_PLACEHOLDER in body:
-        reasons.append(f"'{EXPERIENCE_PLACEHOLDER}' 자리를 실제 경험으로 채우지 않음")
-    if post.quality_score < MIN_QUALITY_SCORE:
-        reasons.append(f"품질 점수 {post.quality_score} < {MIN_QUALITY_SCORE}")
-    return reasons
+    """발행을 막는 사유 목록 (비어 있으면 발행 가능). 자동 발행과 같은 Post.publish_blockers."""
+    return post.publish_blockers()
 
 
 class PublishSelectedPostUseCase:
@@ -90,7 +81,20 @@ class PublishSelectedPostUseCase:
         self._lock = lock
 
     def execute(self, row_index: int) -> ManualPublishResult:
-        post = next((p for p in self._repo.find_all() if p.row_index == row_index), None)
+        # 잠금을 먼저 잡고 시트를 읽는다 — 잠금 전에 읽은 상태·쿼터·중복 판단은 그 사이
+        # 자동 실행이 바꿨을 수 있다(오래된 판단으로 발행하지 않기)
+        if not self._lock.acquire():
+            return ManualPublishResult.rejected(
+                row_index, "자동 파이프라인이 실행 중 — 끝난 뒤 다시 시도하세요",
+            )
+        try:
+            return self._execute_locked(row_index)
+        finally:
+            self._lock.release()
+
+    def _execute_locked(self, row_index: int) -> ManualPublishResult:
+        all_posts = self._repo.find_all()
+        post = next((p for p in all_posts if p.row_index == row_index), None)
         if post is None:
             return ManualPublishResult.rejected(row_index, f"{row_index}행 게시물을 찾을 수 없음")
 
@@ -101,25 +105,14 @@ class PublishSelectedPostUseCase:
         if not self._quota.can_publish(self._repo.count_published_today()):
             return ManualPublishResult.rejected(row_index, "오늘 발행 쿼터를 모두 사용함")
 
-        published = self._repo.find_published(limit=9999)
-        duplicate = self._find_duplicate(post, published)
+        duplicate = duplicate_reason(post, claimed_keywords(all_posts))
         if duplicate:
-            return ManualPublishResult.rejected(row_index, duplicate)
-
-        if not self._lock.acquire():
             return ManualPublishResult.rejected(
-                row_index, "자동 파이프라인이 실행 중 — 끝난 뒤 다시 시도하세요",
+                row_index, f"이미 발행(또는 발행 시도)된 글과 {duplicate}",
             )
-        try:
-            return self._publish_with_browser(post, published)
-        finally:
-            self._lock.release()
 
-    @staticmethod
-    def _find_duplicate(post: Post, published: list[Post]) -> str:
-        keywords = [p.keyword for p in published if p.keyword and p.row_index != post.row_index]
-        is_dup, matched, score = find_duplicate(post.keyword, keywords, DUPLICATE_THRESHOLD)
-        return f"이미 발행된 키워드와 중복: {matched} ({score:.0%})" if is_dup else ""
+        published = [p for p in all_posts if p.status == PostStatus.PUBLISHED]
+        return self._publish_with_browser(post, published)
 
     def _publish_with_browser(self, post: Post, published: list[Post]) -> ManualPublishResult:
         self._browser.start()
@@ -141,16 +134,21 @@ class PublishSelectedPostUseCase:
         self._repo.save(post)
         try:
             result = self._browser.publish(post)
+        except DailyPublishLimitError as e:
+            return self._keep_pending(post, f"플랫폼 일일 한도: {e}")
         except Exception as e:
-            logger.exception(f"수동 발행 중 예외: row={post.row_index}")
-            post.mark_failed(f"{type(e).__name__}: {e}")
+            # 브라우저가 어디서 멈췄는지 모른다 — 올라갔을 수 있으니 재발행 금지 표시
+            logger.exception(f"수동 발행 중 예외 — 결과 불명: row={post.row_index}")
+            post.mark_publish_unconfirmed(f"{type(e).__name__}: {e}")
             self._repo.save(post)
             return ManualPublishResult.failed(post.row_index, post.error_message)
         except BaseException as e:
-            post.mark_failed(f"중단: {type(e).__name__}")
+            post.mark_publish_unconfirmed(f"중단: {type(e).__name__}")
             self._repo.save(post)
             raise
 
+        if not result.success and is_platform_limit(result.error):
+            return self._keep_pending(post, f"플랫폼 일일 한도: {result.error}")
         if not result.success:
             post.mark_failed(result.error)
             self._repo.save(post)
@@ -167,3 +165,10 @@ class PublishSelectedPostUseCase:
         return ManualPublishResult(
             ManualPublishOutcome.PUBLISHED, post.row_index, message, url=result.url,
         )
+
+    def _keep_pending(self, post: Post, reason: str) -> ManualPublishResult:
+        """플랫폼이 거부했다 — 확실히 안 올라갔으므로 발행대기로 되돌린다."""
+        post.reset_to_pending()
+        post.error_message = reason[:200]
+        self._repo.save(post)
+        return ManualPublishResult.failed(post.row_index, f"{reason} — 발행대기 유지")

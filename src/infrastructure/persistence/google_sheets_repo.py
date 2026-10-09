@@ -52,6 +52,17 @@ def parse_sheet_datetime(raw: str) -> datetime | None:
     return None
 
 
+def _parse_int(raw: str) -> int:
+    try:
+        return int((raw or "").strip() or 0)
+    except ValueError:
+        return 0
+
+
+def _format_dt(value: datetime | None) -> str:
+    return value.strftime(_DATETIME_FORMATS[0]) if value else ""
+
+
 class GoogleSheetsPostRepository(PostRepository):
     def __init__(self, creds_path: str, sheet_name: str, worksheet: str = ""):
         creds = GoogleCredentials.from_service_account_file(creds_path, scopes=SCOPES)
@@ -127,6 +138,12 @@ class GoogleSheetsPostRepository(PostRepository):
             quality_score=quality_score,
             cwv_lcp=cwv_lcp,
             cwv_cls=cwv_cls,
+            revision_count=_parse_int(get("revision_count")),
+            revised_at=parse_sheet_datetime(get("revised_at")),
+            retry_count=_parse_int(get("retry_count")),
+            next_retry_at=parse_sheet_datetime(get("next_retry_at")),
+            verified_body_hash=get("verified_body_hash").strip(),
+            approved_body_hash=get("approved_body_hash").strip(),
         )
 
         raw_links = get("internal_links")
@@ -220,30 +237,30 @@ class GoogleSheetsPostRepository(PostRepository):
             result.append(self._row_to_post(row, i))
         return result
 
-    def save(self, post: Post, _prev_status: str = "") -> None:
+    def save(self, post: Post) -> None:
         row = post.row_index
         updates = {
             COL["status"]: post.status.value,
             COL["error_msg"]: post.error_message,
             COL["published_url"]: post.published_url,
+            COL["retry_count"]: str(post.retry_count) if post.retry_count else "",
+            COL["next_retry_at"]: _format_dt(post.next_retry_at),
+            COL["verified_body_hash"]: post.verified_body_hash,
+            COL["approved_body_hash"]: post.approved_body_hash,
         }
-        if post.published_at:
-            updates[COL["published_at"]] = post.published_at.strftime("%Y-%m-%d %H:%M:%S")
+        if post.published_at:  # 최초 발행일 — 수정 발행은 바꾸지 않는다(Post.mark_revised)
+            updates[COL["published_at"]] = _format_dt(post.published_at)
         if post.entry_id:
             updates[COL["entry_id"]] = post.entry_id
+        if post.revised_at:  # 자동·수동 수정 모두 Post 값으로 기록
+            updates[COL["revision_count"]] = str(post.revision_count)
+            updates[COL["revised_at"]] = _format_dt(post.revised_at)
 
-        # 수정 완료 시 revision 컬럼 업데이트
-        if post.status == PostStatus.PUBLISHED and _prev_status == STATUS_REVISING:
-            # revision_count 증가
-            try:
-                cur = self._sheet.cell(row, COL["revision_count"]).value
-                count = int(cur) if cur else 0
-            except (ValueError, TypeError):
-                count = 0
-            updates[COL["revision_count"]] = str(count + 1)
-            updates[COL["revised_at"]] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        cells = [Cell(row=row, col=col, value=value) for col, value in updates.items()]
+        # 마이그레이션 전 시트(격자가 AH까지)에는 새 열을 쓰지 않는다 — 쓰면 저장 전체가 실패한다
+        width = getattr(self._sheet, "col_count", None) or max(COL.values())
+        cells = [
+            Cell(row=row, col=col, value=value) for col, value in updates.items() if col <= width
+        ]
         self._sheet.update_cells(cells)
         logger.debug(f"시트 업데이트: row={row}, status={post.status.value}")
 

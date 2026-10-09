@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 
+from src.domain.entities.post import PUBLISH_UNCONFIRMED
 from src.domain.value_objects.publish_error import (
     PublishError,
     PublishErrorType,
@@ -19,6 +20,8 @@ _API = re.compile(r"api.?error|500|502|503|서버.?오류", re.IGNORECASE)
 _VALID = re.compile(r"valid|검증|본문.?길이|HTML 검증", re.IGNORECASE)
 
 _PATTERNS: list[tuple[re.Pattern, PublishErrorType]] = [
+    # 가장 먼저 — 사유에 timeout 등이 섞여 있어도 자동 복구하면 안 된다
+    (re.compile(re.escape(PUBLISH_UNCONFIRMED)), PublishErrorType.UNCONFIRMED),
     (_QUOTA, PublishErrorType.QUOTA_EXCEEDED),
     (_TIMEOUT, PublishErrorType.NETWORK_TIMEOUT),
     (_AUTH, PublishErrorType.AUTH_FAILURE),
@@ -34,6 +37,7 @@ _RECOVERY_MAP: dict[PublishErrorType, tuple[bool, RecoveryAction]] = {
     PublishErrorType.API_ERROR: (True, RecoveryAction.RETRY_THEN_MANUAL),
     PublishErrorType.VALIDATION: (False, RecoveryAction.MARK_REVISION),
     PublishErrorType.UNKNOWN: (False, RecoveryAction.MANUAL),
+    PublishErrorType.UNCONFIRMED: (False, RecoveryAction.MANUAL),  # --force-reset도 제외
 }
 
 

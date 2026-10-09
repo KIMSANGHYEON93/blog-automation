@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from src.domain.ports.post_repository import PostRepository
 from src.domain.services.error_classifier import ErrorClassifier
+from src.domain.services.retry_policy import RetryPolicy
 from src.domain.value_objects.publish_error import PublishError
 
 logger = logging.getLogger(__name__)
@@ -24,9 +25,12 @@ class RecoverResult:
 class BatchRecoverUseCase:
     """발행실패 포스트를 ErrorClassifier로 분류 후 자동 복구 가능한 건만 발행대기로 전환."""
 
-    def __init__(self, repo: PostRepository):
+    def __init__(self, repo: PostRepository, retry_policy: RetryPolicy | None = None):
         self._repo = repo
         self._classifier = ErrorClassifier()
+        # RETRY_FAILED 경로(ResetStuckPostsUseCase)와 같은 한도
+        # — 매일 08:30 복구가 같은 글을 끝없이 재시도하지 않게
+        self._retry_policy = retry_policy or RetryPolicy()
 
     def execute(self, *, force_unknown: bool = False) -> RecoverResult:
         """발행실패 포스트를 일괄 복구.
@@ -53,7 +57,17 @@ class BatchRecoverUseCase:
                 force_unknown and classified.error_type.value == "unknown"
             )
 
-            if should_recover:
+            if should_recover and not self._retry_policy.is_eligible(
+                post.retry_count, post.next_retry_at,
+            ):
+                result.skipped_manual += 1
+                logger.info(
+                    f"재시도 한도·대기 중 (건너뜀): row={post.row_index}, "
+                    f"count={post.retry_count}/{self._retry_policy.max_retries}"
+                )
+            elif should_recover:
+                post.retry_count += 1
+                post.next_retry_at = self._retry_policy.calculate_next_retry(post.retry_count)
                 if post.was_previously_published():
                     post.reset_failed_to_revision_pending()
                     target = "수정대기"

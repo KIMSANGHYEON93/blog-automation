@@ -12,6 +12,7 @@ class PublishErrorType(Enum):
     AUTH_FAILURE = "auth_failure"
     API_ERROR = "api_error"
     VALIDATION = "validation"
+    UNCONFIRMED = "unconfirmed"  # 발행됐는지 모름 — 다시 발행하면 중복 위험
     UNKNOWN = "unknown"
 
 

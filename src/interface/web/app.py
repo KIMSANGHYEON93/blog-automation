@@ -464,6 +464,15 @@ def _register_edit_routes(app: Flask, editor: EditPostUseCase) -> None:
         flash("발행대기로 되돌렸습니다.", "success")
         return redirect(url_for("post_detail", row_index=row_index))
 
+    @app.post("/posts/<int:row_index>/approve")
+    def approve_post(row_index: int):  # type: ignore[no-untyped-def]
+        try:
+            editor.approve(row_index)
+        except PostNotEditableError:
+            abort(409, description="발행·수정 중인 글은 승인할 수 없습니다")
+        flash("지금 본문을 검수 승인했습니다. 본문을 다시 고치면 승인이 풀립니다.", "success")
+        return redirect(url_for("post_detail", row_index=row_index))
+
     @app.post("/posts/<int:row_index>/regenerate")
     def regenerate_post(row_index: int):  # type: ignore[no-untyped-def]
         try:

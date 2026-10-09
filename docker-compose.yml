@@ -3,21 +3,37 @@ services:
     image: n8nio/n8n:1.123.22
     restart: always
     ports:
-      - "5678:5678"
+      # 이 맥에서만 연다. 대시보드 '지금 생성'은 포트가 아니라 docker exec를 쓴다 (docs/N8N_SECURITY.md)
+      - "127.0.0.1:5678:5678"
     environment:
       # 로그인은 n8n 내부 사용자 관리(소유자 계정)를 쓴다.
       # N8N_BASIC_AUTH_* 는 n8n 1.0에서 제거돼 동작하지 않으므로 두지 않는다.
       # 비밀번호 분실 시: docker exec <컨테이너> n8n user-management:reset-password --email <이메일>
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Asia/Seoul
-      - TZ=Asia/Seoul
-      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
-      - NODE_FUNCTION_ALLOW_BUILTIN=zlib
-      - NODE_OPTIONS=--max-old-space-size=4096
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: Asia/Seoul
+      TZ: Asia/Seoul
+      # 워크플로가 $env.* 를 읽으므로 false가 필요하다. 대신 .env 전체(env_file)를 넣지 않고
+      # 아래에 워크플로가 실제로 쓰는 키만 명시한다 — 카카오·네이버 비밀번호 등이 노드에서 읽히지 않게
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # dns: URL Validation 노드가 호스트를 해석해 내부 IP를 거른다 (없으면 신뢰 도메인만 확인)
+      NODE_FUNCTION_ALLOW_BUILTIN: zlib,dns
+      NODE_OPTIONS: --max-old-space-size=4096
+      # --- 워크플로 $env 사용 키 (grep -o '\$env\.[A-Z_]*' n8n/*.json n8n/code_nodes/*.js) ---
+      # 값은 같은 폴더의 .env에서 docker compose가 치환한다. 없으면 빈 값.
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      SERPAPI_KEY: ${SERPAPI_KEY:-}
+      SHEET_ID: ${SHEET_ID:-}
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
+      UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
+      # workflow_keyword_research.json (Google Ads)
+      GOOGLE_ADS_DEVELOPER_TOKEN: ${GOOGLE_ADS_DEVELOPER_TOKEN:-}
+      GOOGLE_ADS_CUSTOMER_ID: ${GOOGLE_ADS_CUSTOMER_ID:-}
+      GOOGLE_ADS_LOGIN_CUSTOMER_ID: ${GOOGLE_ADS_LOGIN_CUSTOMER_ID:-}
+      GOOGLE_ADS_ACCESS_TOKEN: ${GOOGLE_ADS_ACCESS_TOKEN:-}
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
+      GOOGLE_PRIVATE_KEY: ${GOOGLE_PRIVATE_KEY:-}
     volumes:
       - n8n_data:/home/node/.n8n
-    env_file:
-      - .env
 
 volumes:
   n8n_data:

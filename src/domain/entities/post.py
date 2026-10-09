@@ -1,14 +1,40 @@
 """Post — Aggregate Root entity with state machine."""
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from src.domain.exceptions import InvalidStatusTransitionError
+from src.domain.services.photo_markers import CAPTURE_CAPTION, strip_photo_markers
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
 
 MIN_CONTENT_LENGTH = 3000
+# 외부 발행 결과를 확인하지 못한 실패 표시. 이 사유가 남은 글은 자동 복구·재시도 대상이
+# 아니다 — 이미 올라갔을 수 있어 다시 발행하면 중복 글이 된다. 관리자가 블로그를 확인한 뒤 되돌린다
+PUBLISH_UNCONFIRMED = "발행 여부 수동 확인 필요"
+MIN_QUALITY_SCORE = 70
+# 네이버 초안(n8n prompt_naver_common.md)이 사람의 실제 경험을 채울 자리에 남기는 표시.
+# 남아 있으면 검수를 건너뛴 AI 글이라 어느 플랫폼에도 발행하지 않는다
+# (네이버 AI 콘텐츠 가이드 2026-05)
+EXPERIENCE_PLACEHOLDER = "[[직접 해 보니]]"
+
+
+def body_fingerprint(markdown: str) -> str:
+    """검증 결과를 본문에 묶는 지문. 글 내용이 아닌 변경은 뺀다:
+    사진 표시([[사진:…]]·<!-- 사진: … -->), 캡처 출처 줄, CRLF, 줄 끝·빈 줄 차이.
+    제목·태그·카테고리는 품질 검증 대상이 아니라 넣지 않는다."""
+    text = CAPTURE_CAPTION.sub("", strip_photo_markers(markdown.replace("\r\n", "\n")))
+    lines = [line.rstrip() for line in text.split("\n")]
+    normalized = "\n".join(line for line in lines if line)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+
+
+# 블로그에 올라가 있거나 올라갔을 수 있는 상태 — 중복 키워드 판단의 기준
+_ON_BLOG_STATUSES = frozenset({
+    PostStatus.PUBLISHING, PostStatus.PUBLISHED, PostStatus.REVISION_PENDING, PostStatus.REVISING,
+})
 
 
 @dataclass
@@ -29,6 +55,11 @@ class Post:
     next_retry_at: datetime | None = None
     cwv_lcp: float | None = None
     cwv_cls: float | None = None
+    revision_count: int = 0
+    revised_at: datetime | None = None  # 마지막 수정 발행 시각. published_at(최초 발행일)과 별개
+    # 품질 점수가 어느 본문에 대한 것인지 — body_fingerprint. 비면 예전 행이라 점수를 그대로 믿는다
+    verified_body_hash: str = ""
+    approved_body_hash: str = ""  # 관리자가 '검수 승인'을 누른 본문의 지문 (명시적 기록)
 
     def mark_publishing(self) -> None:
         """PENDING → PUBLISHING (only from PENDING)."""
@@ -99,6 +130,8 @@ class Post:
             raise InvalidStatusTransitionError(self.status, PostStatus.WAITING)
         self.status = PostStatus.WAITING
         self.error_message = ""
+        self.verified_body_hash = ""  # n8n이 새 본문과 새 점수를 쓴다
+        self.approved_body_hash = ""
 
     def publish_tags(self, max_tags: int = 5) -> list[str]:
         """발행에 쓸 태그. n8n이 tags를 빠뜨리면 태그 없이 발행되던 문제 때문에,
@@ -117,15 +150,56 @@ class Post:
                 tags.append(tag)
         return tags[:max_tags]
 
+    def publish_blockers(self) -> list[str]:
+        """새 글 발행을 막는 사유(비면 발행 가능). 자동·수동 발행과 대시보드 표시가 같이 쓴다.
+
+        길이는 블로그에 보이는 글자만 센다(사진 표시 제외). 자리표시를 채우거나 길이를
+        맞추는 일은 하지 않는다 — 막고 사유만 알린다.
+        """
+        reasons: list[str] = []
+        if self.status != PostStatus.PENDING:
+            reasons.append(f"발행대기 상태가 아님 (현재: {self.status.value})")
+        reasons += self._content_blockers()
+        visible = strip_photo_markers(self._body())
+        if visible.strip() and len(visible) < MIN_CONTENT_LENGTH:
+            reasons.append(f"본문 {len(visible)}자 < 최소 {MIN_CONTENT_LENGTH}자")
+        if self.quality_score < MIN_QUALITY_SCORE:
+            reasons.append(f"품질 점수 {self.quality_score} < {MIN_QUALITY_SCORE}")
+        return reasons
+
+    def _content_blockers(self) -> list[str]:
+        """새 발행·수정 발행 모두에 적용하는 본문 규칙."""
+        body = self._body()
+        reasons: list[str] = []
+        if not strip_photo_markers(body).strip():
+            reasons.append("본문 없음")
+        if EXPERIENCE_PLACEHOLDER in body:
+            reasons.append(f"'{EXPERIENCE_PLACEHOLDER}' 자리를 실제 경험으로 채우지 않음")
+        if self.verification_stale():
+            reasons.append("본문이 바뀌어 재검증 필요 (검수 승인 또는 다시 생성)")
+        return reasons
+
+    def _body(self) -> str:
+        return (self.content.body_markdown or "") if self.content else ""
+
     def is_publishable(self) -> bool:
-        """True only when PENDING + quality body + sufficient length + quality_score."""
+        return not self.publish_blockers()
+
+    def may_be_on_blog(self) -> bool:
+        """블로그에 올라가 있거나 올라갔을 수 있는 글 — 같은 키워드를 또 발행하면 중복."""
         return (
-            self.status == PostStatus.PENDING
-            and self.content is not None
-            and self.content.has_body()
-            and len(self.content.body_markdown or "") >= MIN_CONTENT_LENGTH
-            and self.quality_score >= 70
+            self.status in _ON_BLOG_STATUSES
+            or bool(self.published_url or self.entry_id)
+            or self.is_publish_unconfirmed()
         )
+
+    def mark_publish_unconfirmed(self, detail: str) -> None:
+        """발행을 시도했지만 결과를 모른다 — 발행실패로 두고 관리자 확인을 요구한다."""
+        self.status = PostStatus.FAILED
+        self.error_message = f"{PUBLISH_UNCONFIRMED}: {detail}"[:200]
+
+    def is_publish_unconfirmed(self) -> bool:
+        return self.status == PostStatus.FAILED and PUBLISH_UNCONFIRMED in self.error_message
 
     def mark_revision_pending(self, reason: str = "") -> None:
         """PUBLISHED → REVISION_PENDING. reason을 error_message에 저장."""
@@ -141,12 +215,29 @@ class Post:
         self.status = PostStatus.REVISING
 
     def mark_revised(self, url: str) -> None:
-        """REVISING → PUBLISHED with updated timestamp."""
+        """REVISING → PUBLISHED. 최초 발행일은 그대로 두고 수정 시각·횟수를 따로 남긴다
+        (발행일을 바꾸면 수정이 '오늘 발행'으로 세어져 일일 한도를 먹는다)."""
         if self.status != PostStatus.REVISING:
             raise InvalidStatusTransitionError(self.status, PostStatus.PUBLISHED)
         self.status = PostStatus.PUBLISHED
         self.published_url = url
-        self.published_at = datetime.now()
+        self.revised_at = datetime.now()
+        self.revision_count += 1
+
+    def record_verification_baseline(self) -> None:
+        """편집 직전에 부른다: 지문이 아직 없으면 지금 본문(n8n이 검증한 본문)을 기준으로 삼는다."""
+        if not self.verified_body_hash and self._body().strip():
+            self.verified_body_hash = body_fingerprint(self._body())
+
+    def approve_current_body(self) -> None:
+        """관리자 수동 승인 — 지금 본문에만 유효하다. 점수는 바꾸지 않는다."""
+        self.approved_body_hash = body_fingerprint(self._body())
+
+    def verification_stale(self) -> bool:
+        if not self.verified_body_hash:
+            return False
+        current = body_fingerprint(self._body())
+        return current not in (self.verified_body_hash, self.approved_body_hash)
 
     def reset_revising_to_revision_pending(self) -> None:
         """Ghost recovery: REVISING → REVISION_PENDING."""
@@ -155,11 +246,15 @@ class Post:
         self.status = PostStatus.REVISION_PENDING
         self.error_message = "이전 실행 중단으로 자동 복구됨"
 
+    def revision_blockers(self) -> list[str]:
+        """수정 발행을 막는 사유. 본문 규칙은 새 발행과 같고, 길이·품질 점수는 보지 않는다
+        (이미 올라간 예전 글은 점수 칸이 비어 있어 자동 수정이 모두 막힌다)."""
+        reasons: list[str] = []
+        if self.status != PostStatus.REVISION_PENDING:
+            reasons.append(f"수정대기 상태가 아님 (현재: {self.status.value})")
+        if not self.entry_id:
+            reasons.append("글 번호 없음")
+        return reasons + self._content_blockers()
+
     def is_revisable(self) -> bool:
-        """True when REVISION_PENDING + content has body + entry_id exists."""
-        return (
-            self.status == PostStatus.REVISION_PENDING
-            and self.content is not None
-            and self.content.has_body()
-            and bool(self.entry_id)
-        )
+        return not self.revision_blockers()

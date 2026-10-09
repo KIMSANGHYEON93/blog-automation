@@ -39,8 +39,8 @@ docker compose up -d            # localhost:5678
 python -m src.interface.cli                      # 기본: 고스트 복구 → 카테고리 자동분류 → 발행 → CWV 점검
 python -m src.interface.cli --revise             # 수정대기 → 기존 Tistory 글 업데이트
 python -m src.interface.cli --recover-failed [--force-reset]
-python -m src.interface.cli --check-index        # 미색인 발행완료 글 → 수정대기
-python -m src.interface.cli --submit-index       # Google Indexing API 제출
+python -m src.interface.cli --check-index        # 미색인 사유 기록, 콘텐츠 문제만 수정대기
+python -m src.interface.cli --submit-index       # Indexing API 요청 — INDEXING_API_ENABLED=false(기본)면 로그만
 python -m src.interface.cli --generate-sitemap
 python -m src.interface.cli --status             # (= --dashboard, crontab 호환 alias)
 python -m src.interface.cli --discover-keywords [--auto-register] [--discover-days N]
@@ -126,16 +126,17 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 - 잘못된 전이 시 `InvalidStatusTransitionError` (`src/domain/exceptions.py`)
 - WAITING/GENERATING은 n8n(Pipeline A)이 시트에 직접 기록함
 - `is_publishable()`: PENDING + 본문 ≥ 3000자 + `quality_score ≥ 70`
-- 고스트 복구(`ResetStuckPostsUseCase`): 중간에 끊긴 실행 때문에 남은 `발행중`/`수정중` 글을 되돌림
+- 고스트 복구(`ResetStuckPostsUseCase`): 중간에 끊긴 `발행중`은 블로그에 올라갔는지 알 수 없으므로 발행대기로 되돌리지 않고 발행실패 + "발행 여부 수동 확인 필요"로 둔다(자동 복구·`--recover-failed`·`--force-reset` 모두 제외, 관리자가 확인 후 '되돌리기'). `수정중`은 덮어쓰기라 수정대기로 되돌린다
 
 ### Google Sheets 스키마
 
-컬럼 번호는 `src/infrastructure/persistence/column_map.py`의 `COL` dict에만 정의되어 있음(1-based, A~AH). 시트 컬럼을 바꿀 때는 이 파일과 n8n 워크플로우의 Sheets 노드를 함께 수정해야 함.
+컬럼 번호는 `src/infrastructure/persistence/column_map.py`의 `COL` dict에만 정의되어 있음(1-based, A~AM — AI는 n8n이 쓰는 URL슬러그, AJ~AM은 재시도횟수·다음재시도시각·검증본문지문·승인본문지문, 추가 절차는 `docs/SHEETS_GUIDE.md`). 시트 컬럼을 바꿀 때는 이 파일과 n8n 워크플로우의 Sheets 노드를 함께 수정해야 함.
 
 ### Pipeline A (`n8n/`)
 
 - `workflow_complete.json`이 메인 워크플로우, `workflow_keyword_research.json`은 키워드 리서치용
-- `code_nodes/*.js`는 Code 노드의 원본 소스이고, 워크플로우 JSON의 `jsCode` 필드에 **인라인 복사**되어 있음(동기화 스크립트 없음). `.js`만 고치면 n8n에 반영되지 않으므로 JSON도 같이 수정하거나 n8n UI에 다시 붙여넣을 것
+- `code_nodes/*.js`는 Code 노드의 원본 소스이고, 워크플로우 JSON의 `jsCode` 필드에 **인라인 복사**되어 있음(동기화 스크립트 없음). `.js`만 고치면 n8n에 반영되지 않으므로 JSON도 같이 수정하거나 n8n UI에 다시 붙여넣을 것. `make test-n8n`(`n8n/code_nodes/tests/workflow_sync.test.js`)이 둘의 일치와 jsCode 문법을 검사한다
+- **n8n 보안**: URL Validation·Fetch Official Docs는 내부 주소를 요청하지 않고 리다이렉트를 단계마다 검사한다. 컨테이너에는 `.env` 전체가 아니라 워크플로가 쓰는 `$env` 키만 넣는다 — 새 `$env` 키를 쓰면 `docker-compose.yml`에도 추가. 적용·롤백은 `docs/N8N_SECURITY.md`
 - 프롬프트(`prompts/`): 용어(a) / 비교(b) / 에러해결(c)은 `route_prompt.js`가 선택하고, 교차 검증은 d. `*_v1.md`는 이전 버전
 - **키워드 발굴 조회 기간**: `DEFAULT_LOOKBACK_DAYS = 90`. 저트래픽 블로그에서 28일 창은 쿼리별 노출이 흩어져 `min_impressions=5`를 아무도 못 넘긴다(2026-09-23 실측: 28일 0건 / 90일 10건). `--discover-days`로 조절
 - **로그인은 세션 재사용이 먼저다**: `SeleniumBrowserAdapter.login()`이 `.browser_data/tistory_session.json`(0600)의 쿠키를 주입해 관리 페이지 접근으로 검증하고, 실패할 때만 카카오 OAuth를 탄다. 매 실행이 OAuth를 타면 카카오 이상탐지가 2FA를 띄운다(2026-09-23 실측: 기동 7회에 2FA 3회). 세션 파일에는 티스토리 도메인 쿠키만 담는다 — 카카오 `_kau`는 유출 시 피해가 크고 tiara는 추적용이라 제외
@@ -150,7 +151,7 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 ### 설정
 
 - `.env` (`.env.example` 참고) → `src/infrastructure/config.py`의 `Config.from_env()`. `config.validate()`는 기본 발행 모드에서만 호출됨
-- 기능 플래그: `CWV_CHECK`(기본 true), `RETRY_FAILED`(기본 false). 알림은 `SLACK_WEBHOOK_URL` 또는 `TELEGRAM_*` 중 하나
+- 기능 플래그: `CWV_CHECK`(기본 true), `RETRY_FAILED`(기본 false), `INDEXING_API_ENABLED`(기본 false — Indexing API는 JobPosting·BroadcastEvent 전용이라 일반 글에 안 씀, API 200은 요청 접수일 뿐 색인 완료 아님). 알림은 `SLACK_WEBHOOK_URL` 또는 `TELEGRAM_*` 중 하나
 - `site_profile.json`: 카테고리 매핑 + 키워드 분류 규칙. 파일이 없으면 기본값으로 동작
 
 ## Code Style

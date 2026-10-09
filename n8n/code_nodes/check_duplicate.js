@@ -28,7 +28,10 @@ function keywordOverlap(kwA, kwB) {
 }
 
 const results = [];
-for (const item of $input.all()) {
+// 대시보드 '본문 생성'은 그 행의 비고에 '생성요청'을 단다 — 있으면 그 행만, 없으면(예약 실행) 전부
+const allItems = $input.all();
+const requested = allItems.filter((i) => String(i.json['비고'] || '').trim() === '생성요청');
+for (const item of (requested.length > 0 ? requested : allItems)) {
   const keyword = item.json['키워드'] || '';
   let isDuplicate = false;
   let duplicateOf = '';

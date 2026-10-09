@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import time
 
 from src.infrastructure.locking.directory_lock import DirectoryPipelineLock
@@ -36,3 +37,41 @@ class TestDirectoryPipelineLock:
         lock = DirectoryPipelineLock(tmp_path / ".pipeline_b.lock")
         assert lock.acquire() is True
         assert lock.acquire() is False
+
+
+class TestLockOwner:
+    """경과 시간만으로 살아 있는 작업의 락을 지우지 않는다 — 소유 PID를 기록·확인."""
+
+    def test_획득하면_소유_PID_기록_해제하면_디렉터리째_삭제(self, tmp_path):
+        lock_dir = tmp_path / ".pipeline_b.lock"
+        lock = DirectoryPipelineLock(lock_dir)
+        assert lock.acquire() is True
+        assert (lock_dir / "owner").read_text().strip() == str(os.getpid())
+        lock.release()
+        assert not lock_dir.exists()
+
+    def test_오래됐어도_소유_프로세스가_살아_있으면_빼앗지_않는다(self, tmp_path):
+        lock_dir = tmp_path / ".pipeline_b.lock"
+        lock_dir.mkdir()
+        (lock_dir / "owner").write_text(str(os.getpid()))
+        old = time.time() - 6 * 3600
+        os.utime(lock_dir, (old, old))
+        assert DirectoryPipelineLock(lock_dir, stale_after_seconds=5 * 3600).acquire() is False
+
+    def test_소유_프로세스가_죽었으면_바로_회수(self, tmp_path):
+        proc = subprocess.Popen(["true"])
+        proc.wait()
+        lock_dir = tmp_path / ".pipeline_b.lock"
+        lock_dir.mkdir()
+        (lock_dir / "owner").write_text(str(proc.pid))
+        lock = DirectoryPipelineLock(lock_dir)
+        assert lock.acquire() is True
+        assert (lock_dir / "owner").read_text().strip() == str(os.getpid())
+
+    def test_PID가_살아_있어도_하루가_넘으면_재사용으로_보고_회수(self, tmp_path):
+        lock_dir = tmp_path / ".pipeline_b.lock"
+        lock_dir.mkdir()
+        (lock_dir / "owner").write_text(str(os.getpid()))
+        old = time.time() - 25 * 3600
+        os.utime(lock_dir, (old, old))
+        assert DirectoryPipelineLock(lock_dir).acquire() is True

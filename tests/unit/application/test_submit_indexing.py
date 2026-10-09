@@ -43,7 +43,7 @@ class TestSubmitIndexingUseCase:
 
         stats = uc.execute()
 
-        assert stats.submitted == 2
+        assert stats.requested == 2
         assert stats.failed == 0
         assert len(submit.submitted_urls) == 2
 
@@ -57,7 +57,7 @@ class TestSubmitIndexingUseCase:
 
         stats = uc.execute()
 
-        assert stats.submitted == 1
+        assert stats.requested == 1
         assert stats.skipped == 1
 
     def test_포스트_없으면_빈_통계(self):
@@ -68,7 +68,7 @@ class TestSubmitIndexingUseCase:
 
         stats = uc.execute()
 
-        assert stats.submitted == 0
+        assert stats.requested == 0
         assert stats.failed == 0
 
     def test_API_실패시_failed_증가(self):
@@ -79,7 +79,7 @@ class TestSubmitIndexingUseCase:
 
         stats = uc.execute()
 
-        assert stats.submitted == 0
+        assert stats.requested == 0
         assert stats.failed == 1
 
     def test_quota_초과시_조기_중단(self):
@@ -96,24 +96,21 @@ class TestSubmitIndexingUseCase:
         assert stats.failed == 1
         assert len(submit.submitted_urls) == 1
 
-    def test_단일_포스트_제출(self):
-        """submit_single — 성공."""
-        submit = _StubSubmit(success=True)
-        repo = InMemoryPostRepository()
-        uc = SubmitIndexingUseCase(repo, indexing_submit=submit)
 
-        result = uc.submit_single(_published_post())
+def test_API_요청_접수를_색인_완료로_기록하지_않는다(caplog):
+    # Indexing API 200은 '크롤링 요청 접수'일 뿐이다. 시트·상태에 색인 완료로 남기면 안 된다
+    post = _published_post()
+    repo = InMemoryPostRepository([post])
+    saved: list[Post] = []
+    repo.save = saved.append  # type: ignore[method-assign]
+    uc = SubmitIndexingUseCase(repo, indexing_submit=_StubSubmit(success=True))
 
-        assert result is True
-        assert len(submit.submitted_urls) == 1
+    with caplog.at_level("INFO"):
+        stats = uc.execute()
 
-    def test_단일_포스트_미발행_상태_실패(self):
-        """submit_single — PENDING은 제출 불가."""
-        submit = _StubSubmit()
-        repo = InMemoryPostRepository()
-        uc = SubmitIndexingUseCase(repo, indexing_submit=submit)
-
-        result = uc.submit_single(Post(row_index=2, keyword="테스트"))
-
-        assert result is False
-        assert len(submit.submitted_urls) == 0
+    assert stats.requested == 1
+    assert not hasattr(stats, "indexed")
+    assert saved == []
+    assert post.status == PostStatus.PUBLISHED
+    assert "색인 완료" not in caplog.text
+    assert "요청 접수" in caplog.text

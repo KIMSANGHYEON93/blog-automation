@@ -73,12 +73,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--check-index",
         action="store_true",
-        help="발행완료 포스트의 Google 색인 상태 점검 (미색인 → 수정대기)",
+        help="발행완료 포스트의 Google 색인 상태 점검 (미색인 사유 기록, 콘텐츠 문제만 수정대기)",
     )
     parser.add_argument(
         "--submit-index",
         action="store_true",
-        help="발행완료 포스트를 Google Indexing API에 색인 제출",
+        help="Google Indexing API 크롤링 요청 (INDEXING_API_ENABLED=true일 때만, 기본 꺼짐)",
     )
     parser.add_argument(
         "--generate-sitemap",
@@ -295,23 +295,23 @@ def _check_index(config: Config) -> None:
         logger.info("색인 점검 대상 포스트 없음")
         return
 
+    from collections import Counter
+
     checked = 0
-    indexed = 0
     marked = 0
+    categories: Counter[str] = Counter()
     for idx, post in enumerate(published):
         if idx > 0:
             _time.sleep(1)  # API rate limit 회피
         result = uc.execute(post)
         if result.success:
             checked += 1
-            if result.is_indexed:
-                indexed += 1
+            categories[result.category] += 1
             if result.marked_revision:
                 marked += 1
             logger.info(
-                f"색인 점검: {result.post_keyword} — "
-                f"indexed={result.is_indexed}, "
-                f"verdict={result.verdict}"
+                f"색인 점검: {result.post_keyword} — {result.category} "
+                f"(verdict={result.verdict}, {result.coverage_state})"
             )
         elif result.error:
             logger.warning(
@@ -323,12 +323,22 @@ def _check_index(config: Config) -> None:
 
     logger.info(
         f"색인 점검 완료: {checked}/{len(published)}건 점검, "
-        f"색인됨: {indexed}, 미색인→수정대기: {marked}"
+        f"분류: {dict(categories)}, 콘텐츠 문제→수정대기: {marked}"
     )
 
 
 def _submit_index(config: Config) -> None:
-    """발행완료 포스트를 Google Indexing API에 색인 제출."""
+    """발행완료 포스트를 Google Indexing API에 크롤링 요청(INDEXING_API_ENABLED=true일 때만)."""
+    if not config.indexing_api_enabled:
+        # launchd 14:30이 매일 불러도 아무것도 하지 않는다
+        logger.info(
+            "색인 요청 건너뜀: Google Indexing API는 JobPosting·BroadcastEvent(VideoObject) "
+            "페이지 전용이라 일반 블로그 글에는 쓰지 않습니다(INDEXING_API_ENABLED=false). "
+            "새 글은 사이트맵(--generate-sitemap)으로 알리고, 색인 여부는 --check-index와 "
+            "Search Console URL 검사·페이지 색인 생성 보고서에서 확인하세요."
+        )
+        return
+
     config.validate()
 
     repo = GoogleSheetsPostRepository(
@@ -345,8 +355,9 @@ def _submit_index(config: Config) -> None:
 
     notifier = _build_notification()
     msg = (
-        f"색인 제출 완료: 제출={stats.submitted}, "
-        f"실패={stats.failed}, 건너뜀={stats.skipped}"
+        f"Indexing API 크롤링 요청: 요청 접수={stats.requested}, "
+        f"실패={stats.failed}, 건너뜀={stats.skipped} "
+        f"(요청 접수는 색인 완료 아님 — --check-index로 확인)"
     )
     logger.info(msg)
     notifier.send(msg)

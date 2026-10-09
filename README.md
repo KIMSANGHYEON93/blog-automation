@@ -180,7 +180,7 @@ open http://localhost:5678
 python -m src.interface.cli                   # 기본 발행 (고스트 복구 → 발행 → CWV)
 python -m src.interface.cli --revise          # 수정대기 글 업데이트
 python -m src.interface.cli --check-index     # Google 색인 상태 점검
-python -m src.interface.cli --submit-index    # Google Indexing API 제출
+python -m src.interface.cli --submit-index    # Indexing API 요청 (기본 꺼짐: INDEXING_API_ENABLED)
 python -m src.interface.cli --generate-sitemap # sitemap.xml 생성
 python -m src.interface.cli --status          # 블로그 현황 대시보드
 python -m src.interface.cli --discover-keywords # GSC 키워드 발굴

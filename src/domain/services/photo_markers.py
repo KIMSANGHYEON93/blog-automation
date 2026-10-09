@@ -11,6 +11,8 @@ import re
 PHOTO_LINE = re.compile(r"^\[\[사진:([\w-]+\.jpg)\]\][ \t]*$", re.M)
 SCENE_COMMENT = re.compile(r"<!--\s*사진:\s*(.*?)\s*-->", re.S)
 _FAQ_HEADING = "## 자주 묻는 질문"
+# 공식 문서 캡처 아래 출처 줄(EditPostUseCase.add_doc_captures가 넣는다)
+CAPTURE_CAPTION = re.compile(r"^출처: \S+ \(캡처 [^)\n]*\)[ \t]*$", re.M)
 
 
 def photo_marker(filename: str) -> str:

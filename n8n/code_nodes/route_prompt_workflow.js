@@ -318,6 +318,16 @@ const jsonSafetyNote = `
 const today = new Date();
 const yearMonth = `${today.getFullYear()}년 ${today.getMonth() + 1}월`;
 
+// 모델·버전 최신성 — 볼트 혼동 포인트·모델 자체 지식의 낡은 모델을 최신처럼 쓰지 않게
+// (2026-10-07: 'Claude 3.7 확장 사고' 제목, o1 중심 비교, 실재하지 않는 'o2'가 생성됨)
+const freshnessNote = `
+
+## 중요: AI 모델·버전 최신성 규칙 (작성 기준일 ${yearMonth})
+- 제목에 구체적인 AI 모델 버전명(예: Claude 3.7, o1, GPT-4o)을 넣지 않습니다. 개념·기능 이름으로 씁니다.
+- 본문의 모델 이름과 버전은 사용자 메시지의 SERP 인텔리전스나 공식 문서 본문에 나온 것만 씁니다. 자료에서 확인되지 않은 모델 이름은 만들지 않습니다.
+- 내부 용어 정의의 혼동 포인트에 나오는 모델은 개념 설명용 예시입니다. 작성 기준일보다 1년 넘게 앞선 모델은 '이전 세대 모델'로 표기하고 최신 기준처럼 소개하지 않습니다.
+`;
+
 // 공식 문서 본문 (Fetch Official Docs 노드에서 전달)
 const officialDocsText = inputData.official_docs_text || '';
 const docsSection = officialDocsText
@@ -357,7 +367,7 @@ return {
     category,
     row_index: rowIndex,
     prompt_type: promptType,
-    system_prompt: systemPrompt + jsonSafetyNote,
+    system_prompt: systemPrompt + jsonSafetyNote + freshnessNote,
     user_message: `키워드: ${keyword}\n작성 기준일: ${yearMonth} (최신 정보 기준으로 작성하세요)${docsSection}${brainSection}\n\n## SERP 인텔리전스\n${serpSummary}\n\n## 참조 가능 URL 풀\n아래 URL만 references와 인라인 출처에 사용하세요:\n${urlPoolText}`,
   }
 };

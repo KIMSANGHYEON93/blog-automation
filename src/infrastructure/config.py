@@ -25,6 +25,8 @@ class Config:
     naver_login_pw: str = ""
     naver_telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    # Indexing API는 JobPosting·BroadcastEvent(VideoObject) 페이지 전용 — 일반 글은 끈다
+    indexing_api_enabled: bool = False
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -48,6 +50,7 @@ class Config:
             naver_login_pw=os.getenv("NAVER_LOGIN_PW", ""),
             naver_telegram_bot_token=os.getenv("NAVER_TELEGRAM_BOT_TOKEN", ""),
             telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", ""),
+            indexing_api_enabled=os.getenv("INDEXING_API_ENABLED", "false").lower() == "true",
         )
 
     @property

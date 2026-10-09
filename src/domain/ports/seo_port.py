@@ -16,6 +16,9 @@ class IndexingResult:
     indexing_state: str = ""
     robots_txt_state: str = ""
     last_crawl_time: str = ""
+    page_fetch_state: str = ""
+    google_canonical: str = ""
+    user_canonical: str = ""
     error: str = ""
 
 
@@ -42,7 +45,7 @@ class CwvPort(ABC):
 
 @dataclass(frozen=True)
 class IndexingSubmitResult:
-    """색인 제출 결과."""
+    """색인 제출 결과. success는 API가 요청을 받았다는 뜻일 뿐 색인 완료가 아니다."""
 
     url: str
     success: bool = False

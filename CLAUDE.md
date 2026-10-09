@@ -126,11 +126,11 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 - 잘못된 전이 시 `InvalidStatusTransitionError` (`src/domain/exceptions.py`)
 - WAITING/GENERATING은 n8n(Pipeline A)이 시트에 직접 기록함
 - `is_publishable()`: PENDING + 본문 ≥ 3000자 + `quality_score ≥ 70`
-- 고스트 복구(`ResetStuckPostsUseCase`): 중간에 끊긴 실행 때문에 남은 `발행중`/`수정중` 글을 되돌림
+- 고스트 복구(`ResetStuckPostsUseCase`): 중간에 끊긴 `발행중`은 블로그에 올라갔는지 알 수 없으므로 발행대기로 되돌리지 않고 발행실패 + "발행 여부 수동 확인 필요"로 둔다(자동 복구·`--recover-failed`·`--force-reset` 모두 제외, 관리자가 확인 후 '되돌리기'). `수정중`은 덮어쓰기라 수정대기로 되돌린다
 
 ### Google Sheets 스키마
 
-컬럼 번호는 `src/infrastructure/persistence/column_map.py`의 `COL` dict에만 정의되어 있음(1-based, A~AH). 시트 컬럼을 바꿀 때는 이 파일과 n8n 워크플로우의 Sheets 노드를 함께 수정해야 함.
+컬럼 번호는 `src/infrastructure/persistence/column_map.py`의 `COL` dict에만 정의되어 있음(1-based, A~AL — AI~AL은 재시도횟수·다음재시도시각·검증본문지문·승인본문지문, 추가 절차는 `docs/SHEETS_GUIDE.md`). 시트 컬럼을 바꿀 때는 이 파일과 n8n 워크플로우의 Sheets 노드를 함께 수정해야 함.
 
 ### Pipeline A (`n8n/`)
 

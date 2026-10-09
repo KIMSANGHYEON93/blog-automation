@@ -76,6 +76,13 @@
     {% endif %}
   </div>
   {% endif %}
+  {% if editing_enabled and post.needs_approval %}
+  <form method="post" action="{{ url_for('approve_post', row_index=post.row_index) }}" class="restore">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit">검수 승인</button>
+    <span class="sub">자동 검증 뒤 본문이 바뀌었습니다. 직접 읽고 확인했으면 승인하세요(품질 점수는 그대로).</span>
+  </form>
+  {% endif %}
   {% if editing_enabled and post.can_restore %}
   <form method="post" action="{{ url_for('restore_post', row_index=post.row_index) }}" class="restore">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

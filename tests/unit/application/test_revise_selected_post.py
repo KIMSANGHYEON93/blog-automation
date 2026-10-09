@@ -48,7 +48,8 @@ def test_수정대기가_아니면_거부하고_브라우저를_열지_않는다
     result, post, browser, lock = _run(_post(status=PostStatus.PUBLISHED))
     assert result.outcome == ManualPublishOutcome.REJECTED
     assert post.status == PostStatus.PUBLISHED
-    assert not browser.updated_posts and not lock.acquired
+    # 판단은 잠금을 잡은 뒤 최신 상태로 한다 — 잠금은 잡았다 풀고, 브라우저는 열지 않는다
+    assert not browser.updated_posts and not browser.started and lock.released
 
 
 def test_글_번호가_없으면_거부():

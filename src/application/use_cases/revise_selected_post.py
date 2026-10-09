@@ -27,16 +27,19 @@ class ReviseSelectedPostUseCase:
         self._lock = lock
 
     def execute(self, row_index: int) -> ManualPublishResult:
-        post = next((p for p in self._repo.find_all() if p.row_index == row_index), None)
-        if post is None or not post.is_revisable():
-            return ManualPublishResult.rejected(
-                row_index, "수정대기 상태이고 본문과 글 번호가 있는 글만 수정 발행할 수 있습니다",
-            )
         if not self._lock.acquire():
             return ManualPublishResult.rejected(
                 row_index, "다른 작업(자동 발행 등)이 실행 중 — 끝난 뒤 다시 시도하세요",
             )
         try:
+            # 잠금 뒤에 읽는다 — 그 사이 자동 수정이 끝냈을 수 있다
+            post = next((p for p in self._repo.find_all() if p.row_index == row_index), None)
+            if post is None or not post.is_revisable():
+                return ManualPublishResult.rejected(
+                    row_index,
+                    "수정대기 상태이고 본문과 글 번호가 있는 글만 수정 발행할 수 있습니다"
+                    + (f" ({', '.join(post.revision_blockers())})" if post else ""),
+                )
             self._browser.start()
             try:
                 if not self._browser.login():
@@ -48,7 +51,6 @@ class ReviseSelectedPostUseCase:
             self._lock.release()
 
     def _revise(self, post: Post) -> ManualPublishResult:
-        first_published = post.published_at
         post.mark_revising()
         self._repo.save(post)
         try:
@@ -64,10 +66,7 @@ class ReviseSelectedPostUseCase:
             self._back_to_pending(post, f"수정 실패: {error}")
             return ManualPublishResult.failed(post.row_index, post.error_message)
 
-        post.mark_revised(result.url)
-        # mark_revised는 발행일을 지금으로 바꾼다 — 그러면 수정이 '오늘 발행'으로 세어져
-        # 하루 한도를 먹는다. 첫 발행일을 되돌리고, 수정 시각은 로그에만 남긴다
-        post.published_at = first_published
+        post.mark_revised(result.url)  # 첫 발행일 유지, 수정 시각·횟수는 따로 기록
         message = "수정 발행 완료"
         post.error_message = ""
         if result.warnings:

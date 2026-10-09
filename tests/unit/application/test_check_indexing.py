@@ -141,3 +141,20 @@ def test_최근_발행_수정한_글은_색인_점검을_건너뛴다():
 
     assert uc.execute(old).marked_revision
     assert old.status == PostStatus.REVISION_PENDING
+
+
+def test_최근_수정한_글은_최초_발행일이_오래돼도_건너뛴다():
+    # 수정 발행은 published_at(최초 발행일)을 두고 revised_at만 바꾼다
+    from datetime import datetime, timedelta
+
+    now = datetime(2026, 10, 9, 14, 0)
+    post = _published_post(row=2)
+    post.published_at = now - timedelta(days=60)
+    post.revised_at = now - timedelta(days=2)
+    not_indexed = IndexingResult(url="", is_indexed=False, verdict="NEUTRAL",
+                                 coverage_state="Discovered - currently not indexed")
+    uc = CheckIndexingUseCase(repo=InMemoryPostRepository([post]),
+                              indexing=_StubIndexing(not_indexed), clock=lambda: now)
+
+    assert not uc.execute(post).marked_revision
+    assert post.status == PostStatus.PUBLISHED

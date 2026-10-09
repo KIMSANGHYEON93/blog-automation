@@ -36,6 +36,7 @@ class PostSummary:
     blockers: tuple[str, ...]
     body_markdown: str = ""
     tags: str = ""
+    needs_approval: bool = False  # 검증 뒤 본문이 바뀜 — '검수 승인' 버튼 표시
 
     @property
     def can_publish(self) -> bool:
@@ -85,6 +86,7 @@ def summarize(post: Post) -> PostSummary:
         blockers=tuple(publish_blockers(post)),
         body_markdown=(content.body_markdown or "") if content else "",
         tags=content.tags if content else "",
+        needs_approval=post.status in EDITABLE_STATUSES and post.verification_stale(),
     )
 
 

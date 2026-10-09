@@ -104,6 +104,7 @@ def publish_post(
     sb, post: Post, blog_name: str, profile: SiteProfile | None = None, cta_url: str = "",
 ) -> PublishResult:
     """티스토리 에디터에 포스트 발행. PublishResult 반환."""
+    published: tuple[str, str] | None = None  # API 발행이 끝난 뒤의 예외는 실패가 아니다
     try:
         if post.content is None or not post.content.body_markdown:
             return PublishResult.fail("포스트 콘텐츠가 없음")
@@ -175,6 +176,7 @@ def publish_post(
         if not api_result:
             return PublishResult.fail("API 발행 실패 — 모든 방법 실패")
 
+        published = api_result
         published_url, entry_id = api_result
         logger.info(f"API 발행 완료: {post.keyword} → {published_url} (id={entry_id})")
 
@@ -219,6 +221,12 @@ def publish_post(
         return PublishResult.ok(published_url, entry_id=entry_id)
 
     except Exception as e:
+        if published:
+            # 글은 올라갔고 공개 검증 단계에서 터졌다 — 실패로 돌리면 재발행되어 중복 글이 생긴다
+            logger.warning(f"발행 후 검증 중 예외(발행은 완료): {published[0]} — {e}")
+            return PublishResult.ok(
+                published[0], entry_id=published[1], warnings=(f"발행 후 검증 예외: {e}",),
+            )
         logger.error(f"발행 실패: {post.keyword} — {e}")
         return PublishResult.fail(str(e))
 

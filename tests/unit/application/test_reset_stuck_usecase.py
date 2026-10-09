@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 
 from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
-from src.domain.entities.post import Post
+from src.domain.entities.post import PUBLISH_UNCONFIRMED, Post
 from src.domain.services.retry_policy import RetryPolicy
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
@@ -26,8 +26,9 @@ class TestResetStuckPosts:
 
         assert count == 1
         recovered = repo.all()[0]
-        assert recovered.status == PostStatus.PENDING
-        assert "자동 복구" in recovered.error_message
+        # 발행 여부를 모르므로 발행대기로 되돌리지 않는다(중복 발행 방지)
+        assert recovered.status == PostStatus.FAILED
+        assert PUBLISH_UNCONFIRMED in recovered.error_message
 
     def test_고스트_여러건_복구(self):
         posts = [
@@ -44,8 +45,8 @@ class TestResetStuckPosts:
         count = use_case.execute()
 
         assert count == 2
-        assert repo.all()[0].status == PostStatus.PENDING
-        assert repo.all()[1].status == PostStatus.PENDING
+        assert repo.all()[0].status == PostStatus.FAILED
+        assert repo.all()[1].status == PostStatus.FAILED
         assert repo.all()[2].status == PostStatus.PENDING  # 원래 PENDING
 
     def test_빈_목록_처리(self):
@@ -211,5 +212,15 @@ class TestResetRevisingStuck:
         count = use_case.execute()
 
         assert count == 2
-        assert repo.all()[0].status == PostStatus.PENDING
-        assert repo.all()[1].status == PostStatus.REVISION_PENDING
+        assert repo.all()[0].status == PostStatus.FAILED  # 발행 결과 불명 → 사람 확인
+        assert repo.all()[1].status == PostStatus.REVISION_PENDING  # 덮어쓰기라 재시도 안전
+
+
+def test_결과_불명_실패는_재시도_옵션이_켜져_있어도_발행대기로_돌리지_않는다():
+    post = Post(row_index=1, keyword="AD란", status=PostStatus.FAILED,
+                error_message=f"{PUBLISH_UNCONFIRMED}: timeout")
+    repo = InMemoryPostRepository([post])
+
+    ResetStuckPostsUseCase(repo=repo, retry_failed=True).execute()
+
+    assert repo.all()[0].status == PostStatus.FAILED

@@ -193,6 +193,40 @@ def _find_kakao_elements_by_js(sb) -> dict[str, str] | None:
     return None
 
 
+# 카카오 로그인 쿠키를 영구 쿠키로 남겨야 다음 실행이 ID/PW·2FA 없이
+# '계속하기'로 통과한다. 티스토리 TSSESSION은 세션 쿠키라 12시간 안에 죽으므로
+# (2026-10-10 20:58 저장 → 10-11 09:00 만료) 저장 세션만으로는 매일 2FA가 뜬다.
+_STAY_SIGNED_IN_JS = """
+    var boxes = document.querySelectorAll('input[type="checkbox"]');
+    for (var i = 0; i < boxes.length; i++) {
+        var b = boxes[i];
+        var key = (b.name || '') + ' ' + (b.id || '');
+        var label = b.closest('label')
+            || (b.id && document.querySelector('label[for="' + b.id + '"]')) || null;
+        var text = label ? label.textContent : '';
+        if (/staySignedIn|saveSignedIn/i.test(key) || /로그인 상태 유지|간편로그인/.test(text)) {
+            if (!b.checked) { (label || b).click(); }
+            return b.name || b.id || text.trim();
+        }
+    }
+    return '';
+"""
+
+
+def _check_stay_signed_in(sb) -> str:
+    """'로그인 상태 유지'를 켠다. 찾은 체크박스 이름, 없거나 실패하면 ''."""
+    try:
+        found = sb.execute_script(_STAY_SIGNED_IN_JS) or ""
+    except Exception as e:
+        logger.warning(f"로그인 상태 유지 체크 실패 (무시): {e}")
+        return ""
+    if found:
+        logger.info(f"카카오 로그인 상태 유지 체크: {found}")
+    else:
+        logger.warning("카카오 로그인 상태 유지 체크박스를 못 찾음 — 다음 실행도 2FA 가능")
+    return str(found)
+
+
 def _enter_credentials_and_wait(
     sb, kakao_id: str, kakao_pw: str,
     notifier: NotificationPort | None = None,
@@ -218,6 +252,7 @@ def _enter_credentials_and_wait(
         logger.info(f"카카오 로그인 셀렉터: id={id_sel}, pw={pw_sel}, submit={submit_sel}")
 
         time.sleep(1)
+        _check_stay_signed_in(sb)
 
         # 방법 1: SeleniumBase 네이티브 타이핑
         try:

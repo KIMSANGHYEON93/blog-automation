@@ -116,3 +116,22 @@ def test_계정_확인_화면이면_계속하기를_눌러_로그인한다(monke
     sb = AccountConfirmSB()
     assert kakao_auth.kakao_login(sb, "id", "pw") is True
     assert sb.continued
+
+
+class StaySignedInSB:
+    def __init__(self, result=None, error=None):
+        self._result, self._error = result, error
+
+    def execute_script(self, _script, *args):
+        if self._error:
+            raise self._error
+        return self._result
+
+
+def test_로그인_상태_유지를_체크한_이름을_돌려준다():
+    assert kakao_auth._check_stay_signed_in(StaySignedInSB("saveSignedIn")) == "saveSignedIn"
+
+
+def test_로그인_상태_유지_실패는_로그인을_막지_않는다():
+    sb = StaySignedInSB(error=RuntimeError("no such element"))
+    assert kakao_auth._check_stay_signed_in(sb) == ""

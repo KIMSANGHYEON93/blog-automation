@@ -177,3 +177,18 @@ def test_최근_수정한_글은_최초_발행일이_오래돼도_건너뛴다()
     result = _run(post, is_indexed=False, **CRAWLED)
     assert not result.marked_revision
     assert post.status == PostStatus.PUBLISHED
+
+
+def test_점검_대상은_유예가_지난_최근_발행부터_고른다():
+    from src.application.use_cases.check_indexing import pick_check_targets
+
+    old = _published_post(row=2, days_ago=300)
+    mid = _published_post(row=3, days_ago=40)
+    fresh = _published_post(row=4, days_ago=3)  # 유예 기간 — 점검해도 건너뛰므로 자리 낭비
+    undated = _published_post(row=5)
+    undated.published_at = None
+
+    picked = pick_check_targets([old, undated, fresh, mid], NOW, limit=3)
+
+    assert [p.row_index for p in picked] == [3, 2, 5]
+    assert pick_check_targets([old, mid], NOW, limit=1) == [mid]

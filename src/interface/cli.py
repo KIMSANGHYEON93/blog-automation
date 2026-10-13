@@ -290,7 +290,11 @@ def _check_index(config: Config) -> None:
 
     indexing = GscIndexingAdapter()
     uc = CheckIndexingUseCase(repo=repo, indexing=indexing)
-    published = repo.find_published(limit=50)
+    from datetime import datetime as _dt
+
+    from src.application.use_cases.check_indexing import INDEXED, pick_check_targets
+
+    published = pick_check_targets(repo.find_published(limit=10000), _dt.now(), limit=50)
     if not published:
         logger.info("색인 점검 대상 포스트 없음")
         return
@@ -300,6 +304,7 @@ def _check_index(config: Config) -> None:
     checked = 0
     marked = 0
     categories: Counter[str] = Counter()
+    recent = [0, 0]  # 최근 60일 발행 중 [점검, 색인됨] — 발행량 조절 효과를 보는 지표
     for idx, post in enumerate(published):
         if idx > 0:
             _time.sleep(1)  # API rate limit 회피
@@ -307,6 +312,9 @@ def _check_index(config: Config) -> None:
         if result.success:
             checked += 1
             categories[result.category] += 1
+            if post.published_at and (_dt.now() - post.published_at).days <= 60:
+                recent[0] += 1
+                recent[1] += result.category == INDEXED
             if result.marked_revision:
                 marked += 1
             logger.info(
@@ -325,6 +333,7 @@ def _check_index(config: Config) -> None:
         f"색인 점검 완료: {checked}/{len(published)}건 점검, "
         f"분류: {dict(categories)}, 콘텐츠 문제→수정대기: {marked}"
     )
+    logger.info(f"최근 60일 발행 글 색인: {recent[1]}/{recent[0]}건")
 
 
 def _submit_index(config: Config) -> None:

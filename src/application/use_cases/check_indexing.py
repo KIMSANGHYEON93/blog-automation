@@ -74,6 +74,19 @@ def last_changed(post: Post) -> datetime | None:
     return max(dates) if dates else None
 
 
+def pick_check_targets(posts: list[Post], now: datetime, limit: int) -> list[Post]:
+    """유예가 지난 글을 최근 발행순으로. 시트 순서(오래된 글부터)로 고르면 새 글이
+    영영 점검되지 않아 '발견됨 - 색인 안 됨'이 쌓여도 모른다(2026-10-14 실측)."""
+    # ponytail: 최근순 고정이라 오래된 글은 거의 재점검 안 됨 — 필요하면 일부 자리를 순환으로
+    def due(p: Post) -> bool:
+        last = last_changed(p)
+        return not (last and now - last < REINDEX_GRACE)
+
+    picked = sorted((p for p in posts if due(p)),
+                    key=lambda p: p.published_at or datetime.min, reverse=True)
+    return picked[:limit]
+
+
 @dataclass
 class IndexingCheckResult:
     """색인 점검 결과 DTO."""

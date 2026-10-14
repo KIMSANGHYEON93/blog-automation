@@ -79,3 +79,14 @@ def test_오늘_발행_수와_최근_발행_글():
     page = ListPostsUseCase(repo).execute(PostQuery(status=PostStatus.PENDING))
     assert page.published_today == 1
     assert [s.keyword for s in page.recent_published] == ["오늘 글", "어제 글"]  # 최신순, 필터 무관
+
+
+def test_키워드_횟수는_사진_설명을_빼고_글_전체에서_센다():
+    from src.application.use_cases.list_posts import summarize
+    from src.domain.entities.post import Post
+    from src.domain.value_objects.post_content import PostContent
+    # 네이버 구조 검사(validate_structure_naver.js)와 같은 셈 — 소제목 포함, 대소문자 무시
+    body = "## AI 챗봇이란\n\n" + "ai 챗봇은 좋다. " * 6 + "\n\n<!-- 사진: AI 챗봇 AI 챗봇 -->"
+    post = Post(row_index=2, keyword="AI 챗봇",
+                content=PostContent(title="t", body_markdown=body))
+    assert summarize(post).keyword_count == 7

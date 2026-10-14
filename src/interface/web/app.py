@@ -109,6 +109,7 @@ def create_app(
     preview_raw: bool = False,
     keywords: KeywordDesk | None = None,
     daily_limit: int | None = None,
+    keyword_limit: int | None = None,  # 네이버만 — 글 전체 키워드 반복 상한(구조 검사와 같은 값)
     clock: Callable[[], datetime] = datetime.now,
     hub_tab: str | None = None,
     photo_store: Callable[[bytes], str | None] | None = None,
@@ -135,6 +136,7 @@ def create_app(
     app.jinja_env.globals["relogin_label"] = relogin_label
     app.jinja_env.globals["approve_hint"] = approve_hint
     app.jinja_env.globals["daily_limit"] = daily_limit  # 목록 상단 발행 현황(없으면 숨김)
+    app.jinja_env.globals["keyword_limit"] = keyword_limit
     app.jinja_env.globals["hub_tabs"] = HUB_TABS if hub_tab else ()
     app.jinja_env.globals["hub_tab"] = hub_tab
     _register_auth_routes(app, authenticator, login_throttle)

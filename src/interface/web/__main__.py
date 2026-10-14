@@ -386,6 +386,8 @@ def _build_app(
         preview_raw=profile.name != "naver",
         keywords=_build_keyword_desk(config, repo, profile),
         daily_limit=profile.daily_limit,
+        # n8n validate_structure_naver.js LIMITS.maxKeywordCount와 같은 값
+        keyword_limit=6 if profile.name == "naver" else None,
         secret_key=settings.secret_key,
         throttle=throttle,
         secure_cookies=settings.secure_cookies,

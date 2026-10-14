@@ -11,6 +11,9 @@
     <dt>카테고리</dt><dd>{{ post.category or "—" }}</dd>
     <dt>본문</dt><dd>{{ "{:,}".format(post.body_length) }}자</dd>
     <dt>품질 점수</dt><dd>{{ post.quality_score }}</dd>
+    {% if keyword_limit and post.keyword_count > keyword_limit %}
+    <dt>키워드 반복</dt><dd class="error-text">'{{ post.keyword }}' {{ post.keyword_count }}회 — {{ keyword_limit }}회 이하로 줄이세요(네이버 반복 감지)</dd>
+    {% endif %}
     {% if post.verification_note %}<dt>검증 의견</dt><dd>{{ post.verification_note }}</dd>{% endif %}
     {% if post.body_length %}
     {% set tells = post.ai_tells %}

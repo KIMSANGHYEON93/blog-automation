@@ -357,6 +357,28 @@ def test_상세_화면에_검증_의견이_보인다():
     client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
     html = client.get("/posts/2").get_data(as_text=True)
     assert "검증 의견" in html and "「초당 12크레딧」" in html
+
+
+def test_네이버_상세는_키워드_반복_과다를_경고한다():
+    post = _post(2, "AI 챗봇")
+    post.content = PostContent(title="AI 챗봇", body_markdown="AI 챗봇 설명. " * 7)
+    for limit, shown in ((6, True), (None, False)):
+        app = create_app(
+            authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
+            list_posts=ListPostsUseCase(InMemoryPostRepository([post])),
+            job_runner=PublishJobRunner(
+                publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
+            ),
+            secret_key="test-secret-key-0123456789",
+            keyword_limit=limit,
+        )
+        app.config["TESTING"] = True
+        client = app.test_client()
+        token = re.search(r'name="csrf_token" value="([^"]+)"',
+                          client.get("/login").get_data(as_text=True)).group(1)
+        client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
+        html = client.get("/posts/2").get_data(as_text=True)
+        assert ("7회 — 6회 이하로" in html) is shown
     assert "<img src=x" not in html
 
 

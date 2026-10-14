@@ -10,6 +10,7 @@ from src.application.use_cases.publish_selected_post import publish_blockers
 from src.domain.entities.post import Post
 from src.domain.ports.post_repository import PostRepository
 from src.domain.services.ai_tell import find_ai_tells
+from src.domain.services.photo_markers import SCENE_COMMENT
 from src.domain.value_objects.post_status import PostStatus
 
 RECENT_PUBLISHED = 5
@@ -39,6 +40,12 @@ class PostSummary:
     tags: str = ""
     needs_approval: bool = False  # 검증 뒤 본문이 바뀜 — '검수 승인' 버튼 표시
     verification_note: str = ""  # 검증 LLM 의견 — 65점이면 무엇을 고칠지
+
+    @property
+    def keyword_count(self) -> int:
+        """글 전체(소제목 포함)의 키워드 횟수 — 네이버 구조 검사와 같은 셈. 사진 설명은 뺀다."""
+        needle = self.keyword.strip().lower()
+        return SCENE_COMMENT.sub("", self.body_markdown).lower().count(needle) if needle else 0
 
     @property
     def ai_tells(self) -> tuple[str, ...]:

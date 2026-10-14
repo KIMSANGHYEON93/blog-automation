@@ -124,7 +124,27 @@ class TestAuthentication:
 
     def test_CSRF_토큰_없는_로그인_거부(self, h):
         resp = h.client.post("/login", data={"username": "admin", "password": PASSWORD})
-        assert resp.status_code == 400
+        # 세션에 토큰이 없으면 만료로 보고 로그인 화면으로 — 로그인은 되지 않는다
+        assert resp.status_code == 302 and resp.headers["Location"].startswith("/login")
+        assert h.client.get("/").status_code == 302
+
+    def test_로그인_버튼을_두_번_눌러도_오류_화면_없이_들어간다(self, h):
+        token = h.csrf()
+        form = {"username": "admin", "password": PASSWORD, "csrf_token": token}
+        assert h.client.post("/login", data=form).status_code == 302
+        # 로그인하며 세션을 새로 만들어 토큰이 바뀐다 — 같은 초에 온 두 번째 제출(2026-10-14 실측)
+        resp = h.client.post("/login", data=form)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/"
+        assert h.client.get("/").status_code == 200
+
+    def test_세션이_만료되면_요청을_버리고_로그인_화면으로_안내(self, h):
+        h.login()
+        token = h.csrf("/")
+        h.client.delete_cookie("session")
+        resp = h.client.post("/posts/2/publish", data={"csrf_token": token})
+        assert resp.status_code == 302 and resp.headers["Location"].startswith("/login")
+        assert h.published_rows == []
+        assert "만료" in h.client.get("/login").get_data(as_text=True)
 
     def test_로그아웃(self, h):
         h.login()

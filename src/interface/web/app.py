@@ -211,6 +211,14 @@ def _register_guards(
             sent = request.form.get("csrf_token", "")
             expected = session.get("csrf_token", "")
             if not sent or not expected or not hmac.compare_digest(sent, expected):
+                # 요청은 어느 경우든 처리하지 않는다. 사람이 흔히 겪는 두 경우만 오류 화면 대신 안내
+                if request.endpoint == "login" and session.get("admin"):
+                    # 로그인 버튼 두 번 — 첫 제출이 세션을 새로 만들어 토큰이 바뀌었다
+                    return redirect(url_for("index"))
+                if not session.get("admin"):
+                    # 세션 만료(8시간 무활동)·서버 시크릿 교체 뒤 열어 둔 화면에서 누른 경우
+                    flash("로그인이 만료됐습니다. 다시 로그인하세요.", "error")
+                    return redirect(url_for("login"))
                 abort(400, description="CSRF 토큰이 유효하지 않습니다")
         if request.endpoint not in PUBLIC_ENDPOINTS and not session.get("admin"):
             return redirect(url_for("login"))

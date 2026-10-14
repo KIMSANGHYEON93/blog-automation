@@ -2,6 +2,7 @@
 
     python -m src.interface.web hash-password   # 관리자 비밀번호 해시 생성
     python -m src.interface.web gen-secret      # 세션 시크릿 생성
+    python -m src.interface.web reset-password  # 비밀번호 초기화(기존 로그인도 끊김)
     python -m src.interface.web                 # 대시보드 실행 (기본 http://127.0.0.1:8787)
     python -m src.interface.web --platform naver  # 네이버 대시보드 (naver_calendar 탭)
     python -m src.interface.web hub             # 통합 대시보드 (/naver/ · /tistory/ 탭)
@@ -13,6 +14,7 @@ import getpass
 import logging
 import os
 import secrets
+import subprocess
 import sys
 from pathlib import Path
 
@@ -70,6 +72,7 @@ from src.interface.web.generation import (
 )
 from src.interface.web.hub import build_hub
 from src.interface.web.jobs import PublishJobRunner
+from src.interface.web.password_reset import MIN_PASSWORD_LENGTH, reset_admin_password
 from src.interface.web.platform import (
     PlatformProfile,
     build_kakao_relogin,
@@ -85,7 +88,7 @@ from src.interface.web.settings import DashboardSettings, SettingsError
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 LOCK_DIR = PROJECT_ROOT / ".pipeline_b.lock"  # run_pipeline_b.sh와 같은 락
 LOG_FILE = PROJECT_ROOT / "logs" / "dashboard-web.log"
-MIN_PASSWORD_LENGTH = 12
+HUB_LAUNCHD_LABEL = "com.blog-automation.dashboard-hub"
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +103,30 @@ def _hash_password() -> int:
         return 1
     print("\n.env에 추가하세요 ($ 문자가 있으므로 작은따옴표로 감쌀 것):")
     print(f"DASHBOARD_ADMIN_PASSWORD_HASH='{generate_password_hash(password)}'")
+    return 0
+
+
+def _reset_password() -> int:
+    password = getpass.getpass("새 관리자 비밀번호: ")
+    if password != getpass.getpass("비밀번호 확인: "):
+        print("비밀번호가 일치하지 않습니다", file=sys.stderr)
+        return 1
+    try:
+        reset_admin_password(PROJECT_ROOT / ".env", password)
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 1
+    print(".env의 비밀번호 해시와 세션 시크릿을 바꿨습니다 — 기존 로그인은 모두 끊깁니다")
+    # 설정은 시작할 때 읽으므로 상시 실행 중인 통합 대시보드를 다시 띄운다
+    result = subprocess.run(
+        ["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{HUB_LAUNCHD_LABEL}"],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        print("통합 대시보드를 재시작했습니다 — 새 비밀번호로 로그인하세요")
+    else:
+        print("통합 대시보드 재시작 실패 — 직접 실행하세요:\n"
+              f"  launchctl kickstart -k gui/$(id -u)/{HUB_LAUNCHD_LABEL}", file=sys.stderr)
     return 0
 
 
@@ -404,7 +431,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="블로그 관리자 대시보드")
     parser.add_argument(
         "command", nargs="?", default="serve",
-        choices=["serve", "hub", "hash-password", "gen-secret"],
+        choices=["serve", "hub", "hash-password", "gen-secret", "reset-password"],
     )
     parser.add_argument(
         "--platform", default="tistory", choices=["tistory", "naver"],
@@ -414,6 +441,8 @@ def main() -> int:
     load_dotenv(PROJECT_ROOT / ".env")
     if args.command == "hash-password":
         return _hash_password()
+    if args.command == "reset-password":
+        return _reset_password()
     if args.command == "gen-secret":
         print(f"DASHBOARD_SECRET_KEY={secrets.token_urlsafe(48)}")
         return 0

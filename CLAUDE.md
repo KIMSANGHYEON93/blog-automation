@@ -59,6 +59,7 @@ python -m src.interface.cli --publish-pages      # AdSense 필수 페이지
 ```bash
 python -m src.interface.web hash-password   # .env: DASHBOARD_ADMIN_PASSWORD_HASH='...'
 python -m src.interface.web gen-secret      # .env: DASHBOARD_SECRET_KEY=...
+python -m src.interface.web reset-password  # 비밀번호 초기화: .env 해시·시크릿 교체(기존 로그인 끊김) + hub 재시작
 python -m src.interface.web hub            # 통합 대시보드 /naver/·/tistory/ (운영은 launchd가 8787에서 실행)
 DASHBOARD_PORT=8788 make dashboard         # 단독 실행(탭 없음) — hub가 8787을 잡고 있으면 다른 포트 필요
 python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 실행기 테스트

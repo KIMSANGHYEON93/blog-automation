@@ -470,6 +470,14 @@ class TestDocCapture:
         h.login()
         return h, tried
 
+    def test_다시_생성은_올린_사진이_사라진다고_경고한다(self):
+        h, _ = self._harness()
+        post = next(p for p in h.repo.find_all() if p.row_index == 2)
+        post.content = PostContent(title="t", body_markdown="본문\n\n[[사진:a1.jpg]]")
+        html = h.client.get("/posts/2").get_data(as_text=True)
+        assert 'action="/posts/2/regenerate"' in html
+        assert "올린 사진·캡처 표시도 사라집니다" in html
+
     def test_참고자료_주소를_화면에_보여준다(self):
         h, _ = self._harness('["https://a.com/doc"]')
         html = h.client.get("/posts/2").get_data(as_text=True)

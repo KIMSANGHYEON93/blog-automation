@@ -103,6 +103,9 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit">다시 생성</button>
     <span class="sub">대기로 돌립니다. '지금 생성'이 같은 키워드로 새로 씁니다.</span>
+    {% if "[[사진:" in post.body_markdown or "[[직접 해 보니]]" not in post.body_markdown %}
+    <span class="error-text">본문 전체가 새 초안으로 바뀝니다 — 직접 쓴 경험, 올린 사진·캡처 표시도 사라집니다.</span>
+    {% endif %}
   </form>
   {% endif %}
   {% if editing_enabled and post.can_archive %}

@@ -7,19 +7,18 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
-import urllib.parse
 import uuid
 from pathlib import Path
 from typing import Callable, Optional
 
-import requests
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+
+from src.infrastructure.image.pollinations_adapter import fetch_image
 
 logger = logging.getLogger(__name__)
 
 ImageFn = Callable[[str], Optional[bytes]]
 
-_BASE_URL = "https://gen.pollinations.ai/image"
 # 올린 사진 픽셀 상한(폰 사진 약 1,200만 화소의 3배) — 넘으면 디코딩하지 않는다(압축 폭탄)
 MAX_PHOTO_PIXELS = 40_000_000
 # macOS 기본 한글 글꼴(ExtraBold=14번 face). 발행은 이 맥에서만 돌아 저장소에 넣지 않는다
@@ -182,19 +181,12 @@ def save_photo(data: bytes, directory: str | Path) -> str | None:
 def pollinations_image_fn(api_key: str) -> ImageFn:
     def fetch(prompt: str) -> bytes | None:
         seed = int(hashlib.md5(prompt.encode()).hexdigest()[:8], 16) & 0x7FFFFFFF
-        url = (f"{_BASE_URL}/{urllib.parse.quote(prompt, safe='')}"
-               f"?width=1024&height=576&seed={seed}&model=flux")
-        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         try:
-            resp = requests.get(url, headers=headers, timeout=120)
-            resp.raise_for_status()
+            raw, _ = fetch_image(prompt, api_key, seed)  # 키 계정 402면 무료 주소로 다시
         except Exception as e:
             logger.warning(f"사진 생성 실패 — 사진 없이 계속: {e}")
             return None
-        if "image" not in resp.headers.get("content-type", ""):
-            logger.warning("사진 생성 응답이 이미지가 아님 — 사진 없이 계속")
-            return None
-        data = reencode_jpeg(resp.content)
+        data = reencode_jpeg(raw)
         if data is None:
             logger.warning("사진 생성 응답을 이미지로 읽지 못함 — 사진 없이 계속")
         return data

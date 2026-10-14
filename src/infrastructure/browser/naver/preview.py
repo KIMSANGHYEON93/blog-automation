@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 
 from src.infrastructure.browser.naver.adapter import MAX_IMAGES
 from src.infrastructure.browser.naver.content import build_naver_html, layout_blocks
+from src.infrastructure.browser.tistory_photos import preview_photo_tag
 
 _TAGS = [
     "p", "br", "strong", "b", "em", "i", "u", "s", "code", "pre", "blockquote",
@@ -22,10 +23,13 @@ _ATTRS = {"a": ["href"], "p": ["class"], "div": ["class"]}
 
 def build_preview_html(keyword: str, markdown: str) -> str:
     parts = []
+    photos: list[str] = []  # 직접 올린 사진 — bleach가 data URI를 지우므로 정리 뒤에 넣는다
     first_image = True
     for kind, value in layout_blocks(markdown, MAX_IMAGES):
         if kind == "photo":
-            parts.append('<div class="photo">직접 올린 사진</div>')
+            parts.append(f"<p>NAVERPHOTO{len(photos)}</p>")
+            photos.append(preview_photo_tag(value)
+                          or '<div class="photo">직접 올린 사진(파일 없음)</div>')
         elif kind == "image":
             if first_image:
                 parts.append('<div class="photo">대표 썸네일 · 제목이 들어간 사진</div>')
@@ -40,6 +44,9 @@ def build_preview_html(keyword: str, markdown: str) -> str:
         if "center" in paragraph["style"]:
             paragraph["class"] = "c"
         del paragraph["style"]
-    return str(bleach.clean(
+    html = str(bleach.clean(
         str(soup), tags=_TAGS, attributes=_ATTRS, protocols=["http", "https"], strip=True,
     ))
+    for i, tag in enumerate(photos):
+        html = html.replace(f"<p>NAVERPHOTO{i}</p>", tag, 1)
+    return html

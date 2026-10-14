@@ -175,6 +175,7 @@ td.num.wide:first-child { color: var(--muted); background: var(--head); text-ali
 .preview { max-width: 640px; margin: 0 auto; font-size: 15px; line-height: 1.8; }
 .preview h1 { font-size: 22px; margin: 8px 0 24px; }
 .preview .c { text-align: center; margin: 0; }
+.preview img { display: block; max-width: 100%; height: auto; margin: 16px auto; }
 .preview p { margin: 0; min-height: 1.8em; }
 .preview blockquote { margin: 28px 0 16px; padding: 14px 18px; text-align: center; font-weight: 700; border-left: 4px solid var(--ink); background: var(--head); }
 .preview .photo { margin: 16px 0; padding: 48px 16px; text-align: center; font-size: 13px; color: var(--muted); background: var(--head); border: 1px dashed var(--muted); }

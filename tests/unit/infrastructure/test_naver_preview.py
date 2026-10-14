@@ -27,3 +27,12 @@ def test_스크립트와_이벤트_속성은_없앤다():
 def test_표와_목록은_남긴다():
     html = build_preview_html("k", "| a | b |\n|---|---|\n| 1 | 2 |\n\n- 가\n- 나")
     assert "<table" in html and "<li>가</li>" in html
+
+
+def test_직접_올린_사진은_미리보기에_그대로_보이고_없으면_자리만(tmp_path, monkeypatch):
+    from src.infrastructure.browser import tistory_photos
+    (tmp_path / "a1.jpg").write_bytes(b"\xff\xd8jpeg")
+    monkeypatch.setattr(tistory_photos, "PHOTO_DIR", tmp_path)
+    html = build_preview_html("키워드", "도입.\n\n[[사진:a1.jpg]]\n\n[[사진:none.jpg]]\n\n끝.")
+    assert html.count('<img alt="직접 올린 사진" src="data:image/jpeg;base64,/9hqcGVn"') == 1
+    assert "직접 올린 사진(파일 없음)" in html

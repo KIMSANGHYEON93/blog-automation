@@ -61,3 +61,9 @@ class TestLoginThrottle:
         throttle.reset("1.2.3.4")
         throttle.record_failure("1.2.3.4")
         assert throttle.is_blocked("1.2.3.4") is False
+
+
+def test_화면_CSP는_미리보기용_data_이미지만_더_허용한다():
+    from src.interface.web.app import SECURITY_HEADERS
+    csp = SECURITY_HEADERS["Content-Security-Policy"]
+    assert "img-src 'self' data:" in csp and "script-src 'none'" in csp

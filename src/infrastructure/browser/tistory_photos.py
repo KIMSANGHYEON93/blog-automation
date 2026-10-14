@@ -5,9 +5,11 @@
 """
 from __future__ import annotations
 
+import base64
 import io
 import json
 import logging
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -21,6 +23,7 @@ logger = logging.getLogger(__name__)
 # 대시보드가 사진을 저장하는 곳(네이버와 같은 폴더) — 실행 위치와 무관하게 저장소 기준
 PHOTO_DIR = Path(__file__).resolve().parents[3] / "uploads" / "naver"
 PREVIEW_PLACEHOLDER = "(사진은 발행할 때 올라갑니다)"
+_PHOTO_FILE = re.compile(r"[\w-]+\.jpg")  # 업로드가 만든 이름만 — 경로 문자 없음
 
 
 def photo_replacer(key: str, filename: str, width: int, height: int) -> str:
@@ -38,6 +41,19 @@ def replace_photo_markers(markdown: str, photo: Callable[[str], str | None]) -> 
             return ""
         return replaced
     return PHOTO_LINE.sub(_sub, markdown)
+
+
+def preview_photo_tag(filename: str) -> str | None:
+    """미리보기용 <img>. 파일이 없으면 None.
+
+    주소 대신 data URI로 넣는다 — 티스토리 미리보기는 sandbox라 쿠키가 안 실려
+    로그인이 필요한 사진 주소를 열 수 없다. 사진은 대시보드가 저장한 JPEG만이다.
+    """
+    path = PHOTO_DIR / filename
+    if not _PHOTO_FILE.fullmatch(filename) or not path.is_file():
+        return None
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f'<img alt="직접 올린 사진" src="data:image/jpeg;base64,{data}">'
 
 
 def make_uploader(cookies: list[dict], blog_name: str,

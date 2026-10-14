@@ -42,7 +42,8 @@ AUTOMATION_TIMES = (time(0, 0), time(7, 30), time(8, 30), time(9, 0), time(10, 0
 AUTOMATION_GUARD = timedelta(minutes=20)  # 네이버 발행(사진 5장) 소요 시간보다 넉넉하게
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
-        "default-src 'self'; script-src 'none'; object-src 'none'; "
+        # data: 이미지는 미리보기에 직접 올린 사진을 넣으려고(naver/preview.py)
+        "default-src 'self'; img-src 'self' data:; script-src 'none'; object-src 'none'; "
         "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     ),
     "X-Frame-Options": "DENY",

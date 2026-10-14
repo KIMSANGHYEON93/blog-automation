@@ -105,3 +105,12 @@ def test_업로더가_있으면_치환자를_넣는다():
     html = render_tistory_html(_post_with_photo(), "kimsanghyeon",
                                photo=lambda name: f"[##_Image|kage@k/{name}|CDM|1.3|{{}}_##]")
     assert "[##_Image|kage@k/a1.jpg" in html and "[[사진" not in html
+
+
+def test_미리보기는_직접_올린_사진을_그대로_보여준다(tmp_path, monkeypatch):
+    from src.infrastructure.browser import tistory_photos
+    (tmp_path / "a1.jpg").write_bytes(b"\xff\xd8jpeg")
+    monkeypatch.setattr(tistory_photos, "PHOTO_DIR", tmp_path)
+    html = render_tistory_html(_post_with_photo(), "kimsanghyeon")
+    # 미리보기 CSP는 sandbox라 쿠키가 안 실린다 — 주소 대신 본문에 직접 넣는다
+    assert 'src="data:image/jpeg;base64,/9hqcGVn"' in html and "발행할 때" not in html

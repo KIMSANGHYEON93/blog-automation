@@ -328,6 +328,21 @@ const freshnessNote = `
 - 내부 용어 정의의 혼동 포인트에 나오는 모델은 개념 설명용 예시입니다. 작성 기준일보다 1년 넘게 앞선 모델은 '이전 세대 모델'로 표기하고 최신 기준처럼 소개하지 않습니다.
 `;
 
+// AI 문체 규칙 — humanize-korean 룰북에서 셀 수 있는 신호만. 대시보드 'AI 문체' 점검
+// (src/domain/services/ai_tell.py)과 네이버 prompt_naver_common.md에 같은 기준이 있다
+// (2026-10-14: 259행 연결어미 뒤 쉼표 14회, 사람 글 대비 z=+8.4)
+const styleNote = `
+
+## 중요: AI 문체 금지 규칙
+- 연결어미 바로 뒤 쉼표("~하고, ~하며, ~하지만,")를 찍지 않습니다.
+- "결론적으로·따라서·이를 통해·요약하면·정리하자면"은 글 전체에서 2번까지만 씁니다.
+- "혁신적·획기적·압도적·완벽한", "매우 중요합니다·주목할 만합니다" 대신 구체적인 사실이나 수치를 씁니다. 제목에도 "완벽 가이드·완벽 분석"을 쓰지 않습니다.
+- "중요한 것은 ~이다·핵심은 ~이다" 대신 주어와 서술어를 바로 잇습니다.
+- "단순한 X를 넘어 Y", "~할 때입니다", "~되어집니다", "~에 있어서", "다음과 같습니다"는 쓰지 않습니다.
+- 소제목을 "X: Y" 콜론 부제로 만들지 않습니다(순서를 나타내는 "1단계: X"는 괜찮습니다).
+- 같은 종결어미를 네 문장 넘게 잇지 않고, 짧은 문장과 긴 문장을 섞습니다.
+`;
+
 // 공식 문서 본문 (Fetch Official Docs 노드에서 전달)
 const officialDocsText = inputData.official_docs_text || '';
 const docsSection = officialDocsText
@@ -367,7 +382,7 @@ return {
     category,
     row_index: rowIndex,
     prompt_type: promptType,
-    system_prompt: systemPrompt + jsonSafetyNote + freshnessNote,
+    system_prompt: systemPrompt + jsonSafetyNote + freshnessNote + styleNote,
     user_message: `키워드: ${keyword}\n작성 기준일: ${yearMonth} (최신 정보 기준으로 작성하세요)${docsSection}${brainSection}\n\n## SERP 인텔리전스\n${serpSummary}\n\n## 참조 가능 URL 풀\n아래 URL만 references와 인라인 출처에 사용하세요:\n${urlPoolText}`,
   }
 };

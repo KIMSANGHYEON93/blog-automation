@@ -298,7 +298,8 @@ def test_brand_label이_화면에_표시된다():
 def test_상세_화면에_본문이_이스케이프되어_보인다():
     post = _post(2, "MCP란")
     post.content = PostContent(
-        title="MCP란?", body_markdown="## 소제목\n\n본문 <img src=x onerror=alert(1)>",
+        title="MCP란?",
+        body_markdown="## 소제목\n\n본문 <img src=x onerror=alert(1)>\n\n" + "읽고, " * 6,
     )
     app = create_app(
         authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
@@ -315,6 +316,7 @@ def test_상세_화면에_본문이_이스케이프되어_보인다():
     client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
     html = client.get("/posts/2").get_data(as_text=True)
     assert re.search(r'<pre class="body">## 소제목\n\n본문 &lt;img', html)
+    assert "AI 문체" in html and "연결어미 뒤 쉼표" in html  # 생성 글 문체 점검 표시
     assert "<img src=x" not in html
 
 

@@ -11,6 +11,11 @@
     <dt>카테고리</dt><dd>{{ post.category or "—" }}</dd>
     <dt>본문</dt><dd>{{ "{:,}".format(post.body_length) }}자</dd>
     <dt>품질 점수</dt><dd>{{ post.quality_score }}</dd>
+    {% if post.body_length %}
+    {% set tells = post.ai_tells %}
+    <dt>AI 문체</dt>
+    <dd>{% if tells %}{{ tells|join(" / ") }} <span class="sub">— 편집에서 고쳐 쓰면 좋습니다</span>{% else %}눈에 띄는 AI 티 없음{% endif %}</dd>
+    {% endif %}
     <dt>메타 설명</dt><dd>{{ post.meta_description or "—" }}</dd>
     {% if post.published_url %}
     {% set url = post.published_url|safe_url %}

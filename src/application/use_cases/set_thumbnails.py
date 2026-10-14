@@ -51,7 +51,8 @@ class SetThumbnailsUseCase:
         no_thumbnail = [
             p for p in published
             if p.entry_id
-            and (not p.content or not p.content.thumbnail_url)
+            # 본문이 없는 행은 썸네일을 붙일 PostContent가 없다 — 이미지만 만들고 replace에서 죽었다
+            and p.content is not None and not p.content.thumbnail_url
         ]
 
         stats.total = len(no_thumbnail)
@@ -89,6 +90,7 @@ class SetThumbnailsUseCase:
             logger.info(f"이미지 생성 완료: {post.keyword} → {image_url[:80]}")
 
             # 2. PostContent에 thumbnail_url 반영 (frozen이므로 replace 사용)
+            assert post.content is not None  # 위 필터가 보장
             new_content = replace(post.content, thumbnail_url=image_url)
             post.content = new_content
 

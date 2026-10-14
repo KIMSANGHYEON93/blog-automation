@@ -88,7 +88,7 @@ def _merge_style(tag: Tag, new_style: str) -> None:
 
 def _is_toc_container(tag: Tag) -> bool:
     """toc-container 클래스를 가진 요소인지 확인."""
-    classes = tag.get("class", [])
+    classes = tag.get("class") or ""
     return "toc-container" in classes
 
 

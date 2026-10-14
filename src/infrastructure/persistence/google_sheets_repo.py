@@ -10,6 +10,7 @@ import gspread
 from google.oauth2.service_account import Credentials as GoogleCredentials
 from gspread import Cell
 from gspread.http_client import BackOffHTTPClient
+from gspread.utils import ValueInputOption
 
 from src.domain.entities.post import Post
 from src.domain.ports.post_repository import PostRepository
@@ -326,6 +327,6 @@ class GoogleSheetsPostRepository(PostRepository):
         row_data[COL["status"] - 1] = STATUS_WAITING
         row_data[COL["created_at"] - 1] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        self._sheet.append_row(row_data, value_input_option="RAW")
+        self._sheet.append_row(row_data, value_input_option=ValueInputOption.raw)
         logger.info(f"키워드 등록: row={new_row_index}, keyword={keyword}")
         return new_row_index

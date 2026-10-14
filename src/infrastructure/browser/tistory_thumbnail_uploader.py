@@ -28,7 +28,7 @@ def _scrape_post(blog_name: str, entry_id: str) -> dict:
     title = ""
     og_title = soup.find("meta", property="og:title")
     if og_title:
-        title = og_title.get("content", "").strip()
+        title = str(og_title.get("content") or "").strip()
     if not title:
         for selector in [
             "h2.title-article", ".entry-title", ".post-title",

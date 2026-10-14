@@ -25,6 +25,9 @@ dev = [
     "pytest-timeout>=2.0",
     "ruff>=0.4",
     "mypy>=1.10",
+    "types-requests",
+    "types-Markdown",
+    "types-bleach",
 ]
 
 [tool.pytest.ini_options]

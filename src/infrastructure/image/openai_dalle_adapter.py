@@ -44,4 +44,4 @@ class OpenAiDalleAdapter(ImageGenerationPort):
             raise RuntimeError("DALL-E API에서 이미지 URL을 받지 못함")
 
         logger.info(f"DALL-E 이미지 생성 완료: {image_url[:80]}")
-        return image_url
+        return str(image_url)

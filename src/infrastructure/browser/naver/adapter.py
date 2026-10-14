@@ -15,7 +15,7 @@ import random
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from src.domain.entities.post import Post
 from src.domain.ports.browser_port import BrowserPort
@@ -63,8 +63,8 @@ class NaverBrowserAdapter(BrowserPort):
         self._thumbnail_fn = thumbnail_fn  # 첫 사진(대표)에 제목을 얹는다
         self._photo_dir = Path(photo_dir)  # 대시보드에서 직접 올린 사진
         self.images_uploaded = 0  # 마지막 글에서 업로드가 확인된 사진 수(임시저장 시험 보고용)
-        self._sb = None
-        self._sb_context = None
+        self._sb: Any = None  # SeleniumBase SB — 타입 정보 없음
+        self._sb_context: Any = None
 
     def start(self) -> None:
         from seleniumbase import SB

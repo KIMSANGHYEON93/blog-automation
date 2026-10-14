@@ -6,6 +6,7 @@ import logging
 import random
 import time
 from pathlib import Path
+from typing import Any
 
 from src.domain.entities.post import Post
 from src.domain.ports.browser_port import BrowserPort
@@ -40,8 +41,8 @@ class SeleniumBrowserAdapter(BrowserPort):
         self._user_data_dir = user_data_dir
         self._site_profile = site_profile
         self._cta_url = cta_url  # 티스토리 글 끝 네이버 이웃 CTA 주소 — 비면 붙이지 않는다
-        self._sb = None
-        self._sb_context = None  # SB 컨텍스트 매니저 참조 유지
+        self._sb: Any = None  # SeleniumBase SB — 타입 정보 없음
+        self._sb_context: Any = None  # SB 컨텍스트 매니저 참조 유지
 
     def start(self) -> None:
         import os

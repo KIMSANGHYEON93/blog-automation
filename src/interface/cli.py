@@ -27,6 +27,7 @@ from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
 from src.application.use_cases.revise_posts import RevisePostsUseCase
 from src.application.use_cases.submit_indexing import SubmitIndexingUseCase
 from src.domain.exceptions import LoginFailedError
+from src.domain.ports.image_generation_port import ImageGenerationPort
 from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.publish_policy import PublishPolicy
 from src.domain.services.quota_manager import QuotaManager
@@ -605,6 +606,7 @@ def _set_thumbnails(
 
     # 이미지 생성 어댑터 선택: OPENAI_API_KEY 있으면 DALL-E, 없으면 Pollinations(무료)
     openai_key = os.getenv("OPENAI_API_KEY", "")
+    image_gen: ImageGenerationPort
     if openai_key:
         from src.infrastructure.image.openai_dalle_adapter import OpenAiDalleAdapter
         image_gen = OpenAiDalleAdapter(api_key=openai_key)

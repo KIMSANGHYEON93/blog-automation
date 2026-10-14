@@ -509,6 +509,7 @@ class TestPreviewAndDraft:
             list_posts=ListPostsUseCase(repo),
             job_runner=runner,
             secret_key="test-secret-key-0123456789",
+            clock=lambda: NOON,  # 자동 실행 20분 전이면 임시저장 시험이 거부된다
             preview=lambda post: f'<div class="photo">사진</div><p class="c">{post.keyword}</p>',
         )
         app.config["TESTING"] = True

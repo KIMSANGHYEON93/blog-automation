@@ -11,6 +11,7 @@
     <dt>카테고리</dt><dd>{{ post.category or "—" }}</dd>
     <dt>본문</dt><dd>{{ "{:,}".format(post.body_length) }}자</dd>
     <dt>품질 점수</dt><dd>{{ post.quality_score }}</dd>
+    {% if post.verification_note %}<dt>검증 의견</dt><dd>{{ post.verification_note }}</dd>{% endif %}
     {% if post.body_length %}
     {% set tells = post.ai_tells %}
     <dt>AI 문체</dt>

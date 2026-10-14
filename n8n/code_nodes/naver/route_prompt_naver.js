@@ -47,14 +47,18 @@ function formatTopPosts(topPosts) {
   return topPosts.map((p, i) => `${i + 1}. ${p.title}\n   ${p.description}`).join('\n');
 }
 
-function buildUserMessage({ keyword, yearMonth, topPosts, brainCards }) {
+function buildUserMessage({ keyword, yearMonth, topPosts, brainCards, officialDocs }) {
   const brainSection = brainCards && brainCards.length
     ? '\n\n## 내부 용어 정의 (이 정의를 우선 적용하고, 혼동 포인트를 본문에서 짚을 것)\n'
       + brainCards.map((r) => `### ${r['용어']}\n- 정의: ${r['한줄정의']}\n- 혼동 포인트: ${r['혼동포인트'] || '-'}`).join('\n\n')
     : '';
   return `키워드: ${keyword}\n작성 기준일: ${yearMonth}${brainSection}`
     + `\n\n## 네이버 검색 상위 글 (이 글들에 없는 정보를 1개 이상 넣을 것, 문장 베끼기 금지)\n`
-    + formatTopPosts(topPosts);
+    + formatTopPosts(topPosts)
+    // 공식 문서는 Fetch Official Docs가 가져온다 — 넣지 않으면 수치·버전을 모델 기억으로 지어낸다
+    + (officialDocs
+      ? `\n\n## 공식 문서 본문 (가격·버전·기능 수치는 여기 있는 것만 쓸 것)\n${officialDocs}`
+      : '');
 }
 
 if (typeof $input === 'undefined') {
@@ -80,6 +84,7 @@ return {
       yearMonth: `${today.getFullYear()}년 ${today.getMonth() + 1}월`,
       topPosts: input.top_posts || [],
       brainCards: matchBrainTerms(keyword, brainRows),
+      officialDocs: input.official_docs_text || '',
     }),
   },
 };

@@ -337,6 +337,26 @@ def test_상세_화면에_본문이_이스케이프되어_보인다():
     html = client.get("/posts/2").get_data(as_text=True)
     assert re.search(r'<pre class="body">## 소제목\n\n본문 &lt;img', html)
     assert "AI 문체" in html and "연결어미 뒤 쉼표" in html  # 생성 글 문체 점검 표시
+
+
+def test_상세_화면에_검증_의견이_보인다():
+    post = _post(2, "런웨이 AI")
+    post.verification_note = "크레딧 수치가 근거와 다름 — 확인할 문장: 「초당 12크레딧」"
+    app = create_app(
+        authenticator=AdminAuthenticator("admin", generate_password_hash(PASSWORD)),
+        list_posts=ListPostsUseCase(InMemoryPostRepository([post])),
+        job_runner=PublishJobRunner(
+            publish=lambda row: ManualPublishResult(ManualPublishOutcome.PUBLISHED, row, "ok"),
+        ),
+        secret_key="test-secret-key-0123456789",
+    )
+    app.config["TESTING"] = True
+    client = app.test_client()
+    token = re.search(r'name="csrf_token" value="([^"]+)"',
+                      client.get("/login").get_data(as_text=True)).group(1)
+    client.post("/login", data={"username": "admin", "password": PASSWORD, "csrf_token": token})
+    html = client.get("/posts/2").get_data(as_text=True)
+    assert "검증 의견" in html and "「초당 12크레딧」" in html
     assert "<img src=x" not in html
 
 

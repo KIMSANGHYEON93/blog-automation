@@ -60,6 +60,7 @@ class Post:
     # 품질 점수가 어느 본문에 대한 것인지 — body_fingerprint. 비면 예전 행이라 점수를 그대로 믿는다
     verified_body_hash: str = ""
     approved_body_hash: str = ""  # 관리자가 '검수 승인'을 누른 본문의 지문 (명시적 기록)
+    verification_note: str = ""  # 검증 LLM 의견 + 틀렸다고 본 문장 — 화면 표시용, 저장하지 않음
 
     def mark_publishing(self) -> None:
         """PENDING → PUBLISHING (only from PENDING)."""

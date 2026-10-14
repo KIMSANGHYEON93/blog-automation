@@ -64,6 +64,16 @@ def _format_dt(value: datetime | None) -> str:
     return value.strftime(_DATETIME_FORMATS[0]) if value else ""
 
 
+
+def _verification_note(verified: dict) -> str:
+    """검증 LLM 의견과 틀렸다고 본 문장. 네이버판은 llm_reason, 티스토리판은 reason에 남긴다."""
+    reason = str(verified.get("llm_reason") or verified.get("reason") or "")
+    claims = [c for c in verified.get("inaccurate_claims") or [] if isinstance(c, str)]
+    if not claims:
+        return reason
+    quoted = " ".join(f"「{c}」" for c in claims)
+    return f"{reason} — 확인할 문장: {quoted}" if reason else f"확인할 문장: {quoted}"
+
 class GoogleSheetsPostRepository(PostRepository):
     def __init__(self, creds_path: str, sheet_name: str, worksheet: str = ""):
         creds = GoogleCredentials.from_service_account_file(creds_path, scopes=SCOPES)
@@ -105,12 +115,14 @@ class GoogleSheetsPostRepository(PostRepository):
 
         # verified 컬럼(R열) JSON에서 quality_score 추출
         quality_score = 0
+        verification_note = ""
         raw_verified = get("verified")
         if raw_verified:
             try:
                 verified_data = json.loads(raw_verified)
                 if isinstance(verified_data, dict):
                     quality_score = int(verified_data.get("quality_score", 0))
+                    verification_note = _verification_note(verified_data)
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
 
@@ -137,6 +149,7 @@ class GoogleSheetsPostRepository(PostRepository):
             error_message=get("error_msg"),
             entry_id=get("entry_id"),
             quality_score=quality_score,
+            verification_note=verification_note,
             cwv_lcp=cwv_lcp,
             cwv_cls=cwv_cls,
             revision_count=_parse_int(get("revision_count")),

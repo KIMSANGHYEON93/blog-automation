@@ -62,6 +62,12 @@ function isValidScore(score) {
   return Number.isInteger(score) && score >= 0 && score <= 100;
 }
 
+// 검증 LLM이 틀렸다고 본 문장 — 네이버판 pickClaims와 같은 규칙(문자열만, 5개·200자까지)
+function pickClaims(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((c) => typeof c === 'string' && c.trim()).slice(0, 5).map((c) => c.slice(0, 200));
+}
+
 function judgeVerification(result) {
   const reasons = [];
   const malformed = REQUIRED_CHECKS.filter((k) => typeof result[k] !== 'boolean');
@@ -83,6 +89,7 @@ function judgeVerification(result) {
     passed,
     ...checks,
     quality_score: score,
+    inaccurate_claims: pickClaims(result.inaccurate_claims),
     reason: passed ? llmReason : [...reasons, llmReason].filter(Boolean).join(' / ').slice(0, 300),
   };
 }

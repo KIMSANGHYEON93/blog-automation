@@ -38,6 +38,7 @@ class PostSummary:
     body_markdown: str = ""
     tags: str = ""
     needs_approval: bool = False  # 검증 뒤 본문이 바뀜 — '검수 승인' 버튼 표시
+    verification_note: str = ""  # 검증 LLM 의견 — 65점이면 무엇을 고칠지
 
     @property
     def ai_tells(self) -> tuple[str, ...]:
@@ -93,6 +94,7 @@ def summarize(post: Post) -> PostSummary:
         body_markdown=(content.body_markdown or "") if content else "",
         tags=content.tags if content else "",
         needs_approval=post.status in EDITABLE_STATUSES and post.verification_stale(),
+        verification_note=post.verification_note,
     )
 
 

@@ -88,3 +88,19 @@ def test_검증_지문과_승인_지문을_저장하고_읽는다():
     _repo(sheet).save(post)
     back = _repo(sheet)._row_to_post(sheet.row(5), 5)
     assert (back.verified_body_hash, back.approved_body_hash) == ("aa", "bb")
+
+
+def test_검증_의견과_틀렸다고_본_문장을_읽는다():
+    import json
+    verified = json.dumps({
+        "quality_score": 65, "llm_reason": "크레딧 수치가 근거와 다름",
+        "inaccurate_claims": ["초당 12크레딧이 듭니다", "Gen-9 모델"],
+    }, ensure_ascii=False)
+    post = _repo(FakeSheet())._row_to_post(_row(verified=verified), 5)
+    assert post.quality_score == 65
+    assert post.verification_note == (
+        "크레딧 수치가 근거와 다름 — 확인할 문장: 「초당 12크레딧이 듭니다」 「Gen-9 모델」"
+    )
+    # 티스토리판은 llm_reason 없이 reason만 남긴다
+    tistory = json.dumps({"quality_score": 95, "reason": "좋음"})
+    assert _repo(FakeSheet())._row_to_post(_row(verified=tistory), 5).verification_note == "좋음"

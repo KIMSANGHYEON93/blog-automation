@@ -54,6 +54,12 @@ function parseLlmJson(raw) {
   return JSON.parse(cleaned);
 }
 
+// 검증 LLM이 틀렸다고 본 문장 — 대시보드에서 그 문장만 고치게 한다. 문자열만, 5개·200자까지
+function pickClaims(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((c) => typeof c === 'string' && c.trim()).slice(0, 5).map((c) => c.slice(0, 200));
+}
+
 function judgeNaver(result, { structurePassed, structureIssues, searchOk }) {
   const reasons = [];
   if (!searchOk) reasons.push('네이버 검색 결과 0건');
@@ -78,12 +84,13 @@ function judgeNaver(result, { structurePassed, structureIssues, searchOk }) {
     quality_score: score,
     reason: reasons.length ? reasons.join(' / ').slice(0, 300) : (result.reason || ''),
     llm_reason: result.reason || '',
+    inaccurate_claims: pickClaims(result.inaccurate_claims),
     ...checks,
   };
 }
 
 if (typeof $input === 'undefined') {
-  module.exports = { parseLlmJson, judgeNaver, BASE_CHECKS, NAVER_CHECKS };
+  module.exports = { parseLlmJson, judgeNaver, pickClaims, BASE_CHECKS, NAVER_CHECKS };
   return;
 }
 

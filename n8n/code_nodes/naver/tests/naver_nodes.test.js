@@ -169,3 +169,42 @@ test('중복 검사: 대시보드 생성요청 행이 있으면 그 행만 처�
   assert.deepEqual(dup.pickRequested(items).map((i) => i.json.키워드), ['b']);
   assert.equal(dup.pickRequested([{ json: { 키워드: 'a' } }]).length, 1);  // 표시 없으면 전부
 });
+
+// 2026-10-14: 네이버는 공식 문서를 가져오고도 생성·검증에 넣지 않아, 검증 LLM이 자기 지식만으로
+// 최신 사실(Gen-4.5, 2026년 5월 사건)을 '없는 정보·미래 시점'으로 판정해 65점이 났다
+test('생성 메시지에 공식 문서 본문이 들어가고, 없으면 섹션이 없다', () => {
+  const withDocs = route.buildUserMessage({
+    keyword: 'K', yearMonth: '2026년 10월', topPosts: [], brainCards: [], officialDocs: '요금: 월 10달러',
+  });
+  assert.match(withDocs, /## 공식 문서 본문[\s\S]*요금: 월 10달러/);
+  const without = route.buildUserMessage({ keyword: 'K', yearMonth: '2026년 10월', topPosts: [] });
+  assert.doesNotMatch(without, /공식 문서 본문/);
+});
+
+test('검증 메시지에 작성 기준일과 근거 자료가 들어간다', () => {
+  const msg = verifyReq.buildVerifyMessage({
+    keyword: 'K', title: 'T', content: 'C', topPosts: [], today: '2026-10-14', officialDocs: '공식 내용',
+  });
+  assert.match(msg, /작성 기준일: 2026-10-14/);
+  assert.match(msg, /## 근거 자료[\s\S]*공식 내용/);
+});
+
+test('검증 프롬프트: 모르는 최신 정보는 오류가 아니고, 틀린 문장을 목록으로 낸다', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const prompt = fs.readFileSync(path.join(__dirname, '../../../prompts/prompt_naver_h_verification.md'), 'utf8');
+  assert.match(prompt, /inaccurate_claims/);
+  assert.match(prompt, /작성 기준일/);
+});
+
+test('판정: 틀렸다고 본 문장은 문자열만 5개까지 남긴다', () => {
+  const claims = ['a', 2, 'b'.repeat(300), 'c', 'd', 'e', 'f'];
+  const v = verdict.judgeNaver({ ...ALL_TRUE, inaccurate_claims: claims },
+    { structurePassed: true, structureIssues: [], searchOk: true });
+  assert.equal(v.inaccurate_claims.length, 5);
+  assert.equal(v.inaccurate_claims[0], 'a');
+  assert.equal(v.inaccurate_claims[1].length, 200);
+  const none = verdict.judgeNaver({ ...ALL_TRUE, inaccurate_claims: '문자열' },
+    { structurePassed: true, structureIssues: [], searchOk: true });
+  assert.deepEqual(none.inaccurate_claims, []);
+});

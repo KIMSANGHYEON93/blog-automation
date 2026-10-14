@@ -96,3 +96,17 @@ test('네이버: 모두 정상이면 통과', () => {
   assert.equal(v.passed, true);
   assert.equal(v.mobile_readable, true);
 });
+
+test('티스토리: 틀렸다고 본 문장 목록을 판정 결과에 남긴다', () => {
+  const v = tistory.judgeVerification({ ...TISTORY_ALL_TRUE, inaccurate_claims: ['x'] });
+  assert.deepEqual(v.inaccurate_claims, ['x']);
+  assert.deepEqual(tistory.judgeVerification(TISTORY_ALL_TRUE).inaccurate_claims, []);
+});
+
+test('티스토리: 검증 메시지에 작성 기준일과 공식 문서가 들어간다', () => {
+  const req = require('../build_verify_request.js');
+  const msg = req.buildVerifyMessage({ title: 'T', content: 'C', today: '2026-10-14', officialDocs: '공식' });
+  assert.match(msg, /작성 기준일: 2026-10-14/);
+  assert.match(msg, /## 근거 자료[\s\S]*공식/);
+  assert.match(req.SYSTEM_PROMPT, /inaccurate_claims/);
+});

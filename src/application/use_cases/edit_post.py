@@ -1,7 +1,7 @@
 """EditPostUseCase — 관리자가 발행 전 글을 고치고, 실패·보류 글을 발행대기로 되돌린다."""
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 
 from src.domain.entities.post import Post
@@ -70,8 +70,15 @@ class EditPostUseCase:
             category=post.category,
         )
 
+    def capture_targets(self, row_index: int, extra_urls: Sequence[str] = ()) -> list[str]:
+        """캡처할 주소: 직접 넣은 주소 먼저, 다음 참고자료(시트 O열) — 중복 없이 최대 2개."""
+        post = self._find(row_index)
+        refs = post.content.reference_urls() if post and post.content else []
+        return list(dict.fromkeys([*extra_urls, *refs]))[:MAX_DOC_CAPTURES]
+
     def add_doc_captures(
         self, row_index: int, capture: Callable[[list[str]], list[tuple[str, str]]], today: str,
+        extra_urls: Sequence[str] = (),
     ) -> int:
         """참고자료의 공식 문서를 앞에서 MAX_DOC_CAPTURES개까지 캡처해 출처와 함께 넣는다.
 
@@ -80,7 +87,7 @@ class EditPostUseCase:
         post = self._find(row_index)
         if post is None or post.content is None:
             raise PostNotEditableError(f"{row_index}행은 편집할 수 없는 상태입니다")
-        urls = post.content.reference_urls()[:MAX_DOC_CAPTURES]
+        urls = self.capture_targets(row_index, extra_urls)
         captured = capture(urls) if urls else []
         if not captured:
             return 0

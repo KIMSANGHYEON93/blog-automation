@@ -458,6 +458,46 @@ class TestDocCapture:
         body = next(p for p in h.repo.find_all() if p.row_index == 2).content.body_markdown
         assert "[[사진:d1.jpg]]" in body and "출처: https://a.com/doc" in body
 
+    def _harness(self, references=""):
+        tried: list[list[str]] = []
+
+        def capture(urls):
+            tried.append(urls)
+            return [(urls[0], "d1.jpg")] if urls else []
+        h = Harness(doc_capture=capture)
+        post = next(p for p in h.repo.find_all() if p.row_index == 2)
+        post.content = PostContent(title="t", body_markdown="본문", references=references)
+        h.login()
+        return h, tried
+
+    def test_참고자료_주소를_화면에_보여준다(self):
+        h, _ = self._harness('["https://a.com/doc"]')
+        html = h.client.get("/posts/2").get_data(as_text=True)
+        assert "https://a.com/doc" in html and 'name="url"' in html
+
+    def test_직접_넣은_주소로_캡처한다(self):
+        h, tried = self._harness()
+        h.client.post("/posts/2/doc-capture",
+                      data={"csrf_token": h.csrf("/posts/2"), "url": " https://x.com/help "})
+        assert tried == [["https://x.com/help"]]
+        body = next(p for p in h.repo.find_all() if p.row_index == 2).content.body_markdown
+        assert "출처: https://x.com/help" in body
+
+    def test_주소가_하나도_없으면_어디를_채울지_알려준다(self):
+        h, tried = self._harness()
+        resp = h.client.post("/posts/2/doc-capture", data={"csrf_token": h.csrf("/posts/2")},
+                             follow_redirects=True)
+        assert tried == []
+        assert "참고자료(시트 O열)가 비어" in resp.get_data(as_text=True)
+
+    def test_http가_아닌_주소는_캡처하지_않는다(self):
+        h, tried = self._harness()
+        resp = h.client.post("/posts/2/doc-capture",
+                             data={"csrf_token": h.csrf("/posts/2"), "url": "file:///etc/passwd"},
+                             follow_redirects=True)
+        assert tried == []
+        assert "http(s) 주소" in resp.get_data(as_text=True)
+
     def test_캡처_기능이_없으면_버튼도_없다(self, h):
         h.login()
         html = h.client.get("/posts/2").get_data(as_text=True)

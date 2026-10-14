@@ -160,3 +160,17 @@ def test_캡처할_참고자료가_없으면_본문을_바꾸지_않는다():
     added = EditPostUseCase(repo).add_doc_captures(5, lambda urls: [], today="2026-10-08")
     assert added == 0
     assert _get(repo).content.body_markdown == "옛 본문"
+
+
+def test_직접_넣은_주소를_참고자료보다_먼저_캡처한다():
+    repo = _repo()
+    post = _get(repo)
+    post.content = PostContent(title="t", body_markdown="본문",
+                               references='["https://a.com/doc","https://b.com"]')
+    seen: list[list[str]] = []
+    EditPostUseCase(repo).add_doc_captures(
+        5, lambda urls: seen.append(urls) or [], today="2026-10-14",
+        extra_urls=["https://x.com/help", "https://a.com/doc"],
+    )
+    assert seen == [["https://x.com/help", "https://a.com/doc"]]  # 중복 없이 최대 2개
+    assert EditPostUseCase(repo).capture_targets(5) == ["https://a.com/doc", "https://b.com"]

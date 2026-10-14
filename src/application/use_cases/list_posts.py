@@ -40,6 +40,7 @@ class PostSummary:
     tags: str = ""
     needs_approval: bool = False  # 검증 뒤 본문이 바뀜 — '검수 승인' 버튼 표시
     verification_note: str = ""  # 검증 LLM 의견 — 65점이면 무엇을 고칠지
+    reference_urls: tuple[str, ...] = ()  # 참고자료(시트 O열) — 공식 문서 캡처가 여는 주소
 
     @property
     def keyword_count(self) -> int:
@@ -102,6 +103,7 @@ def summarize(post: Post) -> PostSummary:
         tags=content.tags if content else "",
         needs_approval=post.status in EDITABLE_STATUSES and post.verification_stale(),
         verification_note=post.verification_note,
+        reference_urls=tuple(content.reference_urls()) if content else (),
     )
 
 

@@ -136,7 +136,10 @@
   {% if doc_capture_enabled %}
   <form method="post" action="{{ url_for('capture_docs', row_index=post.row_index) }}" class="edit">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <p class="sub">참고자료의 공식 문서를 최대 2장 찍어 출처·날짜와 함께 자주 묻는 질문 앞에 넣습니다(30초~1분). 본문을 고쳤다면 먼저 저장하세요.</p>
+    <p class="sub">공식 문서 페이지를 최대 2장 찍어 출처·날짜와 함께 자주 묻는 질문 앞에 넣습니다(30초~1분). 본문을 고쳤다면 먼저 저장하세요.</p>
+    <p class="sub">캡처할 주소 — 아래 칸에 넣은 주소가 먼저, 그다음 참고자료(시트 O열):
+      {% if post.reference_urls %}{% for u in post.reference_urls %}<br>· {{ u }}{% endfor %}{% else %}<strong>참고자료가 비어 있습니다.</strong> 공식 문서 주소를 직접 넣어 주세요.{% endif %}</p>
+    <label>공식 문서 주소 (선택)<input type="url" name="url" placeholder="https://help.example.com/..." maxlength="500"></label>
     <button type="submit">공식 문서 캡처 넣기</button>
   </form>
   {% endif %}

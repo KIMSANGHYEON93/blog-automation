@@ -6,6 +6,7 @@ CSP/X-Frame-Options/no-store 헤더, Jinja 자동 이스케이프.
 from __future__ import annotations
 
 import hmac
+import re
 import secrets
 from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
@@ -39,6 +40,7 @@ JOB_REFRESH_SECONDS = 3
 # 있으면 자동 실행이 [SKIP]으로 조용히 건너뛰어진다. launchd 시각을 바꾸면 여기도 바꿀 것
 AUTOMATION_TIMES = (time(0, 0), time(7, 30), time(8, 30), time(9, 0), time(10, 0), time(14, 0),
                     time(14, 30))  # 07:30 = 네이버 세션 아침 점검(같은 락을 잡는다)
+MAX_CAPTURE_URL = 500
 AUTOMATION_GUARD = timedelta(minutes=20)  # 네이버 발행(사진 5장) 소요 시간보다 넉넉하게
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
@@ -537,14 +539,27 @@ def _register_doc_capture_route(
     @app.post("/posts/<int:row_index>/doc-capture")
     def capture_docs(row_index: int):  # type: ignore[no-untyped-def]
         # ponytail: 요청 안에서 바로 찍는다(주소 2개 30초~1분) — 길어지면 작업 실행기로 옮긴다
+        url = request.form.get("url", "").strip()
+        if url and (not re.match(r"https?://[^\s]+$", url) or len(url) > MAX_CAPTURE_URL):
+            flash("캡처할 주소는 http(s) 주소로 넣어 주세요.", "error")
+            return redirect(url_for("post_detail", row_index=row_index))
+        extra = [url] if url else []
+        targets = editor.capture_targets(row_index, extra)
+        if not targets:
+            flash("캡처할 주소가 없습니다 — 이 글의 참고자료(시트 O열)가 비어 있습니다. "
+                  "캡처 버튼 위 칸에 공식 문서 주소를 넣고 다시 누르세요.", "error")
+            return redirect(url_for("post_detail", row_index=row_index))
         try:
-            added = editor.add_doc_captures(row_index, doc_capture, today=f"{clock():%Y-%m-%d}")
+            added = editor.add_doc_captures(
+                row_index, doc_capture, today=f"{clock():%Y-%m-%d}", extra_urls=extra,
+            )
         except PostNotEditableError:
             abort(409, description="발행·수정 중인 글에는 캡처를 넣을 수 없습니다")
         if added:
             flash(f"공식 문서 캡처 {added}장을 출처와 함께 넣었습니다. "
                   "미리보기로 확인하세요.", "success")
         else:
-            flash("넣은 캡처가 없습니다 — 참고자료 주소가 없거나 "
-                  "정상으로 열리지 않았습니다.", "error")
+            # 내부 주소·다른 사이트로 넘어가는 주소·열리지 않는 주소는 doc_capture가 뺀다
+            flash("캡처하지 못했습니다 — 주소가 열리지 않거나 다른 사이트로 넘어갔습니다: "
+                  + ", ".join(targets), "error")
         return redirect(url_for("post_detail", row_index=row_index))

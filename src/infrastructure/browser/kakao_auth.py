@@ -107,9 +107,12 @@ def kakao_login(
         current_url = sb.get_current_url()
         logger.info(f"카카오 버튼 클릭 후 URL: {current_url}")
 
+        # '로그인 상태 유지' 이후엔 폼 대신 '간편로그인 계정 선택'이 먼저 뜬다 (2026-10-16~)
+        current_url = _leave_simple_login(sb)
+
         # 카카오 쿠키가 남아 있으면 '해당 카카오계정으로 로그인 [계속하기]'가 먼저 뜬다
         # (2026-10-01 실측 — 처리하지 않으면 예상 외 URL로 실패해 수정·발행이 막힌다)
-        if "kauth.kakao.com" in current_url:
+        if _is_kauth(current_url):
             _click_kauth_continue(sb)
             for _ in range(15):
                 time.sleep(1)
@@ -374,7 +377,7 @@ def _handle_two_fa(sb, notifier: NotificationPort | None = None) -> bool:
             logger.info(f"리다이렉트 감지 ({elapsed}초): {current_url[:80]}")
             time.sleep(2)
             # kauth 계정 확인 페이지: "계속하기" 버튼 자동 클릭
-            if "kauth.kakao.com" in sb.get_current_url():
+            if _is_kauth(sb.get_current_url()):
                 _click_kauth_continue(sb)
                 time.sleep(3)
             # 최종 tistory.com 도달까지 추가 대기 (최대 15초)
@@ -392,6 +395,39 @@ def _handle_two_fa(sb, notifier: NotificationPort | None = None) -> bool:
 
     logger.error(f"2FA 타임아웃 ({TWO_FA_WAIT_SEC}초)")
     return False
+
+
+def _is_kauth(url: str) -> bool:
+    """호스트가 kauth.kakao.com인지. 간편로그인 주소는 continue 파라미터에 이 문자열이 들어 있다."""
+    return urlparse(url).hostname == "kauth.kakao.com"
+
+
+# 간편로그인 화면은 입력칸 없이 계정 카드(a.wrap_profile)와 '새로운 계정으로 로그인'만 있다
+_SIMPLE_CLICK_JS = """
+    var links = document.querySelectorAll('a.wrap_profile');
+    for (var i = 0; i < links.length; i++) {
+        var isNew = /새로운 계정/.test(links[i].textContent);
+        if (isNew !== arguments[0]) { links[i].click(); return true; }
+    }
+    return false;
+"""
+SIMPLE_WAIT_SEC = 8
+
+
+def _leave_simple_login(sb) -> str:
+    """간편로그인 화면이면 저장 계정을 누르고, 안 넘어가면 새 계정 로그인으로 폼에 합류한다."""
+    url: str = sb.get_current_url()
+    if urlparse(url).path.rstrip("/") != "/login/simple":
+        return url
+    for use_saved in (True, False):
+        sb.execute_script(_SIMPLE_CLICK_JS, use_saved)
+        logger.info("간편로그인 화면 — " + ("저장 계정 선택" if use_saved else "새 계정 로그인"))
+        for _ in range(SIMPLE_WAIT_SEC):
+            time.sleep(1)
+            url = str(sb.get_current_url())
+            if urlparse(url).path.rstrip("/") != "/login/simple":
+                return url
+    return url
 
 
 def _click_kauth_continue(sb) -> None:

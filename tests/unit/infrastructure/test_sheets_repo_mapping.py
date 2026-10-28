@@ -1,6 +1,7 @@
 """GoogleSheetsPostRepository 행 ↔ Post 매핑 — 재시도·수정 이력·검증 지문 열 (gspread 없이)."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from src.domain.entities.post import Post
@@ -104,3 +105,16 @@ def test_검증_의견과_틀렸다고_본_문장을_읽는다():
     # 티스토리판은 llm_reason 없이 reason만 남긴다
     tistory = json.dumps({"quality_score": 95, "reason": "좋음"})
     assert _repo(FakeSheet())._row_to_post(_row(verified=tistory), 5).verification_note == "좋음"
+
+
+def test_n8n이_쓰는_중복스킵은_경고_없이_보류로_읽는다(caplog):
+    with caplog.at_level(logging.WARNING):
+        assert GoogleSheetsPostRepository._parse_status("중복스킵") is PostStatus.HOLD
+    assert "알 수 없는 상태값" not in caplog.text
+
+
+def test_정말_모르는_상태값은_보류로_읽고_경고한다(caplog):
+    with caplog.at_level(logging.WARNING):
+        assert GoogleSheetsPostRepository._parse_status("이상한값") is PostStatus.HOLD
+    assert "알 수 없는 상태값 '이상한값'" in caplog.text
+

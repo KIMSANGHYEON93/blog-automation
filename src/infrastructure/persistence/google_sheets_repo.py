@@ -64,6 +64,10 @@ def _format_dt(value: datetime | None) -> str:
     return value.strftime(_DATETIME_FORMATS[0]) if value else ""
 
 
+# n8n 'Sheets Update (중복스킵)'이 일부러 쓰는 상태값 — 보류로 읽되 경고하지 않는다
+N8N_HOLD_STATUSES = frozenset({"중복스킵"})
+
+
 
 def _verification_note(verified: dict) -> str:
     """검증 LLM 의견과 틀렸다고 본 문장. 네이버판은 llm_reason, 티스토리판은 reason에 남긴다."""
@@ -91,7 +95,8 @@ class GoogleSheetsPostRepository(PostRepository):
         try:
             return PostStatus(raw)
         except ValueError:
-            logger.warning("알 수 없는 상태값 '%s' → HOLD 처리", raw)
+            if raw not in N8N_HOLD_STATUSES:
+                logger.warning("알 수 없는 상태값 '%s' → HOLD 처리", raw)
             return PostStatus.HOLD
 
     def _row_to_post(self, row_values: list, row_index: int) -> Post:

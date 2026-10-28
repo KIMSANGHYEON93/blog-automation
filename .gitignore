@@ -22,3 +22,7 @@ credentials.json
 .playwright-mcp/
 .browser_data_naver
 uploads/
+
+# 개인 스킬 설치 파일 (npx skills add)
+.agents/
+skills-lock.json

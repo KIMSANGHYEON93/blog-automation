@@ -96,6 +96,10 @@ class NaverBrowserAdapter(BrowserPort):
             logger.error("네이버 세션 만료 — scripts/naver_blog.py login 으로 다시 로그인 필요")
         return ok
 
+    def session_persists(self) -> bool:
+        """브라우저를 다시 열어도 세션이 남는지 — '로그인 상태 유지'가 적용됐는지."""
+        return login.has_persistent_session(self._sb.driver.get_cookies())
+
     def relogin(self, login_id: str, login_pw: str) -> tuple[bool, str]:
         """대시보드 '네이버 다시 로그인' — 브라우저를 열어 자동 입력하고 폰 승인을 기다린다."""
         if not login_id or not login_pw:

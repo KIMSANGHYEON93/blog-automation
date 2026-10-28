@@ -48,6 +48,18 @@ def classify_login_page(url: str, page_text: str, has_captcha: bool) -> LoginOut
     return LoginOutcome.UNKNOWN
 
 
+AUTH_COOKIE = "NID_AUT"
+
+
+def has_persistent_session(cookies: list[dict]) -> bool:
+    """'로그인 상태 유지'가 적용됐는지 — 인증 쿠키가 만료일 있는 영구 쿠키인가.
+
+    상태 유지를 안 켜면 NID_AUT가 세션 쿠키라 창을 닫는 순간 사라진다. 같은 창 안의
+    확인은 통과하므로 따로 봐야 한다(2026-10-26 실측). Selenium은 영구 쿠키에만 expiry를 준다.
+    """
+    return any(c.get("name") == AUTH_COOKIE and "expiry" in c for c in cookies)
+
+
 APPROVAL_TIMEOUT = 300
 
 # 값은 인자로만 넘긴다 — 스크립트 문자열에 넣으면 드라이버 로그에 남을 수 있다

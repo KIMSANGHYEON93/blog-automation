@@ -454,3 +454,18 @@ def test_relogin_값이_없으면_브라우저를_열지_않는다(monkeypatch):
     monkeypatch.setattr(adapter, "start", lambda: started.append(True))
     ok, message = adapter.relogin("", "")
     assert not ok and "NAVER_LOGIN_ID" in message and started == []
+
+
+class _CookieSb:
+    def __init__(self, cookies):
+        self.driver = type("Driver", (), {"get_cookies": lambda _self: cookies})()
+
+
+@pytest.mark.parametrize(("cookies", "expected"), [
+    ([{"name": "NID_AUT", "value": "x", "expiry": 1824000000}], True),
+    ([{"name": "NID_AUT", "value": "x"}], False),
+])
+def test_세션이_브라우저를_다시_열어도_남는지_쿠키로_판정(cookies, expected):
+    adapter = NaverBrowserAdapter("myblog")
+    adapter._sb = _CookieSb(cookies)
+    assert adapter.session_persists() is expected

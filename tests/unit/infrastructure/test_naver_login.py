@@ -12,6 +12,7 @@ from src.infrastructure.browser.naver.login import (
     LoginOutcome,
     auto_login,
     classify_login_page,
+    has_persistent_session,
 )
 
 NID = "https://nid.naver.com/nidlogin.login"
@@ -183,3 +184,14 @@ def test_로그인_버튼이_안_보이면_제출하지_않는다():
     sb = _FakeSb([("https://nid.naver.com/nidlogin.login", "", False)], visible_submit="")
     assert _run(sb) is LoginOutcome.UNKNOWN
     assert sb.clicks == []
+
+
+@pytest.mark.parametrize(("cookies", "expected"), [
+    ([{"name": "NID_AUT", "value": "x", "expiry": 1824000000}], True),
+    # '로그인 상태 유지'를 안 켜면 만료일 없는 세션 쿠키 — 창을 닫으면 사라진다
+    ([{"name": "NID_AUT", "value": "x"}], False),
+    ([{"name": "NID_SES", "value": "x", "expiry": 1824000000}], False),
+    ([], False),
+])
+def test_로그인_상태_유지_판정(cookies, expected):
+    assert has_persistent_session(cookies) is expected

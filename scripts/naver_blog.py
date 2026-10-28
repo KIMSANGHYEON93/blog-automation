@@ -58,6 +58,10 @@ def _login(adapter: NaverBrowserAdapter) -> int:
     print("브라우저에서 네이버에 로그인하세요. '로그인 상태 유지'를 꼭 체크하세요.")
     input("로그인을 마쳤으면 Enter ▶ ")
     ok = adapter.login()
+    if ok and not adapter.session_persists():
+        print("로그인은 됐지만 '로그인 상태 유지'가 적용되지 않아 창을 닫으면 세션이 사라집니다. "
+              "'로그인 상태 유지'를 체크하고 다시 로그인하세요.")
+        return 1
     print("세션 저장 완료" if ok else "로그인이 확인되지 않았습니다. 다시 시도하세요.")
     return 0 if ok else 1
 

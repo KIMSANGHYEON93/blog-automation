@@ -841,16 +841,22 @@ def _main_inner() -> None:
             result = cwv_uc.execute(post)
             if result.success:
                 checked += 1
+                desktop_note = (
+                    f"데스크톱 LCP={result.desktop_lcp}s, CLS={result.desktop_cls}"
+                    if result.desktop_lcp is not None else "데스크톱 측정 없음"
+                )
+                field_note = f"실사용자={result.field_category or '데이터 없음'}"
                 logger.info(
                     f"CWV: {result.post_keyword} — "
                     f"LCP={result.lcp}s, CLS={result.cls}, "
-                    f"Score={result.score}, Passed={result.passed}"
+                    f"Score={result.score}, Passed={result.passed} | {desktop_note} | {field_note}"
                 )
-                # CWV 경고 알림
+                # CWV 경고 알림 — 판정은 모바일 기준, 데스크톱·실사용자 값은 원인 구분용
                 if not result.passed:
                     notifier.send(
                         f"CWV 경고: {result.post_keyword} — "
-                        f"LCP={result.lcp}s, CLS={result.cls}",
+                        f"모바일 LCP={result.lcp}s, CLS={result.cls} | "
+                        f"{desktop_note} | {field_note}",
                         level="WARNING",
                     )
             elif result.error:

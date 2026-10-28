@@ -31,6 +31,8 @@ class CwvResult:
     performance_score: int = 0
     passed: bool = False
     error: str = ""
+    field_category: str = ""  # CrUX 실사용자 평가(FAST/AVERAGE/SLOW). 데이터가 없으면 ""
+    desktop: CwvResult | None = None  # 데스크톱 측정. 실패하면 None
 
 
 class IndexingPort(ABC):

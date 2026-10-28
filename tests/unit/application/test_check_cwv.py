@@ -107,3 +107,30 @@ class TestFindCwvUnchecked:
 
         assert len(unchecked) == 1
         assert unchecked[0].row_index == 3
+
+
+class TestCwvCheckDetails:
+    def test_데스크톱과_실사용자_평가를_결과에_담는다(self):
+        desktop = CwvResult(lcp_seconds=1.8, cls_score=0.069, performance_score=74, passed=True)
+        cwv = _StubCwv(CwvResult(
+            lcp_seconds=5.3, cls_score=0.29, performance_score=51, passed=False,
+            field_category="SLOW", desktop=desktop,
+        ))
+        repo = InMemoryPostRepository([_published_post()])
+
+        result = CheckCwvUseCase(repo, cwv=cwv).execute(_published_post())
+
+        assert result.desktop_lcp == 1.8
+        assert result.desktop_cls == 0.069
+        assert result.field_category == "SLOW"
+
+    def test_데스크톱_결과가_없으면_None(self):
+        cwv = _StubCwv(_mock_cwv_result(lcp=1.5))
+        repo = InMemoryPostRepository([_published_post()])
+
+        result = CheckCwvUseCase(repo, cwv=cwv).execute(_published_post())
+
+        assert result.desktop_lcp is None
+        assert result.desktop_cls is None
+        assert result.field_category == ""
+

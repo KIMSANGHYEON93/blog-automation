@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 
 from src.domain.ports.post_repository import PostRepository
+from src.domain.value_objects.cwv_measurement import meets_cwv_thresholds
 from src.domain.value_objects.post_status import PostStatus
 
 logger = logging.getLogger(__name__)
@@ -63,11 +64,11 @@ class GetStatusUseCase:
         report.cwv_checked = len(cwv_checked_posts)
 
         if cwv_checked_posts:
-            lcp_threshold = 2.5
             report.cwv_passed = sum(
                 1 for p in cwv_checked_posts
                 if p.cwv_lcp is not None
-                and p.cwv_lcp < lcp_threshold
+                and p.cwv_cls is not None
+                and meets_cwv_thresholds(p.cwv_lcp, p.cwv_cls)
             )
             lcp_values = [
                 p.cwv_lcp for p in cwv_checked_posts

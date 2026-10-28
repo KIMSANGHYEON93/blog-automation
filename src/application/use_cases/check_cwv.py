@@ -24,6 +24,9 @@ class CwvCheckResult:
     score: int
     passed: bool
     error: str = ""
+    desktop_lcp: float | None = None
+    desktop_cls: float | None = None
+    field_category: str = ""
 
 
 class CheckCwvUseCase:
@@ -81,10 +84,17 @@ class CheckCwvUseCase:
             cls_score=cwv.cls_score,
         )
 
+        desktop = cwv.desktop
+        desktop_note = (
+            f"desktop LCP={desktop.lcp_seconds}s, CLS={desktop.cls_score}, "
+            f"Score={desktop.performance_score}"
+            if desktop else "desktop 측정 없음"
+        )
         logger.info(
             f"CWV 점검 완료: {post.keyword} | "
             f"LCP={cwv.lcp_seconds}s, CLS={cwv.cls_score}, "
-            f"Score={cwv.performance_score}, Passed={cwv.passed}"
+            f"Score={cwv.performance_score}, Passed={cwv.passed} | "
+            f"{desktop_note} | field={cwv.field_category or '데이터 없음'}"
         )
 
         # 4. 결과 반환
@@ -96,4 +106,7 @@ class CheckCwvUseCase:
             cls=cwv.cls_score,
             score=cwv.performance_score,
             passed=cwv.passed,
+            desktop_lcp=desktop.lcp_seconds if desktop else None,
+            desktop_cls=desktop.cls_score if desktop else None,
+            field_category=cwv.field_category,
         )

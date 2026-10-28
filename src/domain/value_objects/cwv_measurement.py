@@ -3,6 +3,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# Google 'good' 기준
+LCP_GOOD_SECONDS = 2.5
+CLS_GOOD = 0.1
+
+
+def meets_cwv_thresholds(lcp_seconds: float, cls_score: float) -> bool:
+    """LCP와 CLS가 둘 다 good이어야 통과. LCP만 보면 본문이 통째로 밀리는 글을 놓친다."""
+    return lcp_seconds <= LCP_GOOD_SECONDS and cls_score <= CLS_GOOD
+
 
 @dataclass(frozen=True)
 class CwvMeasurement:
@@ -21,7 +30,7 @@ class CwvMeasurement:
         - needs_improvement: ≤ 4.0s
         - poor: > 4.0s
         """
-        if self.lcp_seconds <= 2.5:
+        if self.lcp_seconds <= LCP_GOOD_SECONDS:
             return "good"
         if self.lcp_seconds <= 4.0:
             return "needs_improvement"
@@ -35,7 +44,7 @@ class CwvMeasurement:
         - needs_improvement: ≤ 0.25
         - poor: > 0.25
         """
-        if self.cls_score <= 0.1:
+        if self.cls_score <= CLS_GOOD:
             return "good"
         if self.cls_score <= 0.25:
             return "needs_improvement"

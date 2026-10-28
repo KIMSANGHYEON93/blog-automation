@@ -1,5 +1,7 @@
 """CwvMeasurement Value Object tests."""
-from src.domain.value_objects.cwv_measurement import CwvMeasurement
+import pytest
+
+from src.domain.value_objects.cwv_measurement import CwvMeasurement, meets_cwv_thresholds
 
 
 class TestCwvMeasurement:
@@ -50,3 +52,15 @@ class TestCwvMeasurement:
             raise AssertionError("Should raise FrozenInstanceError")
         except AttributeError:
             pass
+
+
+class TestMeetsCwvThresholds:
+    @pytest.mark.parametrize(("lcp", "cls", "expected"), [
+        (2.0, 0.05, True),
+        (2.5, 0.1, True),    # 경계값은 good
+        (3.0, 0.05, False),  # LCP만 나쁨
+        (2.0, 0.2, False),   # CLS만 나쁨 — LCP만 보던 판정이 놓치던 경우
+        (5.0, 0.7, False),
+    ])
+    def test_LCP와_CLS가_모두_good이어야_통과(self, lcp, cls, expected):
+        assert meets_cwv_thresholds(lcp, cls) is expected

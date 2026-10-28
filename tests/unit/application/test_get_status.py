@@ -59,3 +59,15 @@ class TestGetStatusUseCase:
 
         assert "Blog Automation Status" in output
         assert "발행완료: 1" in output
+
+    def test_CWV_통과는_LCP와_CLS가_모두_good일_때만(self):
+        good = _post(2, PostStatus.PUBLISHED, url="https://x/2")
+        good.cwv_lcp, good.cwv_cls = 2.0, 0.05
+        bad_cls = _post(3, PostStatus.PUBLISHED, url="https://x/3")
+        bad_cls.cwv_lcp, bad_cls.cwv_cls = 2.0, 0.3
+
+        report = GetStatusUseCase(InMemoryPostRepository([good, bad_cls])).execute()
+
+        assert report.cwv_checked == 2
+        assert report.cwv_passed == 1
+

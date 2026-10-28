@@ -23,7 +23,7 @@ grep -rn "from src.application" src/domain/ 2>/dev/null | wc -l
 # Application → Infrastructure 참조 금지
 grep -rn "from src.infrastructure" src/application/ 2>/dev/null | wc -l
 
-# Interface만 전체 import 가능 (cli.py에서만)
+# Interface(Composition Root: cli.py, src/interface/web/)만 전체 import 가능
 grep -rn "from src.infrastructure" src/interface/ 2>/dev/null
 ```
 

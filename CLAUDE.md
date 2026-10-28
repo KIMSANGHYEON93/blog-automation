@@ -178,7 +178,7 @@ domain/application 작업은 RED → GREEN → REFACTOR 순서로 하고, 사이
 
 ## Skill routing
 
-When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
+When the user's request matches an available skill, invoke it via the Skill tool.
 
 Key routing rules:
 - Product ideas/brainstorming → invoke /office-hours

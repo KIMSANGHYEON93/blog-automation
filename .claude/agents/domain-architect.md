@@ -64,33 +64,9 @@ git add src/domain/{path} tests/unit/domain/test_{module}.py
 git commit -m "feat(domain): add {Class} with TDD"
 ```
 
-# Build Order (순서 엄수)
-1. `PostStatus` (value_objects/post_status.py) — 7-state Enum
-2. `PostContent` (value_objects/post_content.py) — title, body, tags, category
-3. `PublishResult` (value_objects/publish_result.py) — success/failure VO
-4. `ColumnIndex` (value_objects/column_index.py) — A-S column mapping
-5. `SheetRowData` (value_objects/sheet_row_data.py) — row data VO
-6. `DomainError` hierarchy (exceptions.py)
-7. `Post` Entity (entities/post.py) — state machine with all transitions
-8. `PostRepository` Port (ports/post_repository.py) — ABC interface
-9. `BrowserPort` Port (ports/browser_port.py) — ABC interface
-10. `PublishPolicy` Domain Service (services/publish_policy.py)
-
-# Post Entity State Machine (Reference)
-```
-WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED
-                                      ↓
-                                    FAILED
-                                      ↓
-                              (reset) PENDING
-```
-
-Key business rules:
-- `mark_publishing()`: PENDING → PUBLISHING (validates current state)
-- `mark_published(url)`: PUBLISHING → PUBLISHED (records URL + timestamp)
-- `mark_failed(reason)`: PUBLISHING → FAILED (truncate reason to 200 chars)
-- `reset_to_pending()`: PUBLISHING → PENDING (ghost recovery, only from PUBLISHING)
-- `is_publishable()`: True only when PENDING + content.has_body()
+# Domain Model Reference
+상태 목록·전이·고스트 처리 규칙은 `CLAUDE.md`의 "Post 상태 머신"과 `src/domain/entities/post.py`가 기준이다.
+새 모듈은 기존 구조(`entities/`, `value_objects/`, `ports/`, `services/`)에 맞춰 추가한다.
 
 # Output Format
 각 모듈 완료 후 반드시 다음 형식으로 보고:
@@ -103,14 +79,3 @@ Key business rules:
    Next: {next_module}
 ```
 
-# Completion Signal
-모든 10개 모듈 완료 시:
-
-```
-🏁 DOMAIN LAYER COMPLETE
-   Total files: {count}
-   Total tests: {count}
-   All tests passing: YES/NO
-   Coverage: {percentage}
-   Ready for: infra-builder, application use cases
-```

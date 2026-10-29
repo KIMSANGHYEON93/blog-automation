@@ -122,6 +122,16 @@ class TestAuthentication:
         resp = h.login()  # 올바른 비밀번호여도 차단 중
         assert resp.status_code == 429
 
+    def test_로그인_실패와_차단은_로그로_남고_비밀번호는_남지_않는다(self, h, caplog):
+        with caplog.at_level("WARNING", logger="src.interface.web.app"):
+            for _ in range(3):
+                h.login(password="secret-guess-1")
+            h.login()
+        text = caplog.text
+        assert text.count("대시보드 로그인 실패") == 3
+        assert "대시보드 로그인 차단" in text
+        assert "secret-guess-1" not in text and PASSWORD not in text
+
     def test_CSRF_토큰_없는_로그인_거부(self, h):
         resp = h.client.post("/login", data={"username": "admin", "password": PASSWORD})
         # 세션에 토큰이 없으면 만료로 보고 로그인 화면으로 — 로그인은 되지 않는다

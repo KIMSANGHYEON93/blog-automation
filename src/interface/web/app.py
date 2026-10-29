@@ -6,6 +6,7 @@ CSP/X-Frame-Options/no-store 헤더, Jinja 자동 이스케이프.
 from __future__ import annotations
 
 import hmac
+import logging
 import re
 import secrets
 from dataclasses import dataclass, replace
@@ -32,6 +33,8 @@ from src.domain.exceptions import InvalidStatusTransitionError
 from src.domain.value_objects.post_status import PostStatus
 from src.interface.web.auth import AdminAuthenticator, LoginThrottle
 from src.interface.web.jobs import JobState, PublishJobRunner
+
+logger = logging.getLogger(__name__)
 
 PUBLIC_ENDPOINTS = frozenset({"login", "static", "favicon"})
 SAFE_URL_SCHEMES = frozenset({"http", "https"})
@@ -244,12 +247,15 @@ def _register_auth_routes(
             return render_template("login.html")
         client = request.remote_addr or "unknown"
         if throttle.is_blocked(client):
+            logger.warning(f"대시보드 로그인 차단(시도 초과): {client}")
             return render_template(
                 "login.html", error="로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.",
             ), 429
         username = request.form.get("username", "")
         if not authenticator.verify(username, request.form.get("password", "")):
             throttle.record_failure(client)
+            # 대입 시도 추적용 — 입력한 사용자명·비밀번호는 남기지 않는다
+            logger.warning(f"대시보드 로그인 실패: {client}")
             return render_template(
                 "login.html", error="사용자명 또는 비밀번호가 올바르지 않습니다.",
             ), 401

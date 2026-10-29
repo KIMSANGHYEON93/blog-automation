@@ -106,6 +106,10 @@ class NaverBrowserAdapter(BrowserPort):
             return False, "NAVER_LOGIN_ID·NAVER_LOGIN_PW가 .env에 없음"
         self.start()
         try:
+            # 네이버 로그인 화면은 로그인된 세션에서도 그대로 열려, 그냥 제출하면 캡차가 뜬다
+            # (2026-10-29 실측) — 세션이 살아 있으면 제출하지 않는다
+            if editor.is_logged_in(self._sb, self._blog_id):
+                return True, "이미 로그인돼 있음 — 다시 로그인하지 않음"
             outcome = login.auto_login(self._sb, login_id, login_pw)
             if outcome is not login.LoginOutcome.SUCCESS:
                 # 로그인 화면에는 아이디가 보이므로 실패 스크린샷을 남기지 않는다

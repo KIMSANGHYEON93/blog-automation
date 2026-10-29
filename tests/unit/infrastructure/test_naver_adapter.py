@@ -421,13 +421,26 @@ def test_업로드_확인이_늦어도_붙인_사진은_한_장으로_센다(cal
     assert sum(1 for c in calls if c[0] == "image") == 5
 
 
-def _relogin_adapter(monkeypatch, outcome, session_ok=True):
+def _relogin_adapter(monkeypatch, outcome, session_ok=True, already=False):
+    """already: 로그인 전 세션 확인 결과, session_ok: 로그인 제출 뒤 확인 결과."""
     adapter = NaverBrowserAdapter("myblog")
     monkeypatch.setattr(adapter, "start", lambda: setattr(adapter, "_sb", object()))
     monkeypatch.setattr(adapter, "stop", lambda: setattr(adapter, "_sb", None))
-    monkeypatch.setattr(login_mod, "auto_login", lambda sb, i, p: outcome)
-    monkeypatch.setattr(editor, "is_logged_in", lambda sb, blog: session_ok)
+    adapter.submitted = []
+    monkeypatch.setattr(login_mod, "auto_login",
+                        lambda sb, i, p: adapter.submitted.append(True) or outcome)
+    checks = iter([already, session_ok])
+    monkeypatch.setattr(editor, "is_logged_in", lambda sb, blog: next(checks))
     return adapter
+
+
+def test_relogin_세션이_살아_있으면_로그인을_제출하지_않는다(monkeypatch):
+    # 네이버 로그인 화면은 로그인된 세션에서도 그대로 열린다 — 제출하면 캡차가 뜬다(2026-10-29)
+    adapter = _relogin_adapter(monkeypatch, LoginOutcome.BLOCKED, already=True)
+    ok, message = adapter.relogin("id", "pw")
+    assert ok and "이미 로그인" in message
+    assert adapter.submitted == []
+    assert adapter._sb is None
 
 
 def test_relogin_성공(monkeypatch):

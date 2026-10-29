@@ -1,6 +1,7 @@
 """네이버 사진 — 업로드 전 재인코딩."""
 import io
 
+import pytest
 from PIL import Image
 
 from src.infrastructure.browser.naver.images import image_prompt, reencode_jpeg, save_photo
@@ -21,6 +22,21 @@ def test_직접_올린_사진은_회전을_반영하고_EXIF를_빼서_저장한
 def test_이미지가_아니면_저장하지_않는다(tmp_path):
     assert save_photo(b"not an image", tmp_path) is None
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("fmt", ["TIFF", "GIF", "BMP", "PDF"])
+def test_JPEG_PNG가_아닌_형식은_디코더를_거치지_않고_거부(tmp_path, fmt):
+    # 업로드는 외부 입력 — Pillow 취약점 대부분이 TIFF·PSD·EPS·PDF 등 다른 형식 파서에 있다
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8)).save(buf, fmt)
+    assert save_photo(buf.getvalue(), tmp_path) is None
+    assert reencode_jpeg(buf.getvalue()) is None
+
+
+def test_PNG_스크린샷은_저장한다(tmp_path):
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8)).save(buf, "PNG")
+    assert save_photo(buf.getvalue(), tmp_path)
 
 
 def _jpeg_with_exif() -> bytes:

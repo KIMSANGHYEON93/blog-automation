@@ -21,6 +21,9 @@ ImageFn = Callable[[str], Optional[bytes]]
 
 # 올린 사진 픽셀 상한(폰 사진 약 1,200만 화소의 3배) — 넘으면 디코딩하지 않는다(압축 폭탄)
 MAX_PHOTO_PIXELS = 40_000_000
+# 외부에서 받은 사진은 이 형식 파서로만 연다 — Pillow 취약점 대부분이 TIFF·PSD·EPS·PDF·GIF 등
+# 다른 형식 파서에 있다(pip-audit 2026-10-29). Pollinations는 JPEG를 준다
+UPLOAD_FORMATS = ("JPEG", "PNG")
 # macOS 기본 한글 글꼴(ExtraBold=14번 face). 발행은 이 맥에서만 돌아 저장소에 넣지 않는다
 THUMBNAIL_FONT = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
 THUMBNAIL_FONT_INDEX = 14
@@ -150,7 +153,7 @@ def reencode_jpeg(data: bytes) -> bytes | None:
     다시 저장하면 통과한다(2026-09-24 실측, 6장 중 2장이 매번 거부).
     """
     try:
-        image = Image.open(io.BytesIO(data)).convert("RGB")
+        image = Image.open(io.BytesIO(data), formats=UPLOAD_FORMATS).convert("RGB")
     except Exception:
         return None
     out = io.BytesIO()
@@ -165,7 +168,7 @@ def save_photo(data: bytes, directory: str | Path) -> str | None:
     먼저 픽셀에 반영한다(안 하면 아이폰 사진이 옆으로 누운 채 올라간다).
     """
     try:
-        image = Image.open(io.BytesIO(data))
+        image = Image.open(io.BytesIO(data), formats=UPLOAD_FORMATS)
         if image.width * image.height > MAX_PHOTO_PIXELS:
             return None
         upright = ImageOps.exif_transpose(image).convert("RGB")

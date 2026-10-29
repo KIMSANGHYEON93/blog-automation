@@ -7,8 +7,12 @@
 해석 결과 전부가 공인 주소일 때만 요청하고, 리다이렉트는 자동으로 따르지 않고 단계마다 같은 검사를
 한다(사전 확인은 stream으로 본문을 받지 않는다). 브라우저가 도착한 주소도 다시 검사해
 아니면 찍지 않는다.
-한계: (1) 검사와 접속 사이 DNS 응답이 바뀌면(재바인딩) 막지 못한다. (2) 헤드리스 브라우저가
-페이지 안에서 여는 하위 리소스·스크립트 이동 요청은 통제하지 않는다(요청은 나가되 화면은 버린다).
+브라우저는 주소마다 따로 열고, 그 호스트를 검사한 IP로 고정한다(--host-resolver-rules) — 검사와 접속
+사이 DNS 응답이 바뀌는(재바인딩) 틈을 닫는다. 페이지가 내부 주소로 보내는 fetch·이미지 요청은
+Chrome 기본 Local Network Access가 막는다(Chrome 156 실측, 2026-10-29 — CDP setBlockedURLs는
+효과가 없어 쓰지 않음).
+한계: 페이지 스크립트가 최상위 화면을 내부 주소로 옮기면 GET 한 번은 나간다(응답은 못 읽고,
+도착 주소 검사가 캡처를 버린다).
 참고자료는 제품 도움말 등 임의 도메인이라 허용 목록으로 좁히지 않았다.
 """
 from __future__ import annotations
@@ -147,34 +151,63 @@ def reachable_url(
     return None
 
 
+def pinned_resolver_rule(url: str, resolver: Resolver = _system_resolve) -> str | None:
+    """브라우저가 이 호스트를 방금 검사한 IP로만 접속하게 하는 --host-resolver-rules 값.
+
+    해석은 한 번만 하고 그 결과 전부가 공인일 때만 고정한다. IP 주소 자체면 고정할 게 없어
+    빈 문자열, 내부·해석 실패면 None(찍지 않는다). IPv4를 먼저 쓴다.
+    """
+    host = urlparse(url).hostname or ""
+    literal = _literal_ip(host)
+    if literal is not None:
+        return "" if is_public_ip(literal) else None
+    try:
+        addresses = resolver(host)
+    except OSError:
+        return None
+    if not addresses or not all(is_public_ip(a) for a in addresses):
+        return None
+    ipv4 = [a for a in addresses if ":" not in a]
+    return f"MAP {host} {ipv4[0] if ipv4 else f'[{addresses[0]}]'}"
+
+
 def capture_official_docs(urls: list[str], directory: str | Path) -> list[tuple[str, str]]:
     """열리는 주소만 찍어 (주소, 저장한 파일 이름) 목록을 돌려준다. 실패한 주소는 빠진다."""
-    targets = [(u, final) for u in urls if (final := reachable_url(u))]
-    if not targets:
-        return []
+    captured: list[tuple[str, str]] = []
+    for url in urls:
+        final = reachable_url(url)
+        rule = pinned_resolver_rule(final) if final else None
+        if final is None or rule is None:
+            continue
+        name = _capture_one(url, final, rule, directory)
+        if name:
+            captured.append((url, name))
+    return captured
+
+
+def _capture_one(url: str, final: str, rule: str, directory: str | Path) -> str | None:
+    """IP를 고정한 새 브라우저로 한 주소를 찍는다. 고정 규칙이 주소마다 달라 따로 연다."""
     from seleniumbase import SB
 
-    captured: list[tuple[str, str]] = []
-    # 네이버 발행 브라우저(.browser_data_naver)와 섞이지 않게 로그인 없는 임시 프로필로 연다
-    with SB(headless=True) as sb:
-        sb.set_window_size(*WINDOW_SIZE)
-        sb.driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
-        for url, final in targets:
+    # 네이버 발행 브라우저(.browser_data_naver)와 섞이지 않게 로그인 없는 임시 프로필로 연다.
+    # SB는 chromium_arg를 쉼표로 나누므로 규칙은 하나만 넣는다
+    args = {"chromium_arg": f"--host-resolver-rules={rule}"} if rule else {}
+    try:
+        with SB(headless=True, **args) as sb:
+            sb.set_window_size(*WINDOW_SIZE)
+            sb.driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
             try:
-                try:
-                    sb.open(final)  # 검사를 마친 마지막 주소를 연다
-                except Exception as e:
-                    if "timed out" not in str(e).lower():
-                        raise
-                    sb.execute_script("window.stop();")
-                time.sleep(2)  # 글꼴·첫 화면 이미지
-                landed = sb.get_current_url()
-                if not landing_ok(url, landed):
-                    logger.warning(f"공식 문서가 다른 곳으로 이동 — 캡처 버림: {url} → {landed}")
-                    continue
-                name = save_photo(sb.driver.get_screenshot_as_png(), directory)
-                if name:
-                    captured.append((url, name))
+                sb.open(final)  # 검사를 마친 마지막 주소를 연다
             except Exception as e:
-                logger.warning(f"공식 문서 캡처 실패 — 건너뜀: {url} ({e})")
-    return captured
+                if "timed out" not in str(e).lower():
+                    raise
+                sb.execute_script("window.stop();")
+            time.sleep(2)  # 글꼴·첫 화면 이미지
+            landed = sb.get_current_url()
+            if not landing_ok(url, landed):
+                logger.warning(f"공식 문서가 다른 곳으로 이동 — 캡처 버림: {url} → {landed}")
+                return None
+            return save_photo(sb.driver.get_screenshot_as_png(), directory)
+    except Exception as e:
+        logger.warning(f"공식 문서 캡처 실패 — 건너뜀: {url} ({e})")
+        return None

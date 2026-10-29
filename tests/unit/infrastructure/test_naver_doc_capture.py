@@ -11,6 +11,7 @@ from src.infrastructure.browser.naver.doc_capture import (
     is_public_ip,
     is_same_site,
     landing_ok,
+    pinned_resolver_rule,
     reachable_url,
     unsafe_reason,
 )
@@ -144,3 +145,28 @@ def test_브라우저가_도착한_주소도_다시_검사한다():
     assert not landing_ok("https://a.example.org/doc", "http://10.0.0.1/", public_resolver)
     assert not landing_ok("https://a.example.org/doc", "https://a.example.org/doc",
                           lambda h: ["192.168.0.10"])
+
+
+def test_브라우저는_검사한_IP로만_접속한다():
+    # 검사 뒤 DNS가 내부 주소로 바뀌어도(재바인딩) 브라우저는 고정한 IP로 간다
+    assert pinned_resolver_rule("https://a.example.org/doc", public_resolver) == (
+        f"MAP a.example.org {PUBLIC}"
+    )
+    assert pinned_resolver_rule("https://a.example.org/", lambda h: ["2606:2800::1", PUBLIC]) == (
+        f"MAP a.example.org {PUBLIC}"
+    )
+    assert pinned_resolver_rule("https://a.example.org/", lambda h: ["2606:2800::1"]) == (
+        "MAP a.example.org [2606:2800::1]"
+    )
+    assert pinned_resolver_rule(f"https://{PUBLIC}/doc", public_resolver) == ""
+
+
+def test_고정할_IP가_내부거나_해석되지_않으면_None():
+    def fail(host: str) -> list[str]:
+        raise OSError("nodename nor servname provided")
+
+    assert pinned_resolver_rule("https://a.example.org/", lambda h: [PUBLIC, "10.0.0.5"]) is None
+    assert pinned_resolver_rule("https://a.example.org/", lambda h: []) is None
+    assert pinned_resolver_rule("https://a.example.org/", fail) is None
+    assert pinned_resolver_rule("http://127.0.0.1/", public_resolver) is None
+

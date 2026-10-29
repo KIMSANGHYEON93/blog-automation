@@ -10,7 +10,7 @@
 	<string>com.blog-automation.naver-dashboard</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/kimsanghyeon/.pyenv/versions/3.11.11/bin/python3</string>
+		<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/.venv/bin/python</string>
 		<string>-m</string>
 		<string>src.interface.web</string>
 		<string>--platform</string>

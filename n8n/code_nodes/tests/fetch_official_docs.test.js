@@ -54,3 +54,20 @@ test('공식 문서가 아니면 요청하지 않고, 큰 응답은 자른다', 
   assert.equal(calls.length, 0);
   assert.equal((await f.fetchDocHtml('https://docs.python.org/big', request)).length, f.MAX_HTML_CHARS);
 });
+
+// n8n Code 노드(vm2)에는 Node 전역 URL이 없다 — 전역에 기대면 모든 공식 문서가 '허용 목록 밖'이 됐다
+test('URL 전역이 없는 n8n 샌드박스에서도 허용 목록 주소를 알아본다', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const vm = require('node:vm');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'fetch_official_docs.js'), 'utf8');
+  const mod = { exports: {} };
+  const ctx = vm.createContext({ setTimeout, clearTimeout, console });
+  const sandboxRequire = (name) => {
+    if (name === 'url') return require('url');
+    throw new Error(`Cannot find module '${name}'`);
+  };
+  vm.runInContext(`(function (module, require) {\n${src}\n})`, ctx)(mod, sandboxRequire);
+  assert.equal(mod.exports.isOfficialDocUrl('https://learn.microsoft.com/ko-kr/azure/'), true);
+  assert.equal(mod.exports.isOfficialDocUrl('https://evil.org/?u=docs.python.org'), false);
+});

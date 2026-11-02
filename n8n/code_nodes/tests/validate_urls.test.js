@@ -198,3 +198,106 @@ test('URL 개수 상한을 넘는 주소는 요청하지 않고 확인 실패로
   assert.equal(out.url_validation.unverified, 5);
   assert.equal(out.url_validation.total_urls, urls.length);
 });
+
+// n8n Code 노드(vm2)에는 Node 전역 URL이 없다 — 2026-10-16~29 실행 기록에서 모든 URL이
+// '형식 오류'로 판정돼 본문 링크·참고자료가 전부 지워졌다. 같은 조건(vm 컨텍스트)에서 돌려 본다.
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+function loadInSandbox(allowedModules) {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'validate_urls.js'), 'utf8');
+  const mod = { exports: {} };
+  const ctx = vm.createContext({ setTimeout, clearTimeout, console });
+  const sandboxRequire = (name) => {
+    if (allowedModules.includes(name)) return require(name);
+    throw new Error(`Cannot find module '${name}'`);
+  };
+  vm.runInContext(`(function (module, require) {\n${src}\n})`, ctx)(mod, sandboxRequire);
+  return mod.exports;
+}
+
+test('URL 전역이 없는 n8n 샌드박스에서도 url 모듈로 주소를 확인한다', async () => {
+  const sv = loadInSandbox(['url', 'dns']);
+  const { request } = fakeRequest({ 'https://ok.example.org/doc': { statusCode: 200 } });
+  const r = await sv.checkUrl('https://ok.example.org/doc', { request, lookup: publicLookup });
+  assert.equal(r.status, 'ok');
+});
+
+test('url 모듈도 못 쓰면 링크를 지우지 않고 확인 실패로 남긴다', async () => {
+  const sv = loadInSandbox([]);
+  const { request, calls } = fakeRequest({});
+  const out = await sv.validateUrls({
+    content: '설명 [공식](https://ok.example.org/doc)',
+    references: ['https://ok.example.org/doc'],
+    serpUrls: [],
+  }, { request, lookup: publicLookup });
+  assert.match(out.content, /\[공식\]\(https:\/\/ok\.example\.org\/doc\)/);
+  assert.equal(out.references.length, 1);
+  assert.equal(out.url_validation.dead, 0);
+  assert.equal(out.url_validation.unverified, 1);
+  assert.equal(calls.length, 0);
+});
+
+test('없는 주소의 링크를 지워도 이미지 문법은 깨뜨리지 않는다', async () => {
+  const { request } = fakeRequest({
+    'https://gone.example.org/a.png': { statusCode: 404 },
+    'https://gone.example.org/page': { statusCode: 404 },
+  });
+  const content = '![그림](https://gone.example.org/a.png)\n[글](https://gone.example.org/page)';
+  const out = await v.validateUrls({ content, references: [], serpUrls: [] },
+    { request, lookup: publicLookup });
+  assert.match(out.content, /!\[그림\]\(https:\/\/gone\.example\.org\/a\.png\)/);
+  assert.match(out.content, /^글$/m);
+});
+
+test('남은 참고자료를 글 끝 "참고 자료"에 검색 결과 제목(없으면 도메인)으로 붙인다', async () => {
+  const { request } = fakeRequest({
+    'https://ok.example.org/doc': { statusCode: 200 },
+    'https://www.forbidden.example.org/x': { statusCode: 403 },
+    'https://gone.example.org/y': { statusCode: 404 },
+  });
+  const out = await v.validateUrls({
+    content: '본문입니다.',
+    references: ['https://ok.example.org/doc', 'https://www.forbidden.example.org/x',
+      'https://gone.example.org/y', '책 이름'],
+    serpUrls: [],
+    titles: { 'https://ok.example.org/doc': '공식 문서 [가이드]' },
+  }, { request, lookup: publicLookup });
+  assert.equal(out.content, [
+    '본문입니다.',
+    '',
+    '## 참고 자료',
+    '',
+    '- [공식 문서 가이드](https://ok.example.org/doc)',
+    '- [forbidden.example.org](https://www.forbidden.example.org/x)',
+    '',
+  ].join('\n'));
+});
+
+test('참고자료가 없거나 이미 "참고 자료" 절이 있으면 붙이지 않는다', async () => {
+  const { request } = fakeRequest({ 'https://ok.example.org/doc': { statusCode: 200 } });
+  const deps = { request, lookup: publicLookup };
+  const none = await v.validateUrls({ content: '본문', references: [], serpUrls: [] }, deps);
+  assert.equal(none.content, '본문');
+  const existing = '본문\n\n## 참고 자료\n\n- 직접 쓴 목록';
+  const kept = await v.validateUrls(
+    { content: existing, references: ['https://ok.example.org/doc'], serpUrls: [] }, deps);
+  assert.equal(kept.content, existing);
+});
+
+test('검색 결과 텍스트에서 주소별 제목을 뽑는다', () => {
+  const serpText = [
+    '### 검색 상위 콘텐츠 (상위 7개)',
+    '1. 제목A — 사이트',
+    '   스니펫입니다',
+    '   URL: https://a.example.org/x',
+    '2. 제목B',
+    '   (스니펫 없음)',
+    '   URL: https://b.example.org/',
+  ].join('\n');
+  assert.deepEqual({ ...v.serpTitles(serpText) }, {
+    'https://a.example.org/x': '제목A — 사이트',
+    'https://b.example.org/': '제목B',
+  });
+});

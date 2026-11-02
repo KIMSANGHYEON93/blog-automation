@@ -16,7 +16,8 @@ services:
       # 아래에 워크플로가 실제로 쓰는 키만 명시한다 — 카카오·네이버 비밀번호 등이 노드에서 읽히지 않게
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       # dns: URL Validation 노드가 호스트를 해석해 내부 IP를 거른다 (없으면 신뢰 도메인만 확인)
-      NODE_FUNCTION_ALLOW_BUILTIN: zlib,dns
+      # url: Code 노드(vm2)에는 전역 URL이 없어 주소 해석에 필요하다 — 빠지면 링크를 지우지 않고 확인 실패
+      NODE_FUNCTION_ALLOW_BUILTIN: zlib,dns,url
       NODE_OPTIONS: --max-old-space-size=4096
       # --- 워크플로 $env 사용 키 (grep -o '\$env\.[A-Z_]*' n8n/*.json n8n/code_nodes/*.js) ---
       # 값은 같은 폴더의 .env에서 docker compose가 치환한다. 없으면 빈 값.

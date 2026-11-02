@@ -30,6 +30,14 @@ const LIMITS = {
   BATCH: 5,
 };
 
+// n8n Code 노드(vm2)에는 Node 전역 URL이 없다 — url 모듈로 받는다(NODE_FUNCTION_ALLOW_BUILTIN에 url).
+// 둘 다 없으면 주소를 해석하지 못하므로 지우지 않고 확인 실패로 남긴다
+// (2026-10-16~29: 전역 URL에 기대다 모든 주소가 '형식 오류'로 판정돼 링크·참고자료가 전부 지워졌다)
+const URLParser = (() => {
+  if (typeof URL === 'function') return URL;
+  try { return require('url').URL; } catch { return null; }
+})();
+
 // dns 모듈을 못 쓸 때만 쓰는 신뢰 도메인 (parse_serp.js OFFICIAL_DOMAINS의 호스트)
 const TRUSTED_DOMAINS = [
   'learn.microsoft.com', 'docs.microsoft.com', 'docs.aws.amazon.com', 'cloud.google.com',
@@ -100,9 +108,10 @@ function isTrustedHost(host) {
 }
 
 function parseSafeUrl(raw) {
+  if (!URLParser) return { status: 'unverified', reason: 'URL 해석 불가(n8n url 모듈 미허용)' };
   let u;
   try {
-    u = new URL(raw);
+    u = new URLParser(raw);
   } catch {
     return { status: 'broken_format', reason: 'URL 형식 오류' };
   }
@@ -188,7 +197,7 @@ async function followAndCheck(raw, { request, lookup }) {
     if (res.code && isRedirect(res.code)) {
       if (!res.location) return { status: 'unverified', reason: `HTTP ${res.code} (Location 없음)` };
       try {
-        current = new URL(String(res.location), current).href;
+        current = new URLParser(String(res.location), current).href;
       } catch {
         return { status: 'unverified', reason: '잘못된 리다이렉트 주소' };
       }
@@ -219,12 +228,37 @@ function stripLinks(content, urls) {
   let out = content;
   for (const url of urls) {
     const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    out = out.replace(new RegExp(`\\[([^\\]]+)\\]\\(${escaped}\\)`, 'g'), '$1'); // [텍스트](url) → 텍스트
+    // [텍스트](url) → 텍스트. 이미지(![설명](url))는 건드리지 않는다 — 지우면 '!설명'만 남는다
+    out = out.replace(new RegExp(`(?<!!)\\[([^\\]]+)\\]\\(${escaped}\\)`, 'g'), '$1');
   }
   return out;
 }
 
-async function validateUrls({ content, references, serpUrls }, deps) {
+/** Parse SERP Data의 serp_text('n. 제목 / 스니펫 / URL: 주소')에서 주소별 제목을 뽑는다 */
+function serpTitles(serpText) {
+  const titles = {};
+  const re = /^\d+\. (.+)\n[^\n]*\n\s+URL: (\S+)/gm;
+  let m;
+  while ((m = re.exec(String(serpText || ''))) !== null) titles[m[2]] = m[1].trim();
+  return titles;
+}
+
+const REFERENCES_HEADING = '## 참고 자료';
+
+/** 출처는 문장마다 붙이지 않고 글 끝에 모은다. 이미 그 절이 있으면 그대로 둔다 */
+function appendReferences(content, references, titles) {
+  const urls = [...new Set(references.filter((r) => typeof r === 'string' && /^https?:\/\//.test(r)))];
+  if (urls.length === 0 || content.includes(REFERENCES_HEADING)) return content;
+  const label = (url) => {
+    const title = String(titles[url] || '').replace(/[[\]]/g, '').trim();
+    if (title) return title;
+    try { return new URLParser(url).hostname.replace(/^www\./, ''); } catch { return url; }
+  };
+  const items = urls.map((url) => `- [${label(url)}](${url})`);
+  return `${content.trimEnd()}\n\n${REFERENCES_HEADING}\n\n${items.join('\n')}\n`;
+}
+
+async function validateUrls({ content, references, serpUrls, titles = {} }, deps) {
   const refs = Array.isArray(references) ? references : [];
   const urlRegex = /https?:\/\/[^\s\)\]"'<>]+/g;
   const contentUrls = (content.match(urlRegex) || []).map((u) => u.replace(/[.,;:!?)]+$/, ''));
@@ -235,7 +269,7 @@ async function validateUrls({ content, references, serpUrls }, deps) {
 
   const serpDomains = new Set();
   for (const url of serpUrls || []) {
-    try { serpDomains.add(new URL(url).hostname); } catch { /* 무시 */ }
+    try { serpDomains.add(new URLParser(url).hostname); } catch { /* 무시 */ }
   }
 
   const results = [];
@@ -266,7 +300,7 @@ async function validateUrls({ content, references, serpUrls }, deps) {
       unverified.push({ url: r.url, reason: r.reason });
     }
     try {
-      if (serpDomains.has(new URL(r.url).hostname)) serpMatched++;
+      if (serpDomains.has(new URLParser(r.url).hostname)) serpMatched++;
       else serpUnmatched++;
     } catch { /* 무시 */ }
   }
@@ -279,9 +313,10 @@ async function validateUrls({ content, references, serpUrls }, deps) {
   summary += ')';
   if (unverified.length) summary += ` 확인실패 URL: ${unverified.map((u) => u.url).join(' ')}`;
 
+  const keptRefs = refs.filter((ref) => !(typeof ref === 'string' && ref.startsWith('http') && removed.includes(ref)));
   return {
-    content: stripLinks(content, removed),
-    references: refs.filter((ref) => !(typeof ref === 'string' && ref.startsWith('http') && removed.includes(ref))),
+    content: appendReferences(stripLinks(content, removed), keptRefs, titles),
+    references: keptRefs,
     url_validation: {
       passed: removed.length === 0,
       needs_review: unverified.length > 0,
@@ -300,7 +335,7 @@ async function validateUrls({ content, references, serpUrls }, deps) {
 }
 
 if (typeof $input === 'undefined') {
-  module.exports = { LIMITS, TRUSTED_DOMAINS, isPublicIp, isTrustedHost, checkUrl, validateUrls };
+  module.exports = { LIMITS, TRUSTED_DOMAINS, isPublicIp, isTrustedHost, checkUrl, validateUrls, serpTitles };
   return;
 }
 
@@ -315,11 +350,14 @@ try {
 const helpers = this.helpers;
 const item = $input.item.json;
 let serpUrls = [];
+let titles = {};
 try {
-  serpUrls = $('Parse SERP Data').item.json.serp_urls || [];
+  const serp = $('Parse SERP Data').item.json;
+  serpUrls = serp.serp_urls || [];
+  titles = serpTitles(serp.serp_text);
 } catch { /* 노드 미존재 시 빈 배열 */ }
 
 return validateUrls(
-  { content: item.content || '', references: item.references || [], serpUrls },
+  { content: item.content || '', references: item.references || [], serpUrls, titles },
   { request: (opts) => helpers.httpRequest(opts), lookup },
 ).then((result) => ({ json: { ...item, ...result } }));

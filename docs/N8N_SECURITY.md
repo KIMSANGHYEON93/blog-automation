@@ -9,7 +9,7 @@
 |------|----|----|------|
 | 포트 | `5678:5678` (모든 인터페이스) | `127.0.0.1:5678:5678` | 같은 Wi-Fi의 다른 기기가 n8n 로그인 화면에 닿지 않게. 대시보드 '지금 생성'은 `docker exec`를 써서 영향 없음 |
 | 환경변수 | `env_file: .env` (전부 주입) | 워크플로가 쓰는 키만 `environment`에 명시 | `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`라 Code 노드가 `$env`로 `KAKAO_PW`·`NAVER_LOGIN_PW`·`DASHBOARD_SECRET_KEY`·`TELEGRAM_BOT_TOKEN`까지 읽을 수 있었다 |
-| `NODE_FUNCTION_ALLOW_BUILTIN` | `zlib` | `zlib,dns` | URL Validation 노드가 호스트를 DNS로 해석해 내부 IP를 거른다 |
+| `NODE_FUNCTION_ALLOW_BUILTIN` | `zlib` | `zlib,dns,url` | URL Validation 노드가 호스트를 DNS로 해석해 내부 IP를 거른다. `url`은 2026-10-29 추가 — Code 노드(vm2)에 전역 `URL`이 없어, 없으면 모든 주소가 '형식 오류'로 지워졌다 |
 
 `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`는 유지한다. 워크플로가 `$env`를 쓰기 때문이다.
 

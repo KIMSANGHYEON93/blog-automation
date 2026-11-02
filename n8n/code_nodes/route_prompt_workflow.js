@@ -48,14 +48,14 @@ const PROMPT_A = `# 프롬프트 A: IT 기초 용어 정의
 - 관련 검색어는 본문에서 자연스럽게 언급하세요
 - SERP 상위 콘텐츠에서 다루는 주제를 빠짐없이 커버하세요
 - SERP 상위 결과를 참고하되 그대로 복사하지 말 것
-- 인라인 출처는 '[출처명](URL)' 형태로 삽입하세요
+- 문장 끝에 출처명이나 출처 링크를 붙이지 마세요. 참고한 자료의 URL은 references에 모으면 글 끝 '참고 자료'에 자동으로 붙습니다
 
 ## 참조 URL 규칙 (필수)
 
 - **references 필드**: 반드시 SERP 데이터에 포함된 실제 URL만 사용하세요. URL을 추측하거나 기억에 의존하여 작성하지 마세요
-- **인라인 출처 URL**: SERP 데이터의 "URL:" 항목에서 가져오세요. user 메시지의 "참조 가능 URL 풀" 섹션 참고
+- **본문 링크**: 독자가 직접 접속해야 하는 공식 사이트·다운로드 주소만 본문에 링크로 넣고, 이때도 user 메시지의 "참조 가능 URL 풀"에 있는 주소만 씁니다
 - **공식 문서 우선**: SERP URL 중 공식 문서 도메인(learn.microsoft.com, docs.aws.amazon.com, cloud.google.com, developer.mozilla.org 등)이 있으면 우선 사용하세요
-- **URL을 모를 때**: URL 없이 출처명만 텍스트로 기재하세요 (예: "Microsoft Learn 공식 문서 참고"). 존재하지 않는 URL을 만들어내지 마세요
+- **URL을 모를 때**: 본문에 출처명도 적지 말고 references에서 빼세요. 존재하지 않는 URL을 만들어내지 마세요
 
 ## 품질 자가 검증 체크리스트
 
@@ -66,7 +66,7 @@ const PROMPT_A = `# 프롬프트 A: IT 기초 용어 정의
 - [ ] 전체 본문이 3,000자 이상인가?
 - [ ] 실무 시나리오가 2개 이상 포함되어 있는가?
 - [ ] 실무 적용 가이드에 구체적 도구명/명령어가 있는가?
-- [ ] 인라인 출처가 1개 이상 포함되어 있는가?
+- [ ] references에 참고한 URL이 1개 이상 있고, 본문 문장 끝에 출처명이 붙어 있지 않은가?
 - [ ] 기업 환경 적용 사례가 구체적인가?
 - [ ] internal_link_keywords에 해당하는 키워드가 본문에서 **굵게** 표시되어 있는가?
 - [ ] [MERMAID]...[/MERMAID] 다이어그램이 2개 이상 포함되어 있는가?
@@ -75,7 +75,7 @@ const PROMPT_A = `# 프롬프트 A: IT 기초 용어 정의
 - [ ] 장점 테이블과 한계 테이블이 분리되어 있는가?
 - [ ] \`<!-- IMAGE: ... -->\` 마커가 1~2개 포함되어 있는가? (FAQ/Mermaid 섹션 제외)
 - [ ] references 필드의 모든 URL이 SERP 데이터에서 가져온 것인가?
-- [ ] 인라인 출처 URL이 실제 존재하는 URL인가? (추측 URL 사용 금지)
+- [ ] references와 본문 링크의 URL이 URL 풀에 있는 실제 주소인가? (추측 URL 사용 금지)
 
 ## 금지 사항
 
@@ -141,14 +141,14 @@ const PROMPT_B = `# 프롬프트 B: IT 트렌드/비교 분석
 - 관련 검색어는 본문에서 자연스럽게 언급하세요
 - SERP 상위 콘텐츠에서 다루는 비교 관점을 빠짐없이 커버하세요
 - SERP 상위 결과를 참고하되 그대로 복사하지 말 것
-- 인라인 출처는 '[출처명](URL)' 형태로 삽입하세요
+- 문장 끝에 출처명이나 출처 링크를 붙이지 마세요. 참고한 자료의 URL은 references에 모으면 글 끝 '참고 자료'에 자동으로 붙습니다
 
 ## 참조 URL 규칙 (필수)
 
 - **references 필드**: 반드시 SERP 데이터에 포함된 실제 URL만 사용하세요. URL을 추측하거나 기억에 의존하여 작성하지 마세요
-- **인라인 출처 URL**: SERP 데이터의 "URL:" 항목에서 가져오세요. user 메시지의 "참조 가능 URL 풀" 섹션 참고
+- **본문 링크**: 독자가 직접 접속해야 하는 공식 사이트·다운로드 주소만 본문에 링크로 넣고, 이때도 user 메시지의 "참조 가능 URL 풀"에 있는 주소만 씁니다
 - **공식 문서 우선**: SERP URL 중 공식 문서 도메인(learn.microsoft.com, docs.aws.amazon.com, cloud.google.com, developer.mozilla.org 등)이 있으면 우선 사용하세요
-- **URL을 모를 때**: URL 없이 출처명만 텍스트로 기재하세요 (예: "Microsoft Learn 공식 문서 참고"). 존재하지 않는 URL을 만들어내지 마세요
+- **URL을 모를 때**: 본문에 출처명도 적지 말고 references에서 빼세요. 존재하지 않는 URL을 만들어내지 마세요
 
 ## 품질 자가 검증 체크리스트
 
@@ -160,7 +160,7 @@ const PROMPT_B = `# 프롬프트 B: IT 트렌드/비교 분석
 - [ ] 전체 본문이 3,000자 이상인가?
 - [ ] 선택 가이드에 기업 규모별(SMB/Enterprise/스타트업) 추천이 있는가?
 - [ ] 마이그레이션/도입 시나리오가 포함되어 있는가?
-- [ ] 인라인 출처가 1개 이상 포함되어 있는가?
+- [ ] references에 참고한 URL이 1개 이상 있고, 본문 문장 끝에 출처명이 붙어 있지 않은가?
 - [ ] 워크로드 유형별 추천이 있는가?
 - [ ] internal_link_keywords에 해당하는 키워드가 본문에서 **굵게** 표시되어 있는가?
 - [ ] [MERMAID]...[/MERMAID] 다이어그램이 2개 이상 포함되어 있는가?
@@ -168,7 +168,7 @@ const PROMPT_B = `# 프롬프트 B: IT 트렌드/비교 분석
 - [ ] 각 기술별 코드 예시가 1개 이상 포함되어 있는가?
 - [ ] \`<!-- IMAGE: ... -->\` 마커가 1~2개 포함되어 있는가? (FAQ/Mermaid 섹션 제외)
 - [ ] references 필드의 모든 URL이 SERP 데이터에서 가져온 것인가?
-- [ ] 인라인 출처 URL이 실제 존재하는 URL인가? (추측 URL 사용 금지)
+- [ ] references와 본문 링크의 URL이 URL 풀에 있는 실제 주소인가? (추측 URL 사용 금지)
 
 ## 금지 사항
 
@@ -233,14 +233,14 @@ const PROMPT_C = `# 프롬프트 C: 실무 트러블슈팅 가이드
 - 관련 검색어는 본문에서 자연스럽게 언급하세요
 - SERP 상위 콘텐츠에서 다루는 해결 방법을 빠짐없이 커버하세요
 - SERP 상위 결과를 참고하되 그대로 복사하지 말 것
-- 인라인 출처는 '[출처명](URL)' 형태로 삽입하세요
+- 문장 끝에 출처명이나 출처 링크를 붙이지 마세요. 참고한 자료의 URL은 references에 모으면 글 끝 '참고 자료'에 자동으로 붙습니다
 
 ## 참조 URL 규칙 (필수)
 
 - **references 필드**: 반드시 SERP 데이터에 포함된 실제 URL만 사용하세요. URL을 추측하거나 기억에 의존하여 작성하지 마세요
-- **인라인 출처 URL**: SERP 데이터의 "URL:" 항목에서 가져오세요. user 메시지의 "참조 가능 URL 풀" 섹션 참고
+- **본문 링크**: 독자가 직접 접속해야 하는 공식 사이트·다운로드 주소만 본문에 링크로 넣고, 이때도 user 메시지의 "참조 가능 URL 풀"에 있는 주소만 씁니다
 - **공식 문서 우선**: SERP URL 중 공식 문서 도메인(learn.microsoft.com, docs.aws.amazon.com, cloud.google.com, developer.mozilla.org 등)이 있으면 우선 사용하세요
-- **URL을 모를 때**: URL 없이 출처명만 텍스트로 기재하세요 (예: "Microsoft Learn 공식 문서 참고"). 존재하지 않는 URL을 만들어내지 마세요
+- **URL을 모를 때**: 본문에 출처명도 적지 말고 references에서 빼세요. 존재하지 않는 URL을 만들어내지 마세요
 
 ## 품질 자가 검증 체크리스트
 
@@ -255,13 +255,13 @@ const PROMPT_C = `# 프롬프트 C: 실무 트러블슈팅 가이드
 - [ ] 전체 본문이 3,000자 이상인가?
 - [ ] 예방 조치에 구체적인 스크립트나 자동화 팁이 있는가?
 - [ ] 관련 에러/참고 자료 섹션이 포함되어 있는가?
-- [ ] 인라인 출처가 1개 이상 포함되어 있는가?
+- [ ] references에 참고한 URL이 1개 이상 있고, 본문 문장 끝에 출처명이 붙어 있지 않은가?
 - [ ] internal_link_keywords에 해당하는 키워드가 본문에서 **굵게** 표시되어 있는가?
 - [ ] [MERMAID]...[/MERMAID] 다이어그램이 2개 이상 포함되어 있는가?
 - [ ] Mermaid 노드 레이블이 영문으로 작성되어 있는가?
 - [ ] \`<!-- IMAGE: ... -->\` 마커가 1~2개 포함되어 있는가? (FAQ/Mermaid 섹션 제외)
 - [ ] references 필드의 모든 URL이 SERP 데이터에서 가져온 것인가?
-- [ ] 인라인 출처 URL이 실제 존재하는 URL인가? (추측 URL 사용 금지)
+- [ ] references와 본문 링크의 URL이 URL 풀에 있는 실제 주소인가? (추측 URL 사용 금지)
 
 ## 금지 사항
 
@@ -383,6 +383,6 @@ return {
     row_index: rowIndex,
     prompt_type: promptType,
     system_prompt: systemPrompt + jsonSafetyNote + freshnessNote + styleNote,
-    user_message: `키워드: ${keyword}\n작성 기준일: ${yearMonth} (최신 정보 기준으로 작성하세요)${docsSection}${brainSection}\n\n## SERP 인텔리전스\n${serpSummary}\n\n## 참조 가능 URL 풀\n아래 URL만 references와 인라인 출처에 사용하세요:\n${urlPoolText}`,
+    user_message: `키워드: ${keyword}\n작성 기준일: ${yearMonth} (최신 정보 기준으로 작성하세요)${docsSection}${brainSection}\n\n## SERP 인텔리전스\n${serpSummary}\n\n## 참조 가능 URL 풀\n아래 URL만 references와 본문 링크에 사용하세요:\n${urlPoolText}`,
   }
 };

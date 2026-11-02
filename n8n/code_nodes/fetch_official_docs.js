@@ -29,10 +29,19 @@ const MAX_HTML_CHARS = 2000000; // 정규식 처리 전에 자른다
 const MAX_REDIRECTS = 3;
 const REQUEST_TIMEOUT_MS = 10000;
 
+// n8n Code 노드(vm2)에는 Node 전역 URL이 없다 — url 모듈로 받는다(NODE_FUNCTION_ALLOW_BUILTIN에 url).
+// 못 받으면 허용 목록 확인을 할 수 없으니 요청하지 않는다(안전 쪽). 2026-10-09~29에는 전역에 기대
+// 모든 공식 문서가 목록 밖으로 판정돼 본문을 가져오지 못했다
+const URLParser = (() => {
+  if (typeof URL === 'function') return URL;
+  try { return require('url').URL; } catch { return null; }
+})();
+
 function isOfficialDocUrl(raw) {
+  if (!URLParser) return false;
   let u;
   try {
-    u = new URL(raw);
+    u = new URLParser(raw);
   } catch {
     return false;
   }
@@ -72,7 +81,7 @@ async function fetchDocHtml(url, request) {
       const loc = headers.location ?? headers.Location;
       if (!loc) return '';
       try {
-        current = new URL(String(loc), current).href;
+        current = new URLParser(String(loc), current).href;
       } catch {
         return '';
       }

@@ -310,12 +310,43 @@ def _enter_credentials_and_wait(
             logger.info("2단계 인증 감지 — 카카오톡에서 승인 대기...")
             return _handle_two_fa(sb, notifier)
 
-        return _is_tistory_logged_in(current_url)
+        if not _is_tistory_logged_in(current_url):
+            _log_unexpected_page(sb, current_url)
+            return False
+        return True
 
     except Exception as e:
         logger.error(f"카카오 자격증명 입력 예외: {e}")
         return False
 
+
+
+# 제출 뒤 2FA도 티스토리도 아니면 어떤 화면인지 남긴다 — 2026-11-02 대시보드 재로그인이
+# 제출 5초 만에 이유 없이 실패해 원인을 알 수 없었다.
+# 쿼리는 토큰이 섞여 빼고, 입력값은 남기지 않는다
+_VISIBLE_ERROR_JS = """
+    var out = [];
+    var nodes = document.querySelectorAll(
+        '[class*="error"], [class*="alert"], [role="alert"], h1, h2, h3');
+    for (var i = 0; i < nodes.length && out.length < 6; i++) {
+        var t = (nodes[i].innerText || '').trim();
+        if (t && nodes[i].offsetParent !== null) out.push(t.slice(0, 120));
+    }
+    return out.join(' | ');
+"""
+
+
+def _log_unexpected_page(sb, url: str) -> None:
+    parsed = urlparse(url)
+    try:
+        title = sb.get_title() or ""
+        shown = sb.execute_script(_VISIBLE_ERROR_JS) or ""
+    except Exception as e:
+        title, shown = "", f"(화면 읽기 실패: {e})"
+    logger.error(
+        f"제출 후 예상 외 화면 — {parsed.hostname}{parsed.path} "
+        f"제목='{title}' 표시='{shown}'"
+    )
 
 
 def _notify_two_fa(notifier: NotificationPort | None) -> None:

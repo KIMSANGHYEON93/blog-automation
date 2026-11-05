@@ -4,9 +4,12 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import time
 from datetime import datetime
 
 import gspread
+import requests
+from google.auth.exceptions import TransportError
 from google.oauth2.service_account import Credentials as GoogleCredentials
 from gspread import Cell
 from gspread.http_client import BackOffHTTPClient
@@ -78,11 +81,29 @@ def _verification_note(verified: dict) -> str:
     quoted = " ".join(f"「{c}」" for c in claims)
     return f"{reason} — 확인할 문장: {quoted}" if reason else f"확인할 문장: {quoted}"
 
+# 첫 연결(토큰 발급)이 SSL EOF로 끊기면 BackOffHTTPClient는 다시 시도하지 않는다 —
+# 00:00 키워드 발굴이 25일 중 6일 이렇게 죽었다(2026-10~11). 끊긴 연결만 간격을 두고 다시 연다
+_CONNECT_RETRY_DELAYS = (5, 15, 45)
+_TRANSIENT_CONNECT_ERRORS = (TransportError, requests.exceptions.ConnectionError,
+                             requests.exceptions.Timeout)
+_sleep = time.sleep
+
+
+def _open_spreadsheet(client: gspread.Client, sheet_name: str) -> gspread.Spreadsheet:
+    for delay in _CONNECT_RETRY_DELAYS:
+        try:
+            return client.open(sheet_name)
+        except _TRANSIENT_CONNECT_ERRORS as e:
+            logger.warning(f"Google Sheets 연결 끊김 — {delay}초 뒤 다시 시도: {e}")
+            _sleep(delay)
+    return client.open(sheet_name)
+
+
 class GoogleSheetsPostRepository(PostRepository):
     def __init__(self, creds_path: str, sheet_name: str, worksheet: str = ""):
         creds = GoogleCredentials.from_service_account_file(creds_path, scopes=SCOPES)
         client = gspread.authorize(creds, http_client=BackOffHTTPClient)
-        spreadsheet = client.open(sheet_name)
+        spreadsheet = _open_spreadsheet(client, sheet_name)
         # 빈 값이면 첫 탭(티스토리). 네이버 글은 같은 파일의 naver_calendar 탭에 둔다.
         self._sheet = spreadsheet.worksheet(worksheet) if worksheet else spreadsheet.sheet1
         self._header_row = 1  # 1행은 헤더

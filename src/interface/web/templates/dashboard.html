@@ -63,7 +63,7 @@
 
 <form method="get" action="{{ url_for('index') }}" class="search">
   {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status.value }}">{% endif %}
-  <input name="q" value="{{ search }}" placeholder="키워드 또는 제목 검색" maxlength="100">
+  <input name="q" value="{{ search }}" placeholder="키워드 또는 제목 검색" aria-label="키워드 또는 제목 검색" maxlength="100">
   <button type="submit">검색</button>
 </form>
 

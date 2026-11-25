@@ -4,9 +4,9 @@
 {% block content %}
 {% set job_label = job_labels[job.kind] %}
 {% if job.kind in ("generate", "login") %}
-<p><a href="{{ url_for('index') }}">← 목록</a></p>
+<p><a class="back" href="{{ url_for('index') }}">← 목록</a></p>
 {% else %}
-<p><a href="{{ url_for('post_detail', row_index=job.row_index) }}">← {{ job.row_index }}행 게시물</a></p>
+<p><a class="back" href="{{ url_for('post_detail', row_index=job.row_index) }}">← {{ job.row_index }}행 게시물</a></p>
 {% endif %}
 <section class="card">
   {% if running and job.kind == "login" %}<p class="notice notice-info">{{ approve_hint }}</p>{% endif %}

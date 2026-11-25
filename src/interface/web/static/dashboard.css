@@ -88,6 +88,8 @@ button.primary { background: var(--ink); color: var(--paper); }
 button.primary:hover { background: var(--ink); filter: brightness(1.15); }
 button.link { height: auto; border: 0; background: none; color: var(--link); padding: 0; font-weight: 600; }
 form.inline { display: inline; }
+/* 단독 링크("← 목록", "미리보기")의 클릭 영역: 높이 24px 이상(WCAG 2.5.8) */
+.back, .tap { display: inline-block; padding: 4px 0; }
 
 /* 알림 */
 .notice { padding: 10px 14px; margin: 0 0 16px; font-size: 14px; border-left: 4px solid var(--muted); background: var(--head); }
@@ -125,6 +127,8 @@ form.inline { display: inline; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 9px 12px; vertical-align: middle; border-bottom: 1px solid var(--grid); }
 td + td, th + th { border-left: 1px solid var(--grid); }
+/* 머리글 없는 목록(키워드 추천)에는 격자 세로선을 긋지 않는다 */
+table.plain td + td { border-left: 0; }
 th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--head); }
 tbody tr:hover { background: var(--head); }
 .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -203,8 +207,12 @@ td.num.wide:first-child { color: var(--muted); background: var(--head); text-ali
   /* 목록: 가로 스크롤 대신 키워드·상태·열기만 — 행 번호·본문·품질은 상세에 있다 */
   .wide { display: none; }
   .open { display: inline-block; padding: 10px 0 10px 8px; white-space: nowrap; }
-  /* 상태 칸 10개가 네 줄을 먹지 않게 한 줄 가로 스크롤 */
-  .stats { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 96px; overflow-x: auto; }
+  /* 상태 칸은 2열로 줄바꿈 — 가로 스크롤이면 발행실패·보류가 화면 밖에 숨는다.
+     높이는 라벨·숫자를 한 줄에 놓아 줄이고, "전체"는 한 줄을 다 쓴다 */
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .stat { display: flex; justify-content: space-between; align-items: center; }
+  .stat:first-child { grid-column: 1 / -1; }
+  .stat-value { line-height: 1.2; }
   .edit textarea { height: 60vh; }
 }
 /* 터치: 버튼 44px, 입력 16px(iOS는 16px 미만 입력칸에 포커스하면 화면을 확대한다) */
@@ -215,6 +223,10 @@ td.num.wide:first-child { color: var(--muted); background: var(--head); text-ali
   input[type="file"] { height: auto; }
   .edit textarea { font-size: 16px; }
   .checks { gap: 16px; }
+  /* 목록 안 단독 링크는 손가락이 닿을 높이(44px)로 */
+  .back, .tap { display: inline-flex; align-items: center; min-height: 44px; padding: 0; }
+  .jobs li { padding: 0; }
+  .jobs a, td a:not(.open) { display: inline-block; padding: 11px 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   button:active { transform: none; }

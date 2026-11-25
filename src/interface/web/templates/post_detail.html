@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ post.keyword }} · {{ brand_label }}{% endblock %}
 {% block content %}
-<p><a href="{{ url_for('index') }}">← 목록</a></p>
+<p><a class="back" href="{{ url_for('index') }}">← 목록</a></p>
 <section class="card">
   <h1>{{ post.title }}</h1>
   <dl class="meta">
@@ -75,7 +75,7 @@
   {% endif %}
   {% if preview_enabled or (draft_enabled and post.body_length) %}
   <div class="checks">
-    {% if preview_enabled %}<a href="{{ url_for('preview_post', row_index=post.row_index) }}">미리보기</a>{% endif %}
+    {% if preview_enabled %}<a class="tap" href="{{ url_for('preview_post', row_index=post.row_index) }}">미리보기</a>{% endif %}
     {% if draft_enabled and post.body_length and not active_job %}
     <form method="post" action="{{ url_for('draft_post', row_index=post.row_index) }}" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- root LaunchDaemon: 다음 며칠의 깨우기(00:55·08:55)를 다시 예약한다. 설치: sudo bash scripts/wake/install.sh
+     실행하는 스크립트는 root 소유 /Library/Application Support/blog-automation/ 의 사본이다(저장소 경로 아님).
+     매일 12:00·23:00 + 로드·부팅 시 즉시 1회. 스크립트가 멱등이라 여러 번 돌아도 중복 예약하지 않는다. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.blog-automation.wake-scheduler</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>/Library/Application Support/blog-automation/wake-scheduler.sh</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Hour</key>
+			<integer>12</integer>
+			<key>Minute</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>23</integer>
+			<key>Minute</key>
+			<integer>0</integer>
+		</dict>
+	</array>
+	<key>StandardOutPath</key>
+	<string>/var/log/blog-automation-wake.log</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/blog-automation-wake.log</string>
+</dict>
+</plist>

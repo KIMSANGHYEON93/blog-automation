@@ -171,6 +171,11 @@ class TestDashboard:
         assert "Kafka 입문" in html
         assert "발행대기" in html
 
+    def test_검색창에_스크린리더용_label이_연결된다(self, h):
+        h.login()
+        html = h.client.get("/").get_data(as_text=True)
+        assert re.search(r'<input[^>]*name="q"[^>]*aria-label="[^"]+"', html)
+
     def test_상태_필터와_검색(self, h):
         h.login()
         html = h.client.get("/?status=발행완료").get_data(as_text=True)
@@ -723,6 +728,21 @@ class TestKeywords:
         assert "<b>XSS</b>" not in html and "&lt;b&gt;XSS" in html
         assert "월 1,200회 · AI 실무" in html and "네이버 검색량" in html
         assert 'href="/keywords"' in client.get("/").get_data(as_text=True)
+
+    def test_키워드_입력란에_label이_연결된다(self):
+        client, _ = self._client()
+        html = client.get("/keywords").get_data(as_text=True)
+        assert re.search(r'<input[^>]*name="keyword"[^>]*aria-label="[^"]+"', html)
+
+    def test_추천_등록_버튼은_키워드별로_이름이_다르다(self):
+        client, _ = self._client()
+        html = client.get("/keywords").get_data(as_text=True)
+        assert re.search(r'<button[^>]*aria-label="RAG란 등록"', html)
+
+    def test_추천_표는_격자_세로선_없는_plain_표다(self):
+        client, _ = self._client()
+        html = client.get("/keywords").get_data(as_text=True)
+        assert '<table class="plain">' in html
 
     def test_등록하면_행_번호를_알려준다(self):
         client, desk = self._client()

@@ -66,6 +66,7 @@ python -m pytest tests/unit/interface -v    # 인증·CSRF·라우트·작업 �
 ```
 
 - 수동 발행은 `PublishSelectedPostUseCase`: 자동 발행과 같은 규칙(본문 3000자·품질 70점·일일 쿼터·중복 키워드·내부 링크)을 적용하되, 거부 시 게시물 상태를 바꾸지 않음. 발행 불가 사유는 `publish_blockers()`로 목록/상세 화면에도 표시
+- 티스토리 키워드 추천은 `AI브레인용어` 탭에서 뽑는다(`GenerateKeywordsFromTermsUseCase`, `top_n=15`) — 그대로 두면 용어 해설 주제로 쏠린다. 등록은 `RegisterKeywordUseCase`가 두 탭과 중복 검사하지만 동의어(예: 교섭/협상)는 못 잡는다
 - 자동 파이프라인과 같은 `.browser_data`를 쓰므로 `DirectoryPipelineLock`(`run_pipeline_b.sh`와 같은 `.pipeline_b.lock`)을 잡은 뒤에만 브라우저를 엶. 자동 실행 중이면 거부
 - 발행은 `PublishJobRunner` 백그라운드 스레드에서 동시에 1건만 실행, 작업 상태는 메모리에만 있음(서버 재시작 시 사라짐). 작업 페이지는 meta refresh로 갱신(CSP상 JS 없음)
 - 보안: 모든 페이지 로그인 필요, 모든 POST CSRF 검증, IP별 로그인 5회/15분 제한, `127.0.0.1` 바인딩 기본(외부 바인딩은 `DASHBOARD_ALLOW_REMOTE=true` 필요 — HTTP라 HTTPS 프록시 뒤에서만)
@@ -138,12 +139,14 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 - `workflow_complete.json`이 메인 워크플로우, `workflow_keyword_research.json`은 키워드 리서치용
 - `code_nodes/*.js`는 Code 노드의 원본 소스이고, 워크플로우 JSON의 `jsCode` 필드에 **인라인 복사**되어 있음(동기화 스크립트 없음). `.js`만 고치면 n8n에 반영되지 않으므로 JSON도 같이 수정하거나 n8n UI에 다시 붙여넣을 것. `make test-n8n`(`n8n/code_nodes/tests/workflow_sync.test.js`)이 둘의 일치와 jsCode 문법을 검사한다
 - **n8n 보안**: URL Validation·Fetch Official Docs는 내부 주소를 요청하지 않고 리다이렉트를 단계마다 검사한다. 컨테이너에는 `.env` 전체가 아니라 워크플로가 쓰는 `$env` 키만 넣는다 — 새 `$env` 키를 쓰면 `docker-compose.yml`에도 추가. 적용·롤백은 `docs/N8N_SECURITY.md`
-- 프롬프트(`prompts/`): 용어(a) / 비교(b) / 에러해결(c)은 `route_prompt.js`가 선택하고, 교차 검증은 d. `*_v1.md`는 이전 버전
+- **티스토리 프롬프트 원본은 `code_nodes/route_prompt_workflow.js`**(노드 `Route Prompt (A/B/C)`, PROMPT_A/B/C 인라인 + 공통 규칙 노트). `route_prompt.js`와 `prompts/prompt_a|b|c*.md`는 배포되지 않고 이미 내용이 갈라졌다 — 고쳐도 n8n에 반영되지 않는다. 교차 검증은 `prompt_d`, `*_v1.md`는 이전 버전
+- 프롬프트 분기: 시트 **D열 `콘텐츠유형`**에 비교/트렌드가 있거나 키워드에 `vs`가 있으면 B, 에러/트러블슈팅/해결이면 C, 나머지 A. `add_keyword_row`(대시보드·CLI 등록)는 D열을 비우므로 트러블슈팅 글을 원하면 D열을 따로 채워야 한다
+- 티스토리 워크플로 ID는 `ty52rqOEJ6ZjNF2L`. 반영은 백업 후 같은 ID로 `n8n import:workflow` → `n8n update:workflow --id=… --active=true` → `docker compose restart n8n`(절차는 `docs/EXECUTION_GUIDE.md`). 키워드 하나만 다시 만들 때는 시트 상태를 `대기`로 두고 `docker exec blog-automation-n8n-1 n8n execute --id ty52rqOEJ6ZjNF2L`
 - **키워드 발굴 조회 기간**: `DEFAULT_LOOKBACK_DAYS = 90`. 저트래픽 블로그에서 28일 창은 쿼리별 노출이 흩어져 `min_impressions=5`를 아무도 못 넘긴다(2026-09-23 실측: 28일 0건 / 90일 10건). `--discover-days`로 조절
-- **로그인은 세션 재사용이 먼저다**: `SeleniumBrowserAdapter.login()`이 `.browser_data/tistory_session.json`(0600)의 쿠키를 주입해 관리 페이지 접근으로 검증하고, 실패할 때만 카카오 OAuth를 탄다. 매 실행이 OAuth를 타면 카카오 이상탐지가 2FA를 띄운다(2026-09-23 실측: 기동 7회에 2FA 3회). 세션 파일에는 티스토리 도메인 쿠키만 담는다 — 카카오 `_kau`는 유출 시 피해가 크고 tiara는 추적용이라 제외
+- **로그인은 세션 재사용이 먼저다**: `SeleniumBrowserAdapter.login()`이 `.browser_data/tistory_session.json`(0600)의 쿠키를 주입해 관리 페이지 접근으로 검증하고, 실패할 때만 카카오 OAuth를 탄다. 매 실행이 OAuth를 타면 카카오 이상탐지가 2FA를 띄운다(2026-09-23 실측: 기동 7회에 2FA 3회). 세션 파일에는 티스토리 도메인 쿠키만 담는다 — 카카오 `_kau`는 유출 시 피해가 크고 tiara는 추적용이라 제외. 카카오가 보안 퀴즈(캡차)를 띄우면 우회·반복 시도하지 말고 사람이 보이는 창(`SB(headless=False)`, 같은 `.browser_data`)에서 로그인한다 — 제출 뒤 2FA도 티스토리도 아닌 화면이면 `kakao_auth`가 그 화면의 제목·표시 문구를 로그에 남긴다
 - **텔레그램 재실행**: 09:00 발행·10:00 수정이 실패하면 알림 끝에 `/retry_publish`·`/retry_revise`가 붙는다. 누르면 `scripts/telegram_retry_bot.py`(launchd `com.blog-automation.telegram-bot`, 상시 실행, getUpdates 롱폴링)가 `run_pipeline_b.sh`를 다시 돌린다 — 2FA는 여전히 카톡에서 승인해야 한다. `TELEGRAM_CHAT_ID` 채팅의 10분 이내 명령만 받는다. 이 봇 토큰에 웹훅을 걸면 getUpdates가 막힌다
 - **로그인 실패는 예외다**: `browser.login()` 실패 시 `LoginFailedError`가 올라가 종료코드가 0이 아니게 되고 알림이 나간다. 조용히 `return`하면 launchd가 성공으로 기록해 장애가 몇 달간 묻힌다(2026-05~09 실제 사례). 2FA 감지 시에도 즉시 알림이 나가고 승인 대기는 300초
-- **LLM 토큰 예산**: Gemini 3.x는 추론(thoughts) 토큰을 먼저 쓰므로 `maxTokens`가 빠듯하면 응답 JSON이 `MAX_TOKENS`로 잘리고, 파서가 품질 0점으로 처리해 발행이 막힌다(검증 호출 800 → 4096으로 수정). 모델 교체 시 실행 로그의 `finishReason` 확인
+- **LLM 토큰 예산**: Gemini 3.x는 추론(thoughts) 토큰을 먼저 쓰므로 `maxTokens`가 빠듯하면 응답 JSON이 `MAX_TOKENS`로 잘리고, 파서가 품질 0점으로 처리해 발행이 막힌다(검증 호출 800 → 4096으로 수정). 모델 교체 시 실행 로그의 `finishReason` 확인. 실제 모델은 컨테이너 `LLM_PROVIDER`(기본 `gemini`)가 고르며 현재 `gemini-3.8-flash` — `build_llm_request.js`의 Claude 모델은 예비용이다. 추론 토큰은 출력 단가로 청구되어 비용의 대부분을 차지한다(2026-11 실측: 글 1건 3호출, 추론 ≈ 출력의 2배)
 - JSON의 `jsCode`에 코드를 넣을 때 줄바꿈이 이중 이스케이프되면 코드 전체가 주석 한 줄이 되어 조용히 죽는다. 넣은 뒤 `node --check`로 문법 확인
 - 키워드 자동 등록: launchd 00:00이 `--auto-register --discover-limit 3`으로 실행. 등록 1건당 Pipeline A가 SerpAPI를 1회 쓰므로(무료 플랜 월 250건) 건수 조절은 `--discover-limit`으로
 - **AI-Brain 용어 → 키워드**: `--generate-term-keywords`는 `AI브레인용어` 탭에서 키워드를 역방향 생성한다. GSC 발굴은 '이미 노출된 쿼리'만 주므로 트래픽 없는 주제가 영원히 빠지는데(트래픽 없음 → 키워드 없음 → 글 없음 → 트래픽 없음), 볼트 용어는 트래픽과 무관한 시드라 그 루프를 끊는다. `혼동포인트`의 `A ≠ B` 형식(376/381건)에서 비교 글 주제가 나온다. 실측 381건 → 후보 468건. GSC 발굴과 같은 중복·B2C 필터를 쓴다 — 기준이 갈리면 Pipeline A가 중복으로 버린다

@@ -11,7 +11,7 @@ const purpose = $input.item.json._llm_purpose || 'content_gen';
 
 const PROVIDERS = {
   gemini: {
-    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`,
+    url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent`,
     // API 키는 n8n Credential(Header Auth, x-goog-api-key)이 주입한다 —
     // URL/헤더에 넣으면 실행 기록에 평문으로 남는다
     headers: { 'content-type': 'application/json' },

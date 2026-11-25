@@ -52,6 +52,8 @@ python -m src.interface.cli --publish-pages      # AdSense 필수 페이지
 
 운영 환경에서는 launchd(`~/Library/LaunchAgents/com.blog-automation.*.plist`)가 모드별로 실행함(00:00 discover-keywords, 08:30 recover-failed, 09:00 발행, 10:00 revise, 14:00 check-index, 14:30 submit-index, 15:00 dashboard, 일요일 23:00 sync-brain-terms). crontab은 쓰지 않음(중복 실행 방지). plist는 `~/bin/run_pipeline_b.sh`·`~/bin/run_dashboard.sh`를 호출하는데, 이 둘은 저장소의 같은 이름 스크립트를 가리키는 심볼릭 링크이므로 **저장소 스크립트를 고치면 곧바로 운영에 반영됨**. launchd는 셸 초기화를 하지 않으므로 스크립트는 `PROJECT_DIR`/`PYTHON`에 절대경로 기본값을 쓰고, `BLOG_PROJECT_DIR`/`BLOG_PYTHON`으로 덮어쓸 수 있음. 인터프리터는 저장소의 전용 venv(`.venv/bin/python`, pyenv 3.11.11 기반)로, 공용 pyenv와 패키지 버전이 충돌해 분리함(seleniumbase 4.56↔다른 프로젝트 google-genai의 websockets, 2026-10-29). 파이썬을 직접 지정하는 plist 4개(dashboard-hub·naver-dashboard·naver-session-check·telegram-bot)도 같은 경로를 씀. 패키지는 `.venv/bin/python -m pip install …`로 설치하고, mypy는 1.x(`python_version 3.9` 검사 유지)·click은 mypy 3.9 파싱이 되는 8.3.x로 고정. **실행 중인 작업이 있을 때 `run_*.sh`를 제자리에서 고치지 말 것** — bash는 스크립트를 읽어 가며 실행하므로 길이가 바뀌면 엉뚱한 위치부터 이어 실행함. `run_pipeline_b.sh`는 `.pipeline_b.lock` 디렉토리 락으로 동시 실행을 막고, 끝나면 남은 Chrome 프로세스를 정리함. 로그는 `logs/`.
 
+**헬스 체크**: `scripts/health_check.py`(읽기 전용)가 launchd 종료 코드·당일 발행·락·n8n 컨테이너와 01:00 실행을 점검해 이상이 있으면 텔레그램으로 1건 알린다. `--dry-run`으로 메시지만 확인. plist 템플릿은 `scripts/`에 있고 **아직 설치 전**이다(설치·롤백은 `docs/HEALTH_CHECK.md`).
+
 ### 관리자 대시보드 (`src/interface/web/`) — 수동 발행
 
 자동 발행과 별개로, 로그인한 관리자가 게시물 현황을 보고 `발행대기` 글을 1건씩 수동 발행하는 로컬 웹앱 (Flask, 두 번째 Composition Root).

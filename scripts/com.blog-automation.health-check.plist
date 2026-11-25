@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 운영 헬스 체크(읽기 전용) 매일 09:30. 설치는 docs/HEALTH_CHECK.md 절차를 따른다:
+     cp scripts/com.blog-automation.health-check.plist ~/Library/LaunchAgents/
+     launchctl load ~/Library/LaunchAgents/com.blog-automation.health-check.plist
+     제거: launchctl unload 후 plist 삭제. --daily-summary 를 빼면 이상이 있을 때만 알린다. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.blog-automation.health-check</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/.venv/bin/python</string>
+		<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/scripts/health_check.py</string>
+		<string>--daily-summary</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation</string>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>9</integer>
+		<key>Minute</key>
+		<integer>30</integer>
+	</dict>
+	<key>StandardErrorPath</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/logs/health_check.err</string>
+	<key>StandardOutPath</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/logs/health_check.log</string>
+</dict>
+</plist>

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from src.domain.exceptions import InvalidStatusTransitionError
+from src.domain.services.experience_note import EXPERIENCE_PLACEHOLDER
 from src.domain.services.photo_markers import CAPTURE_CAPTION, strip_photo_markers
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
@@ -15,10 +16,8 @@ MIN_CONTENT_LENGTH = 3000
 # 아니다 — 이미 올라갔을 수 있어 다시 발행하면 중복 글이 된다. 관리자가 블로그를 확인한 뒤 되돌린다
 PUBLISH_UNCONFIRMED = "발행 여부 수동 확인 필요"
 MIN_QUALITY_SCORE = 70
-# 네이버 초안(n8n prompt_naver_common.md)이 사람의 실제 경험을 채울 자리에 남기는 표시.
-# 남아 있으면 검수를 건너뛴 AI 글이라 어느 플랫폼에도 발행하지 않는다
-# (네이버 AI 콘텐츠 가이드 2026-05)
-EXPERIENCE_PLACEHOLDER = "[[직접 해 보니]]"
+# 네이버 초안의 경험 자리 표시(EXPERIENCE_PLACEHOLDER)가 남아 있으면 검수를 건너뛴 AI 글이라
+# 어느 플랫폼에도 발행하지 않는다(네이버 AI 콘텐츠 가이드 2026-05)
 
 
 def body_fingerprint(markdown: str) -> str:

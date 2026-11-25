@@ -26,7 +26,7 @@ from src.application.use_cases.publish_posts import PublishPostsUseCase
 from src.application.use_cases.reset_stuck_posts import ResetStuckPostsUseCase
 from src.application.use_cases.revise_posts import RevisePostsUseCase
 from src.application.use_cases.submit_indexing import SubmitIndexingUseCase
-from src.domain.exceptions import LoginFailedError
+from src.domain.exceptions import LoginBlockedError, LoginChallengeError, LoginFailedError
 from src.domain.ports.image_generation_port import ImageGenerationPort
 from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.publish_policy import PublishPolicy
@@ -672,6 +672,11 @@ def main() -> None:
         _main_inner()
     except KeyboardInterrupt:
         logger.info("사용자 중단")
+    except (LoginChallengeError, LoginBlockedError) as e:
+        # 캡차 감지 때 어댑터가 이미 1회 알렸다. 크래시 알림의 /retry_publish는
+        # 반복 로그인을 부추기므로 보내지 않고, 종료코드만 0이 아니게 남긴다.
+        logger.error(f"Pipeline B 중단 (카카오 보안문제): {e}")
+        raise
     except Exception as e:
         logger.exception(f"Pipeline B 크래시: {e}")
         with contextlib.suppress(Exception):

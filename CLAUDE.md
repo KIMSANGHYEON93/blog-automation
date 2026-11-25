@@ -56,6 +56,8 @@ python -m src.interface.cli --publish-pages      # AdSense 필수 페이지
 
 **백업**: `scripts/backup.py`(읽기 전용)가 n8n 워크플로·자격증명(+암호화 키 `config`)과 Sheets 전 탭 CSV를 `backups/`(gitignore, 0600)에 저장하고 각각 7개만 남긴다. `--dry-run` 지원, 복구 절차·검증 기록은 `docs/BACKUP.md`. launchd `com.blog-automation.backup`이 매일 03:30에 실행한다(2026-11-25 설치, 롤백은 `docs/BACKUP.md`). tar.gz에 키가 함께 들어 있으므로 암호화 없이 외부로 내보내지 말 것.
 
+**잠자기 대응**: `scripts/wake/`의 root LaunchDaemon이 매일 00:55·08:55 깨우기를 다시 예약한다(`pmset schedule`은 일회성이라 필요). root는 `/Library/Application Support/blog-automation/`의 root 소유 사본만 실행하고 저장소 파일은 실행하지 않는다. 설치·제거는 사용자가 `sudo bash scripts/wake/install.sh`·`uninstall.sh`로 직접 한다(에이전트는 sudo 실행 금지). 충전기 상시 연결이 전제다. 상세는 `docs/WAKE_SCHEDULER.md`.
+
 ### 관리자 대시보드 (`src/interface/web/`) — 수동 발행
 
 자동 발행과 별개로, 로그인한 관리자가 게시물 현황을 보고 `발행대기` 글을 1건씩 수동 발행하는 로컬 웹앱 (Flask, 두 번째 Composition Root).

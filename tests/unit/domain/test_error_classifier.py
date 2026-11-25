@@ -62,3 +62,42 @@ class TestErrorClassifier:
         err = self.classifier.classify("발행 여부 수동 확인 필요: TimeoutException: timed out")
         assert err.error_type == PublishErrorType.UNCONFIRMED
         assert err.should_auto_recover is False
+
+
+class TestBrowserLaunchFailure:
+    """chromedriver 자동 업데이트 직후 등 Chrome을 띄우지 못한 일시적 실패."""
+
+    def setup_method(self):
+        self.classifier = ErrorClassifier()
+
+    def test_chrome_instance_exited는_재시도_대상(self):
+        error = self.classifier.classify(
+            "Message: session not created: Chrome instance exited. "
+            "Examine ChromeDriver verbose log to determine the cause."
+        )
+        assert error.error_type == PublishErrorType.BROWSER_LAUNCH
+        assert error.recoverable is True
+        assert error.action == RecoveryAction.AUTO_RETRY
+        assert error.should_auto_recover is True
+
+    def test_session_not_created_버전_불일치도_재시도_대상(self):
+        error = self.classifier.classify(
+            "SessionNotCreatedException: session not created: "
+            "This version of ChromeDriver only supports Chrome version 158"
+        )
+        assert error.error_type == PublishErrorType.BROWSER_LAUNCH
+
+    def test_chrome_failed_to_start도_재시도_대상(self):
+        error = self.classifier.classify(
+            "unknown error: Chrome failed to start: exited abnormally"
+        )
+        assert error.error_type == PublishErrorType.BROWSER_LAUNCH
+
+    def test_발행_여부_불명이_섞이면_재시도하지_않는다(self):
+        from src.domain.entities.post import PUBLISH_UNCONFIRMED
+
+        error = self.classifier.classify(
+            f"{PUBLISH_UNCONFIRMED} session not created: Chrome instance exited"
+        )
+        assert error.error_type == PublishErrorType.UNCONFIRMED
+        assert error.should_auto_recover is False

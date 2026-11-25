@@ -8,6 +8,7 @@ import logging
 import time
 from urllib.parse import urlparse
 
+from src.domain.exceptions import LoginChallengeError
 from src.domain.ports.notification_port import NotificationPort
 
 logger = logging.getLogger(__name__)
@@ -134,6 +135,8 @@ def kakao_login(
         logger.warning(f"예상 외 URL: {current_url}")
         return _is_tistory_logged_in(current_url)
 
+    except LoginChallengeError:
+        raise  # 캡차는 일반 실패(False)와 구분해야 그날 재시도를 멈출 수 있다
     except Exception as e:
         logger.error(f"카카오 로그인 예외: {e}")
         return False
@@ -296,6 +299,14 @@ def _enter_credentials_and_wait(
 
         current_url = sb.get_current_url()
 
+        # 보안문제(캡차)는 2FA보다 먼저 본다 — 사람만 풀 수 있고, 우회·재제출하지 않는다
+        challenge = _challenge_text(sb, current_url)
+        if challenge:
+            _log_unexpected_page(sb, current_url)
+            raise LoginChallengeError(
+                f"카카오 보안문제(캡차) 화면 — 자동 로그인 중단: '{challenge}'"
+            )
+
         # 2FA 감지 (URL 또는 페이지 제목/본문 기반)
         is_2fa = (
             "twoStepVerification" in current_url
@@ -315,9 +326,37 @@ def _enter_credentials_and_wait(
             return False
         return True
 
+    except LoginChallengeError:
+        raise
     except Exception as e:
         logger.error(f"카카오 자격증명 입력 예외: {e}")
         return False
+
+
+# 2026-11-24·25 실측: accounts.kakao.com/login/, 제목 '카카오계정',
+# 표시 '안전한 서비스 이용을 위해 아래 문제에 답해 주세요.' — 제목으로는 구분되지 않는다
+_CHALLENGE_MARKERS = ("아래 문제에 답해", "자동입력 방지", "보안문자", "captcha")
+_PAGE_TEXT_JS = "return document.body ? document.body.innerText.slice(0, 3000) : '';"
+
+
+def _challenge_text(sb, url: str) -> str:
+    """카카오 계정 화면이 보안문제(캡차)를 요구하면 그 문구, 아니면 ''.
+
+    화면을 읽지 못하면 ''(일반 실패 경로) — 감지 실패가 로그인 흐름을 깨면 안 된다.
+    """
+    if "accounts.kakao" not in url:
+        return ""
+    try:
+        text = str(sb.execute_script(_PAGE_TEXT_JS) or "")
+    except Exception as e:
+        logger.warning(f"캡차 확인용 화면 읽기 실패 (일반 실패로 처리): {e}")
+        return ""
+    lowered = text.lower()
+    for marker in _CHALLENGE_MARKERS:
+        if marker in lowered:
+            line = next((ln for ln in text.splitlines() if marker in ln.lower()), marker)
+            return line.strip()[:120]
+    return ""
 
 
 

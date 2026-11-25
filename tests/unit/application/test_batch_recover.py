@@ -99,3 +99,33 @@ def test_발행_여부_불명은_강제_복구에서도_제외():
 
     assert result.recovered == 0
     assert repo.all()[0].status == PostStatus.FAILED
+
+
+_CHROME_EXITED = "session not created: Chrome instance exited"
+
+
+def test_Chrome_실행_실패는_자동_복구된다():
+    post = _make_failed_post(1, "runbook 이란", _CHROME_EXITED)
+    repo = InMemoryPostRepository([post])
+
+    result = BatchRecoverUseCase(repo=repo).execute()
+
+    assert result.recovered == 1
+    assert repo.all()[0].status == PostStatus.PENDING
+    assert repo.all()[0].retry_count == 1
+
+
+def test_Chrome_실행_실패도_재시도_한도에_닿으면_더_복구하지_않는다():
+    from src.domain.services.retry_policy import RetryPolicy
+
+    policy = RetryPolicy(max_retries=3)
+    post = _make_failed_post(1, "runbook 이란", _CHROME_EXITED)
+    post.retry_count = 3
+    repo = InMemoryPostRepository([post])
+
+    result = BatchRecoverUseCase(repo=repo, retry_policy=policy).execute()
+
+    assert result.recovered == 0
+    assert result.skipped_manual == 1
+    assert repo.all()[0].status == PostStatus.FAILED
+    assert repo.all()[0].retry_count == 3

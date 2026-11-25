@@ -54,7 +54,7 @@ python -m src.interface.cli --publish-pages      # AdSense 필수 페이지
 
 **헬스 체크**: `scripts/health_check.py`(읽기 전용)가 launchd 종료 코드·당일 발행·락·n8n 컨테이너와 01:00 실행을 점검해 이상이 있으면 텔레그램으로 1건 알린다. `--dry-run`으로 메시지만 확인. launchd `com.blog-automation.health-check`가 매일 09:30에 `--daily-summary`로 실행한다(2026-11-25 설치, 롤백은 `docs/HEALTH_CHECK.md`).
 
-**백업**: `scripts/backup.py`(읽기 전용)가 n8n 워크플로·자격증명(+암호화 키 `config`)과 Sheets 전 탭 CSV를 `backups/`(gitignore, 0600)에 저장하고 각각 7개만 남긴다. `--dry-run` 지원, 복구 절차·검증 기록은 `docs/BACKUP.md`. plist 템플릿은 `scripts/`에 있고 **아직 설치 전**이다. tar.gz에 키가 함께 들어 있으므로 암호화 없이 외부로 내보내지 말 것.
+**백업**: `scripts/backup.py`(읽기 전용)가 n8n 워크플로·자격증명(+암호화 키 `config`)과 Sheets 전 탭 CSV를 `backups/`(gitignore, 0600)에 저장하고 각각 7개만 남긴다. `--dry-run` 지원, 복구 절차·검증 기록은 `docs/BACKUP.md`. launchd `com.blog-automation.backup`이 매일 03:30에 실행한다(2026-11-25 설치, 롤백은 `docs/BACKUP.md`). tar.gz에 키가 함께 들어 있으므로 암호화 없이 외부로 내보내지 말 것.
 
 ### 관리자 대시보드 (`src/interface/web/`) — 수동 발행
 

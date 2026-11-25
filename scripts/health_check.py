@@ -78,7 +78,9 @@ def check_launchd(jobs: dict) -> list:
         return [Finding(ERROR, "launchd", "com.blog-automation.* 작업이 하나도 로드되지 않음")]
     findings = []
     for name, (pid, status) in sorted(jobs.items()):
-        if name in RESIDENT and pid is None:
+        if pid is not None:
+            continue  # 지금 실행 중이면 종료 코드는 이전 인스턴스의 것(재시작 후 -15 등)이라 무시
+        if name in RESIDENT:
             findings.append(Finding(ERROR, "launchd", f"{name}: 상주 서비스가 실행 중이 아님"))
         elif status != 0:
             findings.append(Finding(ERROR, "launchd", f"{name}: 마지막 종료 코드 {status}"))

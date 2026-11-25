@@ -27,6 +27,10 @@ from typing import Callable
 PROJECT_DIR = Path(os.getenv("BLOG_PROJECT_DIR") or Path(__file__).resolve().parents[1])
 LOG_DIR = PROJECT_DIR / "logs"
 LOCK_DIR = PROJECT_DIR / ".pipeline_b.lock"
+# 카카오 캡차 감지 시 fullstack 코드(#1)가 남기는 당일 차단 표시: {"blocked_on": "YYYY-MM-DD", ...}
+KAKAO_BLOCK_FILE = PROJECT_DIR / ".browser_data" / "kakao_challenge_block.json"
+KAKAO_BLOCK_HINT = ".venv/bin/python scripts/tistory_login.py"
+KAKAO_BLOCKED_JOBS = ("publish:", "revise:")  # 로그인이 필요한 launchd 작업
 
 KST = timezone(timedelta(hours=9))
 LABEL_PREFIX = "com.blog-automation."
@@ -79,6 +83,31 @@ def check_launchd(jobs: dict) -> list:
         elif status != 0:
             findings.append(Finding(ERROR, "launchd", f"{name}: 마지막 종료 코드 {status}"))
     return findings
+
+
+def kakao_blocked_today(block_file: Path, now: datetime) -> bool:
+    """차단 표시 파일의 blocked_on 이 오늘(KST)이면 True. 없거나 읽을 수 없으면 False."""
+    try:
+        data = json.loads(block_file.read_text(encoding="utf-8"))
+        return str(data.get("blocked_on")) == f"{now:%Y-%m-%d}"
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def fold_kakao_block(findings: list, blocked: bool) -> list:
+    """캡차 차단 중이면 로그인 실패성 이상(publish·revise, 오늘 발행 실패)을 한 줄로 묶는다.
+
+    텔레그램에는 감지 순간 이미 알림이 나갔으므로, 같은 날 같은 원인을 또 나열하지 않는다.
+    """
+    if not blocked:
+        return findings
+    kept = [
+        f for f in findings
+        if not (f.check == "발행" and f.level == ERROR)
+        and not (f.check == "launchd" and f.detail.startswith(KAKAO_BLOCKED_JOBS))
+    ]
+    notice = Finding(ERROR, "카카오", f"캡차 차단 중 (수동 로그인 필요: {KAKAO_BLOCK_HINT})")
+    return [notice] + kept
 
 
 def check_publish_log(log_dir: Path, now: datetime) -> list:
@@ -237,7 +266,7 @@ def run_checks(now: datetime) -> list:
     findings += check_log_freshness(LOG_DIR, now)
     findings += check_lock(LOCK_DIR, now, _pid_alive)
     findings += collect_n8n(now)
-    return findings
+    return fold_kakao_block(findings, kakao_blocked_today(KAKAO_BLOCK_FILE, now))
 
 
 # --- 전송 -------------------------------------------------------------------------------------

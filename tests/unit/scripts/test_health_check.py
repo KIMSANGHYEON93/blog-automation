@@ -1,5 +1,6 @@
 """운영 헬스 체크 — 이상 판정 규칙(외부 호출 없는 순수 함수)."""
 import importlib.util
+import json
 import os
 import sys
 from datetime import datetime, timedelta
@@ -184,3 +185,39 @@ def test_이상은_오류를_앞에_두고_한_건으로_묶는다():
 def test_일일_요약은_정상_내용을_담는다():
     text = hc.render_summary([hc.Finding(hc.OK, "발행", "오늘 1건 발행")], NOW)
     assert "정상" in text and "오늘 1건 발행" in text
+
+
+def test_캡차_차단_표시가_오늘이면_차단_중으로_본다(tmp_path):
+    block = tmp_path / "kakao_challenge_block.json"
+    block.write_text(json.dumps({"blocked_on": "2026-11-25", "reason": "보안문제"}))
+    assert hc.kakao_blocked_today(block, NOW) is True
+
+
+def test_캡차_차단_표시가_어제거나_없거나_깨졌으면_차단_아님(tmp_path):
+    block = tmp_path / "kakao_challenge_block.json"
+    assert hc.kakao_blocked_today(block, NOW) is False
+    block.write_text(json.dumps({"blocked_on": "2026-11-24"}))
+    assert hc.kakao_blocked_today(block, NOW) is False
+    block.write_text("not json")
+    assert hc.kakao_blocked_today(block, NOW) is False
+    block.write_text("[]")
+    assert hc.kakao_blocked_today(block, NOW) is False
+
+
+def test_차단_중이면_로그인_실패성_이상을_한_줄로_묶는다():
+    findings = [
+        hc.Finding(hc.ERROR, "launchd", "publish: 마지막 종료 코드 1"),
+        hc.Finding(hc.ERROR, "launchd", "revise: 마지막 종료 코드 1"),
+        hc.Finding(hc.ERROR, "발행", "오늘 발행 실패 (exit=1)"),
+        hc.Finding(hc.ERROR, "launchd", "check-index: 마지막 종료 코드 1"),
+        hc.Finding(hc.ERROR, "n8n", "컨테이너 상태 exited"),
+    ]
+    folded = hc.fold_kakao_block(findings, True)
+    assert folded[0].check == "카카오" and "tistory_login.py" in folded[0].detail
+    rest = [f.detail for f in folded[1:]]
+    assert rest == ["check-index: 마지막 종료 코드 1", "컨테이너 상태 exited"]
+
+
+def test_차단이_아니면_이상을_그대로_둔다():
+    findings = [hc.Finding(hc.ERROR, "발행", "오늘 발행 실패 (exit=1)")]
+    assert hc.fold_kakao_block(findings, False) == findings

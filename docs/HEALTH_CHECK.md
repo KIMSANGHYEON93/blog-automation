@@ -14,6 +14,7 @@
 | 락 | `.pipeline_b.lock` 소유 PID가 죽었거나 2시간 넘게 유지 | 오류 |
 | n8n 컨테이너 | `blog-automation-n8n-1`이 running이 아님 / Docker 접근 불가 | 오류 |
 | n8n 01:00 | 가장 최근 01:00(KST) 슬롯에 Content Generation 실행이 없거나 success가 없음 (01:30 전에는 판정 보류) | 오류 |
+| 카카오 캡차 차단 | `.browser_data/kakao_challenge_block.json`의 `blocked_on`이 오늘이면 "캡차 차단 중(수동 로그인 필요)" 한 줄로 묶고, 같은 날 publish·revise 종료 코드·발행 실패는 중복 나열하지 않는다. 파일이 없으면 정상(#1에서 생성) | 오류 |
 
 n8n 실행 이력은 컨테이너 안에서 `docker exec … node`로 `execution_entity`를 **읽기 전용(`OPEN_READONLY`)**
 으로 조회한다(`startedAt`은 UTC, 스크립트가 KST로 바꿔 비교). n8n 이미지에 내장된 `sqlite3` 모듈을 쓰므로

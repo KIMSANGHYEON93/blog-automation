@@ -9,6 +9,7 @@ class PublishErrorType(Enum):
     """발행 실패 에러 유형."""
     QUOTA_EXCEEDED = "quota_exceeded"
     NETWORK_TIMEOUT = "network_timeout"
+    BROWSER_LAUNCH = "browser_launch"  # Chrome을 띄우지 못함 (chromedriver 업데이트 직후 등)
     AUTH_FAILURE = "auth_failure"
     API_ERROR = "api_error"
     VALIDATION = "validation"

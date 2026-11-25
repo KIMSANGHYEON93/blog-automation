@@ -12,6 +12,11 @@ from src.domain.value_objects.publish_error import (
 
 # 에러 메시지 패턴 → 에러 유형 매핑
 _QUOTA = re.compile(r"최대 \d+개까지|quota|daily.?limit", re.IGNORECASE)
+# chromedriver 자동 업데이트 직후처럼 브라우저 세션 자체를 못 연 일시적 실패
+_BROWSER_LAUNCH = re.compile(
+    r"session not created|chrome instance exited|chrome failed to start",
+    re.IGNORECASE,
+)
 _TIMEOUT = re.compile(r"timeout|timed?\s*out|연결.?시간", re.IGNORECASE)
 _AUTH = re.compile(
     r"login|로그인|auth|인증|session.?expired|세션", re.IGNORECASE,
@@ -23,6 +28,7 @@ _PATTERNS: list[tuple[re.Pattern, PublishErrorType]] = [
     # 가장 먼저 — 사유에 timeout 등이 섞여 있어도 자동 복구하면 안 된다
     (re.compile(re.escape(PUBLISH_UNCONFIRMED)), PublishErrorType.UNCONFIRMED),
     (_QUOTA, PublishErrorType.QUOTA_EXCEEDED),
+    (_BROWSER_LAUNCH, PublishErrorType.BROWSER_LAUNCH),
     (_TIMEOUT, PublishErrorType.NETWORK_TIMEOUT),
     (_AUTH, PublishErrorType.AUTH_FAILURE),
     (_API, PublishErrorType.API_ERROR),
@@ -33,6 +39,8 @@ _PATTERNS: list[tuple[re.Pattern, PublishErrorType]] = [
 _RECOVERY_MAP: dict[PublishErrorType, tuple[bool, RecoveryAction]] = {
     PublishErrorType.QUOTA_EXCEEDED: (True, RecoveryAction.AUTO_RESET),
     PublishErrorType.NETWORK_TIMEOUT: (True, RecoveryAction.AUTO_RETRY),
+    # 횟수 상한은 RetryPolicy(BatchRecoverUseCase)가 건다
+    PublishErrorType.BROWSER_LAUNCH: (True, RecoveryAction.AUTO_RETRY),
     PublishErrorType.AUTH_FAILURE: (False, RecoveryAction.MANUAL),
     PublishErrorType.API_ERROR: (True, RecoveryAction.RETRY_THEN_MANUAL),
     PublishErrorType.VALIDATION: (False, RecoveryAction.MARK_REVISION),

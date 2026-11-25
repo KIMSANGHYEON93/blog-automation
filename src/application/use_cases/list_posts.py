@@ -10,6 +10,7 @@ from src.application.use_cases.publish_selected_post import publish_blockers
 from src.domain.entities.post import Post
 from src.domain.ports.post_repository import PostRepository
 from src.domain.services.ai_tell import find_ai_tells
+from src.domain.services.experience_note import experience_questions
 from src.domain.services.photo_markers import SCENE_COMMENT
 from src.domain.value_objects.post_status import PostStatus
 
@@ -52,6 +53,11 @@ class PostSummary:
     def ai_tells(self) -> tuple[str, ...]:
         """본문의 AI 티 — 상세 화면에서만 쓰므로 목록 조회 때는 계산하지 않는다."""
         return find_ai_tells(self.body_markdown)
+
+    @property
+    def experience_questions(self) -> tuple[str, ...]:
+        """'직접 해 보니' 자리의 확인 질문 — 비면 빠른 입력을 보이지 않는다."""
+        return tuple(experience_questions(self.body_markdown))
 
     @property
     def can_publish(self) -> bool:

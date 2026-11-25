@@ -163,6 +163,20 @@ td.num.wide:first-child { color: var(--muted); background: var(--head); text-ali
 }
 .edit textarea:focus { outline: 3px solid var(--mark); outline-offset: 0; border-color: var(--ink); }
 .edit + .edit { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--grid); }
+/* 빠른 입력: 결과는 손가락으로 고르는 칸 세 개, 버튼은 미리보기·저장 나란히 */
+.choices { display: flex; gap: 8px; margin: 0 0 14px; padding: 0; border: 0; }
+.choices legend { padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.edit .choice {
+  flex: 1 1 0; display: flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; margin: 0; border: 1px solid var(--muted); cursor: pointer;
+  font-size: 15px; font-weight: 700; color: var(--ink);
+}
+.choice input { width: auto; height: auto; margin: 0; }
+.choice:has(input:checked) { border: 2px solid var(--ink); background: var(--head); }
+.choice:focus-within { outline: 3px solid var(--mark); }
+.quick .body { margin-bottom: 12px; }
+.quick-actions { display: flex; gap: 8px; }
+.quick-actions button { flex: 1 1 0; height: 44px; }
 .restore { margin-top: 12px; }
 /* 작업 버튼: 한 줄에 같은 폭·같은 높이로 나란히, 설명은 아래 한 줄 */
 .actions { display: flex; gap: 8px; margin-bottom: 6px; }
@@ -221,6 +235,7 @@ td.num.wide:first-child { color: var(--muted); background: var(--head); text-ali
   button.link { height: auto; padding: 0; font-size: 15px; }
   input, select { height: 44px; font-size: 16px; }
   input[type="file"] { height: auto; }
+  .choice input { height: auto; }
   .edit textarea { font-size: 16px; }
   .checks { gap: 16px; }
   /* 목록 안 단독 링크는 손가락이 닿을 높이(44px)로 */

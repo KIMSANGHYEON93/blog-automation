@@ -4,11 +4,6 @@
  * 출력: _llm_url, _llm_headers, _llm_body, _llm_provider + 원본 데이터 패스스루
  */
 
-const provider = $env.LLM_PROVIDER || 'gemini';
-const systemPrompt = $input.item.json.system_prompt;
-const userMessage = $input.item.json.user_message;
-const purpose = $input.item.json._llm_purpose || 'content_gen';
-
 const PROVIDERS = {
   gemini: {
     url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent`,
@@ -16,16 +11,13 @@ const PROVIDERS = {
     // URL/헤더에 넣으면 실행 기록에 평문으로 남는다
     headers: { 'content-type': 'application/json' },
     body: (sys, user, opts) => {
-      const payload = {
+      // google_search는 넣지 않는다 — 장문 생성 요청에서는 모델이 검색을 고르지 않았다
+      // (32건 모두 0회, #17). 검색은 앞 단계 Research Request가 따로 하고 결과를 user_message에 넣는다
+      return {
         contents: [{ role: 'user', parts: [{ text: user }] }],
         systemInstruction: { parts: [{ text: sys }] },
         generationConfig: { maxOutputTokens: opts.maxTokens, temperature: opts.temperature },
       };
-      // Search Grounding: 콘텐츠 생성 시 Google 검색으로 실시간 팩트 기반 응답
-      if (opts.useSearchGrounding) {
-        payload.tools = [{ google_search: {} }];
-      }
-      return payload;
     },
   },
   claude: {
@@ -47,12 +39,26 @@ const PROVIDERS = {
   },
 };
 
+function optionsFor(llmPurpose) {
+  return llmPurpose === 'verification'
+    ? { maxTokens: 4096, temperature: 0, model: 'claude-haiku-4-5-20251001' }
+    : { maxTokens: 32768, temperature: 0.7 };
+}
+
+if (typeof $input === 'undefined') {
+  module.exports = { PROVIDERS, optionsFor };
+  return;
+}
+
+const provider = $env.LLM_PROVIDER || 'gemini';
+const systemPrompt = $input.item.json.system_prompt;
+const userMessage = $input.item.json.user_message;
+const purpose = $input.item.json._llm_purpose || 'content_gen';
+
 const config = PROVIDERS[provider];
 if (!config) throw new Error(`지원하지 않는 LLM provider: ${provider}`);
 
-const opts = purpose === 'verification'
-  ? { maxTokens: 4096, temperature: 0, model: 'claude-haiku-4-5-20251001' }
-  : { maxTokens: 32768, temperature: 0.7, useSearchGrounding: true };
+const opts = optionsFor(purpose);
 
 return {
   json: {

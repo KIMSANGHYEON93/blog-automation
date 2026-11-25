@@ -28,6 +28,9 @@ const SOURCES = {
     'Parse Verification Result': 'parse_verification.js',
     'Check Duplicate': 'check_duplicate.js',
     'Fetch Official Docs': 'fetch_official_docs.js',
+    'Build Research Request': 'build_research_request.js',
+    'Check Research': 'check_research.js',
+    'Apply Research': 'apply_research.js',
   },
 };
 // 원본 파일 없이 JSON에만 있는 한두 줄짜리 축약 노드

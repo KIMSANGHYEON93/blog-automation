@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- n8n·Sheets 로컬 백업(읽기 전용) 매일 03:30. 01:00 n8n 생성과 02:00 네이버 실행이 끝난 뒤다.
+     설치는 docs/BACKUP.md 절차를 따른다(사용자 승인 후):
+     cp scripts/com.blog-automation.backup.plist ~/Library/LaunchAgents/
+     launchctl load ~/Library/LaunchAgents/com.blog-automation.backup.plist
+     제거: launchctl unload 후 plist 삭제. 백업 파일(backups/)은 그대로 남는다. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.blog-automation.backup</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/.venv/bin/python</string>
+		<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/scripts/backup.py</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation</string>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>3</integer>
+		<key>Minute</key>
+		<integer>30</integer>
+	</dict>
+	<key>StandardErrorPath</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/logs/backup.err</string>
+	<key>StandardOutPath</key>
+	<string>/Users/kimsanghyeon/GitHub/Core Web Vitals/blog-automation/logs/backup.log</string>
+</dict>
+</plist>

@@ -66,7 +66,7 @@ docker compose restart n8n        # 가져온 워크플로의 활성 상태·스
 
 ## launchd 등록 (사용자 승인 후)
 
-`scripts/com.blog-automation.backup.plist`는 **템플릿일 뿐 아직 설치되지 않았다.** 매일 03:30(01:00 n8n 생성·02:00 네이버 실행 뒤)에 실행한다.
+`scripts/com.blog-automation.backup.plist`는 템플릿이고, **2026-11-25에 설치했다**(아래는 재설치·이전할 때의 절차). 매일 03:30(01:00 n8n 생성·02:00 네이버 실행 뒤)에 실행한다.
 
 ```bash
 .venv/bin/python scripts/backup.py --dry-run     # 설치 전 확인

@@ -221,3 +221,8 @@ def test_차단_중이면_로그인_실패성_이상을_한_줄로_묶는다():
 def test_차단이_아니면_이상을_그대로_둔다():
     findings = [hc.Finding(hc.ERROR, "발행", "오늘 발행 실패 (exit=1)")]
     assert hc.fold_kakao_block(findings, False) == findings
+
+
+def test_실행_중인_작업은_이전_종료_코드를_무시한다():
+    # 재시작된 상주 서비스는 PID가 있고 마지막 종료 코드(-15 등)는 이전 인스턴스의 것이다
+    assert hc.check_launchd({"dashboard-hub": (94815, -15), "telegram-bot": (1292, 0)}) == []

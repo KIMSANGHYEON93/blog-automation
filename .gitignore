@@ -29,3 +29,6 @@ skills-lock.json
 
 # 프로젝트 전용 가상환경 — 공용 pyenv와 패키지 버전이 충돌해 분리(2026-10-29)
 .venv/
+
+# 로컬 백업(n8n 자격증명 포함) — scripts/backup.py, docs/BACKUP.md
+backups/

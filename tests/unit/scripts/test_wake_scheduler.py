@@ -1,6 +1,7 @@
 """wake-scheduler.sh — 가짜 pmset 으로 예약 규칙을 확인한다(실제 pmset·root 불필요)."""
 import re
 import subprocess
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -43,6 +44,7 @@ def test_bash_문법이_맞다():
         subprocess.run(["/bin/bash", "-n", str(_WAKE_DIR / name)], check=True)
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS BSD date(-v/-j) 및 pmset 전용")
 def test_앞으로_며칠의_정해진_시각만_예약한다(run):
     stamps = run()
     assert stamps, "예약이 하나도 없음"
@@ -55,6 +57,7 @@ def test_앞으로_며칠의_정해진_시각만_예약한다(run):
     assert len(stamps) == len(set(stamps))
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS BSD date(-v/-j) 및 pmset 전용")
 def test_내일_두_시각은_반드시_예약된다(run):
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m/%d/%Y")
     stamps = run()
@@ -62,6 +65,7 @@ def test_내일_두_시각은_반드시_예약된다(run):
     assert f"{tomorrow} 08:55:00" in stamps
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS BSD date(-v/-j) 및 pmset 전용")
 def test_이미_예약된_시각은_다시_예약하지_않는다(run):
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%m/%d/%Y")
     existing = (

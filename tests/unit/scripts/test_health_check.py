@@ -261,3 +261,19 @@ def test_조회가_두_번_모두_실패하면_예외를_올린다(monkeypatch):
     monkeypatch.setattr(hc.time, "sleep", lambda s: None)
     with pytest.raises(subprocess.TimeoutExpired):
         hc._run(["docker", "ps"])
+
+
+def test_헬스_체크_자신의_종료_코드_1은_이상으로_보지_않는다():
+    jobs = {"health-check": (None, 1), "publish": (None, 0)}
+    assert hc.check_launchd(jobs) == []
+
+
+def test_헬스_체크_자신이_전송_실패나_크래시로_끝나면_이상으로_본다():
+    for status in (2, 120, -9):
+        found = hc.check_launchd({"health-check": (None, status)})
+        assert [f.detail for f in found] == [f"health-check: 마지막 종료 코드 {status}"]
+
+
+def test_다른_작업의_종료_코드_1은_계속_이상이다():
+    found = hc.check_launchd({"backup": (None, 1), "health-check": (None, 1)})
+    assert [f.detail for f in found] == ["backup: 마지막 종료 코드 1"]

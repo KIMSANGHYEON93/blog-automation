@@ -7,7 +7,7 @@
 
 | 항목 | 기준 | 등급 |
 |------|------|------|
-| launchd | `launchctl list`의 `com.blog-automation.*` 마지막 종료 코드 ≠ 0 | 오류 |
+| launchd | `launchctl list`의 `com.blog-automation.*` 마지막 종료 코드 ≠ 0(헬스 체크 자신은 1도 정상: 이상을 발견해 알림을 보낸 경우) | 오류 |
 | launchd 상주 | `telegram-bot`·`dashboard-hub`에 PID 없음 | 오류 |
 | 발행 | 09:00 이후, 당일 `logs/publish_YYYYMMDD_*.log`: 없음(경고)·exit≠0(오류, 예외 이름 포함)·발행 가능한데 0건(경고)·`[SKIP]`(경고) | 오류/경고 |
 | 로그 신선도 | `logs/*.log` 중 가장 최근 것이 36시간 넘음 | 오류 |

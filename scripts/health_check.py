@@ -36,6 +36,8 @@ KAKAO_BLOCKED_JOBS = ("publish:", "revise:")  # 로그인이 필요한 launchd �
 KST = timezone(timedelta(hours=9))
 LABEL_PREFIX = "com.blog-automation."
 RESIDENT = ("telegram-bot", "dashboard-hub")  # KeepAlive 서비스: PID가 있어야 정상
+SELF_JOB = "health-check"  # 이 스크립트를 돌리는 launchd 작업
+SELF_OK_EXITS = (0, 1)  # 0 정상, 1 이상을 발견해 알림 전송(2 전송 실패·그 밖은 크래시)
 N8N_CONTAINER = "blog-automation-n8n-1"
 N8N_WORKFLOW_NAME = "Blog Automation Pipeline A — Content Generation"
 N8N_CRON_HOUR_KST = 1
@@ -84,6 +86,10 @@ def check_launchd(jobs: dict) -> list:
             continue  # 지금 실행 중이면 종료 코드는 이전 인스턴스의 것(재시작 후 -15 등)이라 무시
         if name in RESIDENT:
             findings.append(Finding(ERROR, "launchd", f"{name}: 상주 서비스가 실행 중이 아님"))
+        elif name == SELF_JOB:
+            # 이상을 발견하면 종료 코드 1이 정상 — 그대로 두면 다음 날 자기 자신을 알린다
+            if status not in SELF_OK_EXITS:
+                findings.append(Finding(ERROR, "launchd", f"{name}: 마지막 종료 코드 {status}"))
         elif status != 0:
             findings.append(Finding(ERROR, "launchd", f"{name}: 마지막 종료 코드 {status}"))
     return findings

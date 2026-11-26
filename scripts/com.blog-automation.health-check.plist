@@ -3,7 +3,7 @@
 <!-- 운영 헬스 체크(읽기 전용) 매일 09:30. 설치는 docs/HEALTH_CHECK.md 절차를 따른다:
      cp scripts/com.blog-automation.health-check.plist ~/Library/LaunchAgents/
      launchctl load ~/Library/LaunchAgents/com.blog-automation.health-check.plist
-     제거: launchctl unload 후 plist 삭제. --daily-summary 를 빼면 이상이 있을 때만 알린다. -->
+     제거: launchctl unload 후 plist 삭제. 일일 요약 옵션(daily-summary)을 빼면 이상이 있을 때만 알린다. -->
 <plist version="1.0">
 <dict>
 	<key>Label</key>

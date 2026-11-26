@@ -18,6 +18,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -41,7 +42,8 @@ N8N_CRON_HOUR_KST = 1
 PUBLISH_CHECK_AFTER_HOUR = 9  # 09:00 발행 이후에만 당일 발행 로그를 요구한다
 LOCK_STALE_MINUTES = 120  # 정상 실행은 15분 안팎 — 2시간이 넘으면 정체
 LOG_STALE_HOURS = 36
-SUBPROCESS_TIMEOUT = 30
+SUBPROCESS_TIMEOUT = 120  # 메모리 스래싱 중 docker/launchctl 응답이 30초를 넘긴 사례(2026-11-26)
+RETRY_DELAY = 5  # 첫 실패 뒤 1회 재시도 전 대기(초)
 
 logger = logging.getLogger("health_check")
 
@@ -210,9 +212,17 @@ def render_summary(findings: list, now: datetime) -> str:
 # --- 외부 조회 (읽기 전용) --------------------------------------------------------------------
 
 def _run(cmd: list) -> str:
-    return subprocess.run(
-        cmd, capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT, check=True
-    ).stdout
+    """읽기 전용 조회. 일시적 실패(시간 초과·비정상 종료)는 한 번 더 시도한다."""
+    for attempt in (1, 2):
+        try:
+            return subprocess.run(
+                cmd, capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT, check=True
+            ).stdout
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+            if attempt == 2:
+                raise
+            time.sleep(RETRY_DELAY)
+    raise AssertionError("unreachable")
 
 
 def _pid_alive(pid: int) -> bool:

@@ -233,7 +233,7 @@
       "typeVersion": 2,
       "position": [
         3800,
-        200
+        300
       ]
     },
     {
@@ -246,8 +246,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3800,
-        400
+        3890,
+        460
       ]
     },
     {
@@ -951,11 +951,6 @@
             "node": "URL Validation",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Code Block Lint",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -964,7 +959,7 @@
       "main": [
         [
           {
-            "node": "Build Verify Request",
+            "node": "Code Block Lint",
             "type": "main",
             "index": 0
           }

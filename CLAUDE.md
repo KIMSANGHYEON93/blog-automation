@@ -159,6 +159,7 @@ WAITING → GENERATING → PENDING → PUBLISHING → PUBLISHED → REVISION_PEN
 - 키워드 자동 등록: launchd 00:00이 `--auto-register --discover-limit 3`으로 실행. 등록 1건당 Pipeline A가 SerpAPI를 1회 쓰므로(무료 플랜 월 250건) 건수 조절은 `--discover-limit`으로
 - **AI-Brain 용어 → 키워드**: `--generate-term-keywords`는 `AI브레인용어` 탭에서 키워드를 역방향 생성한다. GSC 발굴은 '이미 노출된 쿼리'만 주므로 트래픽 없는 주제가 영원히 빠지는데(트래픽 없음 → 키워드 없음 → 글 없음 → 트래픽 없음), 볼트 용어는 트래픽과 무관한 시드라 그 루프를 끊는다. `혼동포인트`의 `A ≠ B` 형식(376/381건)에서 비교 글 주제가 나온다. 실측 381건 → 후보 468건. GSC 발굴과 같은 중복·B2C 필터를 쓴다 — 기준이 갈리면 Pipeline A가 중복으로 버린다
 - **AI-Brain 용어 주입**: 시트 `AI브레인용어` 탭(용어·별칭·한줄정의·혼동포인트·출처)을 `Sheets Read (Brain Terms)`가 읽고, `Route Prompt`가 키워드와 매칭되는 용어를 최대 3건까지 user_message에 넣는다. 원본은 Google Drive 옵시디언 볼트 `AI-Brain/10_Terms`이고, `python scripts/sync_brain_terms.py`(`.env`의 `BRAIN_VAULT_FOLDER_ID`, `--dry-run` 지원)로 탭을 갱신한다 — 서비스 계정에 볼트 폴더가 읽기 권한으로 공유돼 있어야 함. n8n은 병렬 브랜치 실행 순서를 보장하지 않으므로 용어 노드는 `Reduce to Trigger → Sheets Read (Brain Terms) → Reduce Brain Terms → Sheets Read (Status=대기)`로 **직렬 배치**하고, 축약 노드가 뒤 노드의 중복 실행을 막는다
+- **입력이 2개인 노드를 만들지 않는다**: n8n v1은 들어오는 갈래마다 노드를 한 번씩 실행한다. `Build Verify Request`가 URL Validation·Code Block Lint 두 곳에서 입력을 받아 글 1건에 검증 호출이 2번 나가고 2번째 Sheets Update가 paired item 오류로 끝났다(2026-11 실행 182~191 전부). 지금은 `Validate Structure → URL Validation → Code Block Lint → Build Verify Request` 직렬이고, `n8n/code_nodes/tests/workflow_graph.test.js`가 Merge·트리거 외 다중 입력을 막는다
 
 ### 설정
 

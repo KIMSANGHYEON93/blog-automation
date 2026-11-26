@@ -21,6 +21,9 @@ def _psi(lcp_ms: float, cls: float, score: float, field: str = "") -> dict:
     return data
 
 
+SENT: list[dict] = []  # psi fixture가 받은 요청(쿼리·헤더) — 테스트마다 비운다
+
+
 class _Resp:
     def __init__(self, data: dict):
         self._data = data
@@ -36,9 +39,11 @@ class _Resp:
 def psi(monkeypatch):
     responses: dict = {}
     calls: list[str] = []
+    SENT.clear()
 
-    def fake_get(url, params, timeout):
+    def fake_get(url, params, timeout, headers=None):
         calls.append(params["strategy"])
+        SENT.append({"url": url, "params": dict(params), "headers": dict(headers or {})})
         r = responses[params["strategy"]]
         if isinstance(r, Exception):
             raise r
@@ -108,3 +113,50 @@ def test_모바일_측정이_실패하면_오류로_끝나고_데스크톱은_�
 
     assert "429" in r.error  # cli가 이 문자열로 한도 초과를 감지해 점검을 멈춘다
     assert calls == ["mobile"]
+
+
+FAKE_KEY = "AIzaSyFAKE_pagespeed-0123456789abcdefghij"
+
+
+def test_API_키는_쿼리가_아니라_헤더로_보낸다(psi, monkeypatch):
+    responses, _ = psi
+    monkeypatch.setenv("PAGESPEED_API_KEY", FAKE_KEY)
+    responses["mobile"] = _psi(2000, 0.05, 0.9)
+    responses["desktop"] = _psi(1000, 0.0, 0.95)
+
+    PageSpeedCwvAdapter().check("https://x.tistory.com/1")
+
+    assert len(SENT) == 2
+    for req in SENT:
+        assert "key" not in req["params"]
+        assert req["headers"].get("X-Goog-Api-Key") == FAKE_KEY
+
+
+def test_실패_로그와_오류에_API_키가_남지_않는다(psi, monkeypatch, caplog):
+    responses, _ = psi
+    monkeypatch.setenv("PAGESPEED_API_KEY", FAKE_KEY)
+    responses["mobile"] = requests.HTTPError(
+        "429 Client Error: Too Many Requests for url: "
+        "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
+        f"?url=https%3A%2F%2Fx.tistory.com%2F1&strategy=mobile&key={FAKE_KEY}"
+    )
+
+    with caplog.at_level("WARNING"):
+        r = PageSpeedCwvAdapter().check("https://x.tistory.com/1")
+
+    assert FAKE_KEY not in caplog.text
+    assert FAKE_KEY not in r.error
+    assert "429" in r.error  # 한도 초과 감지 문자열은 남긴다
+    assert "PageSpeed API 호출 실패" in caplog.text
+
+
+def test_데스크톱_실패_로그에도_API_키가_남지_않는다(psi, monkeypatch, caplog):
+    responses, _ = psi
+    monkeypatch.setenv("PAGESPEED_API_KEY", FAKE_KEY)
+    responses["mobile"] = _psi(2000, 0.05, 0.9)
+    responses["desktop"] = requests.HTTPError(f"500 Server Error for url: x?key={FAKE_KEY}")
+
+    with caplog.at_level("WARNING"):
+        PageSpeedCwvAdapter().check("https://x.tistory.com/1")
+
+    assert FAKE_KEY not in caplog.text

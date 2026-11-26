@@ -42,3 +42,17 @@ def test_10분_지난_명령은_무시():
 
 def test_메시지_없는_업데이트는_무시():
     assert bot.command_args({"update_id": 1}, CHAT, NOW) is None
+
+
+def test_답장_실패_로그에_봇_토큰이_남지_않는다(monkeypatch, caplog):
+    token = "123456789:AAFakeBotToken_abc-DEF0123456789xyz"
+
+    def fake_api(tok, method, payload, timeout=10):
+        raise OSError(f"failed https://api.telegram.org/bot{tok}/{method}")
+
+    monkeypatch.setattr(bot, "_api", fake_api)
+    with caplog.at_level("WARNING"):
+        bot._reply(token, CHAT, "hi")
+
+    assert "답장 실패" in caplog.text
+    assert token not in caplog.text

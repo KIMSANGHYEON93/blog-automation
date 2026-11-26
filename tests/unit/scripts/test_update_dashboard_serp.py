@@ -73,3 +73,20 @@ class TestFillKeywordMetaSerpBudget:
         dashboard.fill_keyword_meta(sheet)
         diff_rows = {c.row for c in sheet.sheet1.updated if c.col == dashboard.IDX_DIFFICULTY + 1}
         assert len(diff_rows) == len(rows)
+
+
+def test_SERP_실패_출력에_API_키가_남지_않는다(monkeypatch, capsys):
+    fake_key = "serpFAKEkey0123456789"
+
+    def failing_fetch(api_key, keyword):
+        raise OSError(f"timeout https://serpapi.com/search.json?q={keyword}&api_key={api_key}")
+
+    monkeypatch.setenv("SERPAPI_KEY", fake_key)
+    monkeypatch.setattr(dashboard, "fetch_serp", failing_fetch)
+    monkeypatch.setattr(dashboard.time, "sleep", lambda _s: None)
+
+    dashboard.fill_keyword_meta(_FakeSpreadsheet([_row("B", "", "")]))
+
+    out = capsys.readouterr().out
+    assert "SERP 조회 실패" in out
+    assert fake_key not in out

@@ -9,7 +9,9 @@ import contextlib
 import logging
 import os
 import sys
+import time
 from pathlib import Path
+from typing import Callable
 
 from dotenv import load_dotenv
 
@@ -28,9 +30,13 @@ from src.application.use_cases.revise_posts import RevisePostsUseCase
 from src.application.use_cases.submit_indexing import SubmitIndexingUseCase
 from src.domain.exceptions import LoginBlockedError, LoginChallengeError, LoginFailedError
 from src.domain.ports.image_generation_port import ImageGenerationPort
+from src.domain.ports.notification_port import NotificationPort
+from src.domain.ports.post_repository import PostRepository
+from src.domain.ports.seo_port import CwvPort
 from src.domain.services.internal_link_service import InternalLinkService
 from src.domain.services.publish_policy import PublishPolicy
 from src.domain.services.quota_manager import QuotaManager
+from src.domain.services.secret_masking import mask_secrets
 from src.domain.value_objects.credentials import Credentials
 from src.infrastructure.browser.selenium_adapter import SeleniumBrowserAdapter
 from src.infrastructure.browser.tistory_editor import set_site_profile
@@ -830,46 +836,54 @@ def _main_inner() -> None:
         notifier.send(msg, level=level)
 
     # Step 3: CWV 점검 (발행완료 포스트 대상)
-    cwv_enabled = os.getenv("CWV_CHECK", "true").lower() == "true"
-    if cwv_enabled:
-        import time as _time
-
+    if os.getenv("CWV_CHECK", "true").lower() == "true":
         from src.infrastructure.seo.cwv_checker import PageSpeedCwvAdapter
 
-        cwv = PageSpeedCwvAdapter()
-        cwv_uc = CheckCwvUseCase(repo=repo, cwv=cwv)
-        unchecked = repo.find_cwv_unchecked(limit=10)
-        checked = 0
-        for idx, post in enumerate(unchecked):
-            if idx > 0:
-                _time.sleep(3)  # PageSpeed API rate limit 회피
-            result = cwv_uc.execute(post)
-            if result.success:
-                checked += 1
-                desktop_note = (
-                    f"데스크톱 LCP={result.desktop_lcp}s, CLS={result.desktop_cls}"
-                    if result.desktop_lcp is not None else "데스크톱 측정 없음"
+        _run_cwv_checks(repo, notifier, PageSpeedCwvAdapter())
+
+
+def _run_cwv_checks(
+    repo: PostRepository, notifier: NotificationPort, cwv: CwvPort,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """발행완료 글 최대 10건의 CWV를 재고 로그·알림을 남긴다. 429면 멈춘다.
+
+    오류 문자열은 어댑터가 넘긴 그대로 믿지 않고 한 번 더 가린다(요청 URL의 키 등).
+    """
+    cwv_uc = CheckCwvUseCase(repo=repo, cwv=cwv)
+    unchecked = repo.find_cwv_unchecked(limit=10)
+    checked = 0
+    for idx, post in enumerate(unchecked):
+        if idx > 0:
+            sleep(3)  # PageSpeed API rate limit 회피
+        result = cwv_uc.execute(post)
+        if result.success:
+            checked += 1
+            desktop_note = (
+                f"데스크톱 LCP={result.desktop_lcp}s, CLS={result.desktop_cls}"
+                if result.desktop_lcp is not None else "데스크톱 측정 없음"
+            )
+            field_note = f"실사용자={result.field_category or '데이터 없음'}"
+            logger.info(
+                f"CWV: {result.post_keyword} — "
+                f"LCP={result.lcp}s, CLS={result.cls}, "
+                f"Score={result.score}, Passed={result.passed} | {desktop_note} | {field_note}"
+            )
+            # CWV 경고 알림 — 판정은 모바일 기준, 데스크톱·실사용자 값은 원인 구분용
+            if not result.passed:
+                notifier.send(
+                    f"CWV 경고: {result.post_keyword} — "
+                    f"모바일 LCP={result.lcp}s, CLS={result.cls} | "
+                    f"{desktop_note} | {field_note}",
+                    level="WARNING",
                 )
-                field_note = f"실사용자={result.field_category or '데이터 없음'}"
-                logger.info(
-                    f"CWV: {result.post_keyword} — "
-                    f"LCP={result.lcp}s, CLS={result.cls}, "
-                    f"Score={result.score}, Passed={result.passed} | {desktop_note} | {field_note}"
-                )
-                # CWV 경고 알림 — 판정은 모바일 기준, 데스크톱·실사용자 값은 원인 구분용
-                if not result.passed:
-                    notifier.send(
-                        f"CWV 경고: {result.post_keyword} — "
-                        f"모바일 LCP={result.lcp}s, CLS={result.cls} | "
-                        f"{desktop_note} | {field_note}",
-                        level="WARNING",
-                    )
-            elif result.error:
-                logger.warning(f"CWV 실패: {result.post_keyword} — {result.error}")
-                if "429" in result.error:
-                    logger.warning("PageSpeed API rate limit — CWV 점검 중단")
-                    break
-        logger.info(f"CWV 점검 완료: {checked}/{len(unchecked)}건")
+        elif result.error:
+            error = mask_secrets(result.error)
+            logger.warning(f"CWV 실패: {result.post_keyword} — {error}")
+            if "429" in error:
+                logger.warning("PageSpeed API rate limit — CWV 점검 중단")
+                break
+    logger.info(f"CWV 점검 완료: {checked}/{len(unchecked)}건")
 
 
 if __name__ == "__main__":

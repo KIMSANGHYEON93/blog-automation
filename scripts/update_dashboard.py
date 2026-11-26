@@ -23,6 +23,11 @@ from dotenv import load_dotenv
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build as gapi_build
 
+# `python scripts/update_dashboard.py`로 실행하면 sys.path에 scripts/만 들어가 src를 못 찾는다
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.domain.services.secret_masking import mask_secrets  # noqa: E402
+
 load_dotenv()
 
 SCOPES = [
@@ -1108,7 +1113,7 @@ def fill_keyword_meta(
 
             except Exception as e:
                 if not dry_run:
-                    print(f"  SERP 조회 실패 ({keyword}): {e}")
+                    print(f"  SERP 조회 실패 ({keyword}): {mask_secrets(e)}")
                 difficulty = estimate_difficulty(vol)
 
         # 난이도 기록

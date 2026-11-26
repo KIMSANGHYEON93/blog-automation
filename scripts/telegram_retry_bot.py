@@ -11,11 +11,16 @@ import json
 import logging
 import os
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
+# `python scripts/telegram_retry_bot.py`로 실행하면 sys.path에 scripts/만 들어가 src를 못 찾는다
+sys.path.insert(0, str(PROJECT_DIR))
+
+from src.domain.services.secret_masking import mask_secrets  # noqa: E402
 RUN_SCRIPT = PROJECT_DIR / "run_pipeline_b.sh"
 LOCK_DIR = PROJECT_DIR / ".pipeline_b.lock"
 MAX_AGE_SECONDS = 600  # 봇이 꺼져 있던 동안 쌓인 오래된 명령은 실행하지 않는다
@@ -54,7 +59,7 @@ def _reply(token: str, chat_id: str, text: str) -> None:
     try:
         _api(token, "sendMessage", {"chat_id": chat_id, "text": text})
     except Exception as e:
-        logger.warning(f"답장 실패: {e}")
+        logger.warning(f"답장 실패: {mask_secrets(e)}")
 
 
 def _run(token: str, chat_id: str, args: list[str]) -> None:
@@ -88,7 +93,7 @@ def main() -> None:
                 timeout=POLL_TIMEOUT + 10,
             )
         except Exception as e:
-            logger.warning(f"getUpdates 실패, 30초 후 재시도: {e}")
+            logger.warning(f"getUpdates 실패, 30초 후 재시도: {mask_secrets(e)}")
             time.sleep(30)
             continue
         for update in result.get("result", []):

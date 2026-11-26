@@ -6,6 +6,7 @@ import logging
 import urllib.request
 
 from src.domain.ports.notification_port import NotificationPort
+from src.domain.services.secret_masking import mask_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -40,5 +41,5 @@ class TelegramNotificationAdapter(NotificationPort):
             with urllib.request.urlopen(req, timeout=10) as resp:
                 return bool(resp.status == 200)
         except Exception as e:
-            logger.warning(f"Telegram 알림 전송 실패: {e}")
+            logger.warning(f"Telegram 알림 전송 실패: {mask_secrets(e)}")
             return False

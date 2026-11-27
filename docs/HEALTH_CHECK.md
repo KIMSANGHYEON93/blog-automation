@@ -7,7 +7,7 @@
 
 | 항목 | 기준 | 등급 |
 |------|------|------|
-| launchd | `launchctl list`의 `com.blog-automation.*` 마지막 종료 코드 ≠ 0 | 오류 |
+| launchd | `launchctl list`의 `com.blog-automation.*` 마지막 종료 코드 ≠ 0(헬스 체크 자신은 1도 정상: 이상을 발견해 알림을 보낸 경우) | 오류 |
 | launchd 상주 | `telegram-bot`·`dashboard-hub`에 PID 없음 | 오류 |
 | 발행 | 09:00 이후, 당일 `logs/publish_YYYYMMDD_*.log`: 없음(경고)·exit≠0(오류, 예외 이름 포함)·발행 가능한데 0건(경고)·`[SKIP]`(경고) | 오류/경고 |
 | 로그 신선도 | `logs/*.log` 중 가장 최근 것이 36시간 넘음 | 오류 |
@@ -29,7 +29,21 @@ n8n 실행 이력은 컨테이너 안에서 `docker exec … node`로 `execution
 .venv/bin/python scripts/health_check.py --daily-summary            # 정상 요약도 전송(생존 신호)
 ```
 
-종료 코드: 0 정상, 1 이상 발견, 2 알림 전송 실패. 운영 저장소가 아닌 곳(worktree)에서 돌릴 때는
+종료 코드:
+
+| 코드 | 의미 | 다음 점검의 자기 판정 |
+|------|------|----------------------|
+| 0 | 정상 | 정상 |
+| 1 | 이상 발견, 알림 전송 성공 | 정상(이상은 그날 알림으로 이미 알렸다) |
+| 2 | 알림 전송 실패 | **이상** |
+| 3 | 헬스 체크 자체 크래시(처리되지 않은 예외) | **이상** |
+
+파이썬은 처리되지 않은 예외로 죽을 때도 종료 코드 1을 내서 "이상 발견"과 구분되지 않는다. 그래서 `main()`이
+모든 예외를 잡아 트레이스백을 로그에(API 키·토큰·`key=값`은 마스킹) 남기고, 가능하면 텔레그램으로
+"헬스 체크 자체 오류"를 알린 뒤 3으로 끝낸다. 알림 전송까지 실패해도 3이다.
+한계: `main()`이 시작되기 전의 실패(문법 오류·import 실패)는 파이썬이 여전히 1을 낸다.
+
+운영 저장소가 아닌 곳(worktree)에서 돌릴 때는
 `BLOG_PROJECT_DIR=<운영 저장소>`로 logs/·락 위치를 지정한다(`run_pipeline_b.sh`와 같은 규약).
 
 알림은 기존 `TelegramNotificationAdapter`를 그대로 쓴다(`.env`의 `TELEGRAM_BOT_TOKEN`·`TELEGRAM_CHAT_ID`,

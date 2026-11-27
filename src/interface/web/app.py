@@ -32,6 +32,7 @@ from src.application.use_cases.register_keyword import DuplicateKeywordError
 from src.domain.exceptions import InvalidStatusTransitionError
 from src.domain.value_objects.post_status import PostStatus
 from src.interface.web.auth import AdminAuthenticator, LoginThrottle
+from src.interface.web.experience import register_experience_route
 from src.interface.web.jobs import JobState, PublishJobRunner
 
 logger = logging.getLogger(__name__)
@@ -148,6 +149,7 @@ def create_app(
     _register_dashboard_routes(app, list_posts, job_runner, clock)
     if edit_post is not None:
         _register_edit_routes(app, edit_post)
+        register_experience_route(app, edit_post, list_posts, job_runner)
         if photo_store is not None:
             _register_photo_route(app, edit_post, photo_store)
         if doc_capture is not None:

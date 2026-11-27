@@ -33,6 +33,41 @@
   </dl>
 </section>
 
+{% if editing_enabled and post.can_edit and post.experience_questions %}
+{% set xp = experience if experience is defined else none %}
+<section class="card" id="experience">
+  <h2>직접 해 보니 — 빠른 입력</h2>
+  <p class="sub">해 본 결과를 고르고 질문마다 숫자나 단어로 답하세요. 입력한 내용만 문단이 되고, 저장하면 '직접 해 보니' 표시 자리를 바꿉니다.</p>
+  {% if xp and xp.error %}<p class="notice notice-error" role="alert">{{ xp.error }}</p>{% endif %}
+  {% if xp and xp.notice %}<p class="notice notice-info" role="status">{{ xp.notice }}</p>{% endif %}
+  <form method="post" action="{{ url_for('fill_experience', row_index=post.row_index) }}" class="edit quick">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <fieldset class="choices">
+      <legend>결과</legend>
+      {% for r in experience_results %}
+      <label class="choice"><input type="radio" name="result" value="{{ r.value }}"{% if xp and xp.result == r.value %} checked{% endif %} required> {{ r.label }}</label>
+      {% endfor %}
+    </fieldset>
+    {% for q in post.experience_questions %}
+    <label>{{ q }}
+      <input name="answer" value="{{ xp.answers[loop.index0] if xp and xp.answers|length > loop.index0 else '' }}" maxlength="{{ experience_limits[0] }}" placeholder="예: 예 / 30분 / 무료 요금제" autocomplete="off" required></label>
+    {% endfor %}
+    <label>한 줄 메모 (선택)
+      <input name="memo" value="{{ xp.memo if xp else '' }}" maxlength="{{ experience_limits[1] }}" autocomplete="off"></label>
+    {% if photo_upload_enabled %}<p class="sub">화면 캡처는 아래 <a href="#photo">사진 올리기</a>로 넣으세요 — 이 문단 바로 아래(자주 묻는 질문 앞)에 들어갑니다.</p>{% endif %}
+    {% if xp and xp.preview %}
+    <p class="sub">미리보기 — 이대로 본문에 들어갑니다:</p>
+    <pre class="body">{{ xp.preview }}</pre>
+    <input type="hidden" name="previewed" value="{{ xp.fingerprint }}">
+    {% endif %}
+    <div class="quick-actions">
+      <button type="submit" name="action" value="preview">미리보기</button>
+      {% if xp and xp.preview %}<button type="submit" name="action" value="save" class="primary">저장</button>{% endif %}
+    </div>
+  </form>
+</section>
+{% endif %}
+
 {% set revising = revise_enabled and post.status.name == "REVISION_PENDING" %}
 <section class="card">
   {% set waiting = post.status.name == 'WAITING' and generate_enabled %}
@@ -129,7 +164,7 @@
     <button type="submit" class="primary">저장</button>
   </form>
   {% if photo_upload_enabled %}
-  <form method="post" action="{{ url_for('upload_photo', row_index=post.row_index) }}" enctype="multipart/form-data" class="edit">
+  <form method="post" action="{{ url_for('upload_photo', row_index=post.row_index) }}" enctype="multipart/form-data" class="edit" id="photo">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>사진 올리기 (자주 묻는 질문 앞에 들어갑니다 · 본문을 고쳤다면 먼저 저장하세요)
       <input type="file" name="photo" accept="image/*" required></label>

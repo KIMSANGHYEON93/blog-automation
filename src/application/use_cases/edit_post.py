@@ -7,6 +7,13 @@ from dataclasses import replace
 from src.domain.entities.post import Post
 from src.domain.exceptions import InvalidStatusTransitionError
 from src.domain.ports.post_repository import PostRepository
+from src.domain.services.experience_note import (
+    ExperienceInputError,
+    ExperienceResult,
+    compose_experience_paragraph,
+    experience_questions,
+    fill_experience,
+)
 from src.domain.services.photo_markers import insert_photo_marker
 from src.domain.value_objects.post_content import PostContent
 from src.domain.value_objects.post_status import PostStatus
@@ -69,6 +76,50 @@ class EditPostUseCase:
             body=insert_photo_marker(post.content.body_markdown or "", filename),
             category=post.category,
         )
+
+    def preview_experience(
+        self, row_index: int, result: ExperienceResult | None, answers: Sequence[str], memo: str,
+    ) -> str:
+        """빠른 입력으로 조립될 경험 문단(저장 안 함). 입력이 모자라면 ExperienceInputError."""
+        return self._compose_experience(self._editable(row_index), result, answers, memo)
+
+    def fill_experience(
+        self, row_index: int, result: ExperienceResult | None, answers: Sequence[str], memo: str,
+    ) -> Post:
+        """'직접 해 보니' 자리를 조립한 문단으로 바꿔 저장한다.
+
+        검증 뒤 본문을 고친 적이 없으면 바뀐 곳은 사람이 입력한 경험뿐이므로 그 본문을 승인해
+        둔다(검수 승인을 또 요구하지 않는다). 이미 재검증이 필요한 글은 그대로 둔다.
+        """
+        post = self._editable(row_index)
+        paragraph = self._compose_experience(post, result, answers, memo)
+        content = post.content or PostContent()
+        body = fill_experience(content.body_markdown or "", paragraph)
+        post.record_verification_baseline()
+        was_fresh = not post.verification_stale()
+        updated = self.edit(row_index, title=content.title or "", body=body,
+                            tags=content.tags, category=post.category)
+        if was_fresh:
+            updated.approve_current_body()
+            self._repo.save(updated)
+        return updated
+
+    def _compose_experience(
+        self, post: Post, result: ExperienceResult | None, answers: Sequence[str], memo: str,
+    ) -> str:
+        body = post.content.body_markdown if post.content else ""
+        questions = experience_questions(body or "")
+        if not questions:
+            raise ExperienceInputError("이미 채워졌거나 '직접 해 보니' 표시가 없습니다")
+        if len(answers) != len(questions):
+            raise ExperienceInputError("질문이 바뀌었습니다 — 화면을 새로 고친 뒤 다시 입력하세요")
+        return compose_experience_paragraph(result, list(zip(questions, answers)), memo)
+
+    def _editable(self, row_index: int) -> Post:
+        post = self._find(row_index)
+        if post is None or post.status not in EDITABLE_STATUSES or post.content is None:
+            raise PostNotEditableError(f"{row_index}행은 편집할 수 없는 상태입니다")
+        return post
 
     def capture_targets(self, row_index: int, extra_urls: Sequence[str] = ()) -> list[str]:
         """캡처할 주소: 직접 넣은 주소 먼저, 다음 참고자료(시트 O열) — 중복 없이 최대 2개."""

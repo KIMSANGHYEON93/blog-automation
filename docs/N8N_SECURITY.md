@@ -45,8 +45,9 @@ Gemini 키·구글 서비스 계정은 n8n Credential(DB)에 있어 이 변경�
    docker exec <컨테이너> n8n import:workflow --input=/tmp/wc.json   # id ty52rqOEJ6ZjNF2L 유지
    docker exec <컨테이너> n8n import:workflow --input=/tmp/wn.json   # 네이버는 같은 id(SGXJWwyw6GW5aN6w)로 — 중복 생성 주의
    docker exec <컨테이너> n8n update:workflow --id=ty52rqOEJ6ZjNF2L --active=true
+   docker exec <컨테이너> n8n update:workflow --id=SGXJWwyw6GW5aN6w --active=true
    ```
-   네이버 워크플로는 비활성 그대로 둔다(대시보드 '지금 생성'으로만 실행).
+   네이버 워크플로도 활성으로 되돌린다(매일 02:00 실행, 2026-11-27 기준). 대시보드 '지금 생성'은 활성 여부와 상관없이 동작한다.
    `workflow_naver.json`에는 id가 없으므로 UI에서 기존 워크플로를 열어 붙여넣거나, 파일에 `"id": "SGXJWwyw6GW5aN6w"`를 넣은 임시 사본으로 가져온다.
 3. 컨테이너 다시 만들기 (환경변수·포트는 재생성해야 반영된다)
    ```bash

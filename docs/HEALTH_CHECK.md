@@ -14,6 +14,9 @@
 | 락 | `.pipeline_b.lock` 소유 PID가 죽었거나 2시간 넘게 유지 | 오류 |
 | n8n 컨테이너 | `blog-automation-n8n-1`이 running이 아님 / Docker 접근 불가 | 오류 |
 | n8n 01:00 | 가장 최근 01:00(KST) 슬롯에 Content Generation 실행이 없거나 success가 없음 (01:30 전에는 판정 보류) | 오류 |
+| 전원 (#13) | `pmset -g batt`: 배터리로 구동 중이면 오류, 충전기 연결 상태에서 잔량 30% 미만이면 경고(`BATTERY_LOW_PERCENT`). 배터리 없는 맥은 충전기 연결만 본다 | 오류/경고 |
+| 깨우기 예약 (#13) | `pmset -g sched`: 지금부터 90분 뒤 이후의 다음 01:00·09:00 실행 각각에 대해, 실행 90분 전~실행 시각 사이 wake 예약이 있어야 한다(`WAKE_SLOT_HOURS`, `WAKE_LEAD_MINUTES`). 곧 올 시각(90분 안)은 이미 깨어 있다고 보고 건너뛴다 | 오류 |
+| 최근 백업 (#12) | `backups/n8n/n8n_*.tar.gz`·`backups/sheets/<시각>/`(manifest.json 있는 완성본만) 중 가장 최근 것이 26시간을 넘음(`BACKUP_MAX_AGE_HOURS`) 또는 없음. n8n·Sheets를 따로 본다. 시각은 파일 이름 기준 | 오류 |
 | 카카오 캡차 차단 | `.browser_data/kakao_challenge_block.json`의 `blocked_on`이 오늘이면 "캡차 차단 중(수동 로그인 필요)" 한 줄로 묶고, 같은 날 publish·revise 종료 코드·발행 실패는 중복 나열하지 않는다. 파일이 없으면 정상(#1에서 생성) | 오류 |
 
 n8n 실행 이력은 컨테이너 안에서 `docker exec … node`로 `execution_entity`를 **읽기 전용(`OPEN_READONLY`)**
@@ -68,6 +71,8 @@ launchctl start com.blog-automation.health-check     # 즉시 1회 시험(실제
 
 ## 알려진 한계
 
+- 깨우기 점검은 예약의 존재만 본다. 예약이 있어도 배터리 방전·전원 차단이면 깨어나지 못하므로 전원 점검과 함께 본다. pmset 시각은 맥의 로컬 시각(KST)으로 비교한다.
+- 백업 점검은 산출물의 시각만 본다. 내용 검증은 `docs/BACKUP.md`의 복구 시험으로 한다. launchd `backup`의 종료 코드 이상과 같은 원인으로 중복 알림이 올 수 있다.
 - 맥이 09:30에 잠들어 있으면 깨어난 직후에 실행된다. 맥이 아예 꺼져 있으면 알림도 없다(`--daily-summary`를 켜 두면 "오늘 요약이 안 왔다"가 신호가 된다 — 외부 데드맨 감시는 범위 밖).
 - 같은 이상이 이어지면 매일 같은 알림이 온다(중복 억제 없음).
 - 발행 건수는 Sheets가 아니라 당일 발행 로그를 센다. 대시보드 수동 발행은 이 로그에 없다.

@@ -226,3 +226,38 @@ def test_차단이_아니면_이상을_그대로_둔다():
 def test_실행_중인_작업은_이전_종료_코드를_무시한다():
     # 재시작된 상주 서비스는 PID가 있고 마지막 종료 코드(-15 등)는 이전 인스턴스의 것이다
     assert hc.check_launchd({"dashboard-hub": (94815, -15), "telegram-bot": (1292, 0)}) == []
+
+
+def test_조회는_일시_실패하면_한_번_더_시도한다(monkeypatch):
+    import subprocess
+    from types import SimpleNamespace
+
+    outcomes = [subprocess.TimeoutExpired("docker", 1), SimpleNamespace(stdout="ok")]
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(kwargs["timeout"])
+        item = outcomes[len(calls) - 1]
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(hc.subprocess, "run", fake_run)
+    monkeypatch.setattr(hc.time, "sleep", lambda s: None)
+    assert hc._run(["docker", "ps"]) == "ok"
+    assert calls == [hc.SUBPROCESS_TIMEOUT, hc.SUBPROCESS_TIMEOUT]
+    assert hc.SUBPROCESS_TIMEOUT >= 120
+
+
+def test_조회가_두_번_모두_실패하면_예외를_올린다(monkeypatch):
+    import subprocess
+
+    import pytest
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired("docker", 1)
+
+    monkeypatch.setattr(hc.subprocess, "run", fake_run)
+    monkeypatch.setattr(hc.time, "sleep", lambda s: None)
+    with pytest.raises(subprocess.TimeoutExpired):
+        hc._run(["docker", "ps"])

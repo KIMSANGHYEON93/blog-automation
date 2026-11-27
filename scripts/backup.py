@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -34,6 +35,8 @@ N8N_CONFIG_PATH = "/home/node/.n8n/config"
 SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 DEFAULT_KEEP = 7
 SUBPROCESS_TIMEOUT = 300
+CONTAINER_CHECK_TRIES = 3  # 메모리 스래싱 중 docker inspect 일시 실패 방지(2026-11-26)
+CONTAINER_CHECK_DELAY = 10  # 재시도 사이 대기(초)
 
 logger = logging.getLogger("backup")
 
@@ -99,11 +102,17 @@ def _run(cmd: list) -> str:
 
 
 def container_running() -> bool:
-    try:
-        out = _run(["docker", "inspect", "-f", "{{.State.Status}}", N8N_CONTAINER])
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return out.strip() == "running"
+    """컨테이너가 running 이면 True. 조회가 일시 실패하면 몇 번 더 시도한다."""
+    for attempt in range(1, CONTAINER_CHECK_TRIES + 1):
+        try:
+            out = _run(["docker", "inspect", "-f", "{{.State.Status}}", N8N_CONTAINER])
+            return out.strip() == "running"
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.warning("docker inspect 실패 %d/%d: %s", attempt, CONTAINER_CHECK_TRIES,
+                           type(e).__name__)
+            if attempt < CONTAINER_CHECK_TRIES:
+                time.sleep(CONTAINER_CHECK_DELAY)
+    return False
 
 
 def backup_n8n(stamp: str, keep: int, dry_run: bool) -> str:

@@ -69,3 +69,44 @@ def test_워크플로_내보내기가_비었거나_깨졌으면_실패한다():
         bk.validate_workflows("{}")
     with pytest.raises(json.JSONDecodeError):
         bk.validate_workflows("not json")
+
+
+def _docker_inspect(monkeypatch, results):
+    """results: 호출마다 돌려줄 값(예외면 던진다). 대기 시간은 없앤다."""
+    calls = []
+
+    def fake_run(cmd):
+        calls.append(cmd)
+        item = results[len(calls) - 1]
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(bk, "_run", fake_run)
+    monkeypatch.setattr(bk.time, "sleep", lambda s: None)
+    return calls
+
+
+def test_컨테이너_조회가_일시_실패해도_재시도해서_실행_중이면_통과한다(monkeypatch):
+    import subprocess
+
+    calls = _docker_inspect(
+        monkeypatch, [subprocess.TimeoutExpired("docker", 1), "running\n"]
+    )
+    assert bk.container_running() is True
+    assert len(calls) == 2
+
+
+def test_컨테이너_조회가_계속_실패하면_정해진_횟수만_시도하고_거짓이다(monkeypatch):
+    import subprocess
+
+    err = subprocess.CalledProcessError(1, "docker")
+    calls = _docker_inspect(monkeypatch, [err] * bk.CONTAINER_CHECK_TRIES)
+    assert bk.container_running() is False
+    assert len(calls) == bk.CONTAINER_CHECK_TRIES
+
+
+def test_컨테이너가_멈춰_있으면_재시도하지_않고_거짓이다(monkeypatch):
+    calls = _docker_inspect(monkeypatch, ["exited\n"])
+    assert bk.container_running() is False
+    assert len(calls) == 1

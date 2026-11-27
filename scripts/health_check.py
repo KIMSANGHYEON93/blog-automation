@@ -19,6 +19,7 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -37,7 +38,15 @@ KST = timezone(timedelta(hours=9))
 LABEL_PREFIX = "com.blog-automation."
 RESIDENT = ("telegram-bot", "dashboard-hub")  # KeepAlive 서비스: PID가 있어야 정상
 SELF_JOB = "health-check"  # 이 스크립트를 돌리는 launchd 작업
-SELF_OK_EXITS = (0, 1)  # 0 정상, 1 이상을 발견해 알림 전송(2 전송 실패·그 밖은 크래시)
+# 종료 코드. 파이썬은 처리되지 않은 예외로도 1로 죽으므로 크래시는 main()이 전용 코드 3으로 바꾼다
+EXIT_OK, EXIT_ISSUES, EXIT_SEND_FAILED, EXIT_CRASH = 0, 1, 2, 3
+SELF_OK_EXITS = (EXIT_OK, EXIT_ISSUES)  # 그 밖(전송 실패·크래시)은 다음 점검이 이상으로 알린다
+_SECRET_PATTERNS = (
+    re.compile(r"AIza[0-9A-Za-z_-]{20,}"),  # Google API 키
+    re.compile(r"\d{6,}:[0-9A-Za-z_-]{30,}"),  # 텔레그램 봇 토큰
+    re.compile(r"(?i)((?:api_?)?key|token|secret|password)=[^\s&\"']+"),  # URL·설정의 값
+)
+CRASH_MESSAGE_LIMIT = 300
 N8N_CONTAINER = "blog-automation-n8n-1"
 N8N_WORKFLOW_NAME = "Blog Automation Pipeline A — Content Generation"
 N8N_CRON_HOUR_KST = 1
@@ -306,7 +315,7 @@ def send_telegram(text: str, level: str) -> bool:
     )
 
 
-def main(argv: list | None = None) -> int:
+def _run_main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dry-run", action="store_true", help="메시지만 출력하고 보내지 않는다")
     parser.add_argument(
@@ -324,14 +333,38 @@ def main(argv: list | None = None) -> int:
 
     if message is None:
         logger.info("정상 — 보낼 알림 없음")
-        return 0
+        return EXIT_OK
     if args.dry_run:
         print(message)
-        return 0 if healthy else 1
+        return EXIT_OK if healthy else EXIT_ISSUES
     sent = send_telegram(message, "INFO" if healthy else ("ERROR" if has_error else "WARNING"))
     if not sent:
-        return 2
-    return 0 if healthy else 1
+        return EXIT_SEND_FAILED
+    return EXIT_OK if healthy else EXIT_ISSUES
+
+
+def mask_secrets(text: str) -> str:
+    """로그·알림에 남기기 전에 API 키·토큰·`key=값` 형태를 가린다."""
+    text = _SECRET_PATTERNS[0].sub("***", text)
+    text = _SECRET_PATTERNS[1].sub("***", text)
+    return _SECRET_PATTERNS[2].sub(lambda m: f"{m.group(1)}=***", text)
+
+
+def main(argv: list | None = None) -> int:
+    """처리되지 않은 예외는 로그(시크릿 마스킹)와 텔레그램 시도 뒤 전용 코드 3으로 끝낸다.
+
+    그대로 두면 파이썬이 종료 코드 1을 내는데 "이상 발견"과 같아 다음 점검이 정상으로 본다.
+    """
+    try:
+        return _run_main(argv)
+    except Exception as e:  # noqa: BLE001 - 최상위에서 모든 예외를 잡는 것이 목적
+        logger.error("헬스 체크 자체 오류:\n%s", mask_secrets(traceback.format_exc()))
+        summary = mask_secrets(f"{type(e).__name__}: {e}")[:CRASH_MESSAGE_LIMIT]
+        try:
+            send_telegram(f"🛑 헬스 체크 자체 오류(종료 코드 {EXIT_CRASH}): {summary}", "ERROR")
+        except Exception:  # noqa: BLE001 - 알림 실패가 크래시 코드를 바꾸면 안 된다
+            logger.error("크래시 알림 전송도 실패")
+        return EXIT_CRASH
 
 
 if __name__ == "__main__":

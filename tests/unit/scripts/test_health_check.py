@@ -277,3 +277,68 @@ def test_헬스_체크_자신이_전송_실패나_크래시로_끝나면_이상�
 def test_다른_작업의_종료_코드_1은_계속_이상이다():
     found = hc.check_launchd({"backup": (None, 1), "health-check": (None, 1)})
     assert [f.detail for f in found] == ["backup: 마지막 종료 코드 1"]
+
+
+def test_종료_코드_상수는_서로_다르고_크래시_코드는_자기_정상_범위_밖이다():
+    codes = (hc.EXIT_OK, hc.EXIT_ISSUES, hc.EXIT_SEND_FAILED, hc.EXIT_CRASH)
+    assert len(set(codes)) == 4
+    assert hc.EXIT_CRASH not in hc.SELF_OK_EXITS
+    assert hc.SELF_OK_EXITS == (hc.EXIT_OK, hc.EXIT_ISSUES)
+
+
+def test_자기_종료_코드_경계_0_1은_정상_2와_크래시는_이상이고_타_작업_1은_이상이다():
+    def details(jobs):
+        return [f.detail for f in hc.check_launchd(jobs)]
+
+    assert details({"health-check": (None, hc.EXIT_OK)}) == []
+    assert details({"health-check": (None, hc.EXIT_ISSUES)}) == []
+    assert details({"health-check": (None, hc.EXIT_SEND_FAILED)}) == [
+        "health-check: 마지막 종료 코드 2"
+    ]
+    assert details({"health-check": (None, hc.EXIT_CRASH)}) == [
+        "health-check: 마지막 종료 코드 3"
+    ]
+    assert details({"publish": (None, 1)}) == ["publish: 마지막 종료 코드 1"]
+
+
+def test_처리되지_않은_예외는_크래시_코드로_끝나고_알림에_시크릿이_없다(monkeypatch, caplog):
+    secret = "AIza" + "a" * 35
+    sent = []
+
+    def boom(argv=None):
+        raise RuntimeError(f"HTTPError for url: https://x/y?url=a&key={secret}")
+
+    monkeypatch.setattr(hc, "_run_main", boom)
+    monkeypatch.setattr(hc, "send_telegram", lambda text, level: sent.append((text, level)))
+    assert hc.main([]) == hc.EXIT_CRASH
+    assert len(sent) == 1 and sent[0][1] == "ERROR"
+    assert secret not in sent[0][0] and "RuntimeError" in sent[0][0]
+    assert secret not in caplog.text and "헬스 체크 자체 오류" in caplog.text
+
+
+def test_크래시_알림_전송까지_실패해도_크래시_코드를_돌려준다(monkeypatch):
+    def boom(argv=None):
+        raise ValueError("x")
+
+    def send_fails(text, level):
+        raise OSError("network down")
+
+    monkeypatch.setattr(hc, "_run_main", boom)
+    monkeypatch.setattr(hc, "send_telegram", send_fails)
+    assert hc.main([]) == hc.EXIT_CRASH
+
+
+def test_정상_실행의_종료_코드는_그대로_전달한다(monkeypatch):
+    monkeypatch.setattr(hc, "_run_main", lambda argv=None: hc.EXIT_ISSUES)
+    assert hc.main([]) == hc.EXIT_ISSUES
+
+
+def test_시크릿_마스킹은_키_토큰_쿼리값을_가린다():
+    text = (
+        "GET https://api/x?url=a&key=AIza" + "b" * 35 + " bot 123456789:" + "c" * 35
+        + " token=abc123 password=hunter2"
+    )
+    masked = hc.mask_secrets(text)
+    for leaked in ("AIza", "123456789:", "abc123", "hunter2"):
+        assert leaked not in masked
+    assert "url=a" in masked

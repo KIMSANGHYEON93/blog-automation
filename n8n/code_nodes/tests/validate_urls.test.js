@@ -139,6 +139,34 @@ test('HEAD를 거부(405)하면 GET으로 다시 확인한다', async () => {
   assert.equal(calls[1].disableFollowRedirect, true);
 });
 
+// kroki.io처럼 HEAD에만 404를 주고 GET에는 200을 주는 서버가 있다(#26)
+const HEAD_THEN_GET_CASES = [
+  { head: 404, get: 200, expected: 'ok' },
+  { head: 404, get: 404, expected: 'dead' },
+  { head: 410, get: 200, expected: 'ok' },
+  { head: 404, get: 400, expected: 'unverified' },
+];
+for (const { head, get, expected } of HEAD_THEN_GET_CASES) {
+  test(`HEAD ${head}이면 GET으로 다시 보고 GET 결과(${get})로 판정한다 → ${expected}`, async () => {
+    const url = `https://k.example.org/svg/${head}-${get}`;
+    const { request, calls } = fakeRequest({
+      [`HEAD ${url}`]: { statusCode: head },
+      [`GET ${url}`]: { statusCode: get },
+    });
+    const r = await v.checkUrl(url, { request, lookup: publicLookup });
+    assert.equal(r.status, expected);
+    assert.deepEqual(calls.map((c) => c.method), ['HEAD', 'GET']);
+    assert.equal(calls[1].headers.Range, `bytes=0-${v.LIMITS.MAX_BODY_BYTES - 1}`);
+  });
+}
+
+test('HEAD가 200이면 GET을 보내지 않는다', async () => {
+  const { request, calls } = fakeRequest({ 'HEAD https://k.example.org/ok': { statusCode: 200 } });
+  const r = await v.checkUrl('https://k.example.org/ok', { request, lookup: publicLookup });
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(calls.map((c) => c.method), ['HEAD']);
+});
+
 test('응답이 끝나지 않으면 URL별 시간 상한에서 확인 실패로 끝낸다', async () => {
   const request = () => new Promise(() => {});
   const r = await v.checkUrl('https://slow.example.org/', { request, lookup: publicLookup, deadlineMs: 30 });

@@ -175,7 +175,9 @@ async function requestOnce(url, method, request) {
 }
 
 const isRedirect = (c) => c >= 300 && c < 400;
-const isSettled = (c) => (c >= 200 && c < 400) || c === 404 || c === 410;
+// HEAD 응답만으로 판정을 끝내는 코드. 404·410은 넣지 않는다 — kroki.io처럼 HEAD에만 404를 주고
+// GET에는 200을 주는 서버가 있어(#26) GET으로 다시 본 결과로 판정한다
+const isSettled = (c) => c >= 200 && c < 400;
 
 function classify(res) {
   if (res.error) return { status: 'unverified', reason: `접속 실패(${res.error})` };

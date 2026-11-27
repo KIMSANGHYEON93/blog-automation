@@ -342,3 +342,203 @@ def test_시크릿_마스킹은_키_토큰_쿼리값을_가린다():
     for leaked in ("AIza", "123456789:", "abc123", "hunter2"):
         assert leaked not in masked
     assert "url=a" in masked
+
+
+# --- #13 전원·깨우기 예약, #12 최근 백업 시각 -----------------------------------------------------
+
+def _batt(source, pct=None, state="charged"):
+    text = f"Now drawing from '{source}'\n"
+    if pct is not None:
+        text += f" -InternalBattery-0 (id=1)\t{pct}%; {state}; 0:00 remaining present: true\n"
+    return text
+
+
+def test_충전기_연결과_충분한_잔량은_정상이다():
+    found = hc.check_power(_batt("AC Power", 100))
+    assert [f.level for f in found] == [hc.OK]
+    assert "AC" in found[0].detail and "100%" in found[0].detail
+
+
+def test_배터리로_구동_중이면_잔량이_높아도_오류다():
+    found = hc.check_power(_batt("Battery Power", 80, "discharging"))
+    assert [f.level for f in found] == [hc.ERROR]
+    assert "배터리로 구동" in found[0].detail and "80%" in found[0].detail
+
+
+def test_배터리_잔량_경계는_30퍼센트다():
+    assert hc.BATTERY_LOW_PERCENT == 30
+    assert hc.check_power(_batt("AC Power", 30, "charging"))[0].level == hc.OK
+    low = hc.check_power(_batt("AC Power", 29, "charging"))
+    assert [f.level for f in low] == [hc.WARN]
+    assert "29%" in low[0].detail
+
+
+def test_배터리가_없는_맥은_충전기_연결만_본다():
+    assert [f.level for f in hc.check_power(_batt("AC Power"))] == [hc.OK]
+
+
+def test_전원_출력을_해석하지_못하면_경고한다():
+    found = hc.check_power("무슨 말인지 모를 출력")
+    assert [f.level for f in found] == [hc.WARN]
+    assert "해석" in found[0].detail
+
+
+_NOW = datetime(2026, 11, 27, 17, 42, tzinfo=hc.KST)
+
+
+def _sched(*stamps):
+    lines = ["Scheduled power events:"]
+    for i, stamp in enumerate(stamps):
+        lines.append(f" [{i}]  wake at {stamp} by 'pmset'")
+    return "\n".join(lines)
+
+
+def test_다음_01시와_09시_앞에_깨우기가_있으면_정상이다():
+    sched = _sched("11/28/2026 00:55:00", "11/28/2026 08:55:00", "11/29/2026 00:55:00")
+    found = hc.check_wake_schedule(sched, _NOW)
+    assert [f.level for f in found] == [hc.OK]
+    assert "11/28 00:55" in found[0].detail
+
+
+def test_09시_앞_깨우기가_없으면_오류다():
+    found = hc.check_wake_schedule(_sched("11/28/2026 00:55:00"), _NOW)
+    assert [f.level for f in found] == [hc.ERROR]
+    assert "09:00" in found[0].detail and "11/28" in found[0].detail
+
+
+def test_예약이_하나도_없으면_01시와_09시_둘_다_오류다():
+    found = hc.check_wake_schedule("No scheduled events\n", _NOW)
+    assert [f.level for f in found] == [hc.ERROR, hc.ERROR]
+    assert "01:00" in found[0].detail and "09:00" in found[1].detail
+
+
+def test_깨우기는_실행_90분_전까지만_인정한다():
+    assert hc.WAKE_LEAD_MINUTES == 90
+    edge = _sched("11/27/2026 23:30:00", "11/28/2026 07:30:00")  # 정확히 90분 전
+    assert [f.level for f in hc.check_wake_schedule(edge, _NOW)] == [hc.OK]
+    early = _sched("11/27/2026 23:29:00", "11/28/2026 07:29:00")  # 91분 전
+    assert [f.level for f in hc.check_wake_schedule(early, _NOW)] == [hc.ERROR, hc.ERROR]
+
+
+def test_실행_뒤의_깨우기는_소용없다():
+    late = _sched("11/28/2026 01:05:00", "11/28/2026 09:05:00")
+    assert [f.level for f in hc.check_wake_schedule(late, _NOW)] == [hc.ERROR, hc.ERROR]
+
+
+def test_한쪽만_있으면_없는_쪽만_오류로_알린다():
+    found = hc.check_wake_schedule(_sched("11/28/2026 07:30:00"), _NOW)
+    assert [f.level for f in found] == [hc.ERROR]
+    assert found[0].detail.startswith("11/28 01:00")
+
+
+def test_이미_소비된_당일_깨우기는_오탐하지_않는다():
+    now = datetime(2026, 11, 27, 8, 56, tzinfo=hc.KST)  # 08:55 예약은 방금 실행돼 사라졌다
+    sched = _sched("11/28/2026 00:55:00", "11/28/2026 08:55:00")
+    assert [f.level for f in hc.check_wake_schedule(sched, now)] == [hc.OK]
+
+
+def test_깨우기_점검은_wake_외_이벤트를_세지_않는다():
+    sched = (
+        "Scheduled power events:\n"
+        " [0]  shutdown at 11/28/2026 00:55:00 by 'pmset'\n"
+        " [1]  poweron at 11/28/2026 08:55:00 by 'pmset'\n"
+    )
+    assert [f.level for f in hc.check_wake_schedule(sched, _NOW)] == [hc.ERROR, hc.ERROR]
+
+
+def _make_backups(root, n8n=(), sheets=(), partial_sheets=()):
+    (root / "n8n").mkdir(parents=True, exist_ok=True)
+    (root / "sheets").mkdir(parents=True, exist_ok=True)
+    for stamp in n8n:
+        (root / "n8n" / f"n8n_{stamp}.tar.gz").write_bytes(b"x")
+    for stamp in sheets:
+        d = root / "sheets" / stamp
+        d.mkdir()
+        (d / "manifest.json").write_text("{}")
+    for stamp in partial_sheets:
+        (root / "sheets" / stamp).mkdir()
+
+
+_BNOW = datetime(2026, 11, 27, 9, 30, tzinfo=hc.KST)
+
+
+def test_두_백업이_허용_시간_안이면_정상이다(tmp_path):
+    _make_backups(tmp_path, n8n=["20261127_033000"], sheets=["20261127_033000"])
+    found = hc.check_backup(tmp_path, _BNOW)
+    assert [f.level for f in found] == [hc.OK]
+    assert "n8n" in found[0].detail and "Sheets" in found[0].detail
+
+
+def test_n8n_백업만_오래되면_n8n만_오류다(tmp_path):
+    _make_backups(tmp_path, n8n=["20261125_225037"], sheets=["20261127_033000"])
+    found = hc.check_backup(tmp_path, _BNOW)
+    errors = [f for f in found if f.level == hc.ERROR]
+    assert len(errors) == 1 and "n8n" in errors[0].detail
+    assert "11/25 22:50" in errors[0].detail and "34시간" in errors[0].detail
+
+
+def test_백업_허용_시간_경계는_26시간이다(tmp_path):
+    assert hc.BACKUP_MAX_AGE_HOURS == 26
+    edge = _BNOW - timedelta(hours=26)
+    over = _BNOW - timedelta(hours=26, minutes=1)
+    _make_backups(tmp_path, n8n=[f"{edge:%Y%m%d_%H%M%S}"], sheets=[f"{edge:%Y%m%d_%H%M%S}"])
+    assert [f.level for f in hc.check_backup(tmp_path, _BNOW)] == [hc.OK]
+    other = tmp_path / "other"
+    _make_backups(other, n8n=[f"{over:%Y%m%d_%H%M%S}"], sheets=[f"{over:%Y%m%d_%H%M%S}"])
+    assert [f.level for f in hc.check_backup(other, _BNOW)] == [hc.ERROR, hc.ERROR]
+
+
+def test_manifest가_없는_미완성_Sheets_스냅샷은_인정하지_않는다(tmp_path):
+    _make_backups(
+        tmp_path, n8n=["20261127_033000"],
+        sheets=["20261125_033000"], partial_sheets=["20261127_033000"],
+    )
+    errors = [f for f in hc.check_backup(tmp_path, _BNOW) if f.level == hc.ERROR]
+    assert len(errors) == 1 and "Sheets" in errors[0].detail and "11/25 03:30" in errors[0].detail
+
+
+def test_여러_백업_중_가장_최근_것을_본다(tmp_path):
+    _make_backups(
+        tmp_path,
+        n8n=["20261120_033000", "20261127_033000", "20261126_033000"],
+        sheets=["20261127_033000", "20261101_033000"],
+    )
+    assert [f.level for f in hc.check_backup(tmp_path, _BNOW)] == [hc.OK]
+
+
+def test_백업이_하나도_없으면_둘_다_오류다(tmp_path):
+    found = hc.check_backup(tmp_path / "없음", _BNOW)
+    assert [f.level for f in found] == [hc.ERROR, hc.ERROR]
+    assert all("없음" in f.detail for f in found)
+
+
+def test_이름_형식이_다른_파일은_무시한다(tmp_path):
+    _make_backups(tmp_path, sheets=["20261127_033000"])
+    (tmp_path / "n8n" / "memo.txt").write_text("x")
+    (tmp_path / "n8n" / "n8n_latest.tar.gz").write_bytes(b"x")
+    found = hc.check_backup(tmp_path, _BNOW)
+    assert [f.level for f in found] == [hc.ERROR] and "n8n" in found[0].detail
+
+
+def test_전원_깨우기_조회가_실패하면_경고로_알리고_시크릿은_없다(monkeypatch):
+    def fail(cmd):
+        raise OSError("pmset 없음 key=SECRETVALUE")
+
+    monkeypatch.setattr(hc, "_run", fail)
+    for found in (hc.collect_power(), hc.collect_wake(_NOW)):
+        assert [f.level for f in found] == [hc.WARN]
+        assert "SECRETVALUE" not in found[0].detail
+
+
+def test_run_checks가_새_점검_셋을_모두_호출한다(monkeypatch):
+    called = []
+    for name in ("collect_launchd", "collect_n8n"):
+        monkeypatch.setattr(hc, name, lambda *a, _n=name: called.append(_n) or [])
+    monkeypatch.setattr(hc, "check_publish_log", lambda *a: [])
+    monkeypatch.setattr(hc, "check_log_freshness", lambda *a: [])
+    monkeypatch.setattr(hc, "check_lock", lambda *a: [])
+    monkeypatch.setattr(hc, "collect_power", lambda: called.append("power") or [])
+    monkeypatch.setattr(hc, "collect_wake", lambda now: called.append("wake") or [])
+    monkeypatch.setattr(hc, "check_backup", lambda d, now: called.append("backup") or [])
+    hc.run_checks(_NOW)
+    assert {"power", "wake", "backup"} <= set(called)

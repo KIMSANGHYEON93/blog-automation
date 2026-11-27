@@ -1,12 +1,13 @@
 """운영 헬스 체크 — 읽기 전용 점검 후 이상이 있으면 텔레그램으로 요약 1건을 보낸다.
 
 점검 항목: launchd 마지막 종료 코드·상주 서비스 PID, 당일 발행 결과(발행 로그), 로그 신선도,
-`.pipeline_b.lock` 정체, n8n 컨테이너 상태, 전날 01:00(KST) n8n Content Generation 실행 여부.
+`.pipeline_b.lock` 정체, n8n 컨테이너 상태, 전날 01:00(KST) n8n Content Generation 실행 여부,
+전원(충전기·배터리 잔량), 다음 01:00·09:00 실행 앞 깨우기 예약, 최근 n8n·Sheets 백업 시각.
 
 아무것도 고치지 않는다(자동 복구 없음). 정상이면 보내지 않는다(`--daily-summary`면 정상도 1건).
 `--dry-run`은 메시지만 출력하고 보내지 않는다. 비밀값(토큰 등)은 출력하지 않는다.
 
-종료 코드: 0 정상, 1 이상 발견, 2 알림 전송 실패.
+종료 코드: 0 정상, 1 이상 발견, 2 알림 전송 실패, 3 헬스 체크 자체 크래시.
 """
 from __future__ import annotations
 
@@ -51,6 +52,12 @@ N8N_CONTAINER = "blog-automation-n8n-1"
 N8N_WORKFLOW_NAME = "Blog Automation Pipeline A — Content Generation"
 N8N_CRON_HOUR_KST = 1
 PUBLISH_CHECK_AFTER_HOUR = 9  # 09:00 발행 이후에만 당일 발행 로그를 요구한다
+BATTERY_LOW_PERCENT = 30  # 충전기가 연결돼 있어도 이 값 미만이면 경고
+WAKE_SLOT_HOURS = (1, 9)  # 맥이 깨어 있어야 하는 정기 실행 시각(01:00 n8n 생성, 09:00 발행)
+WAKE_LEAD_MINUTES = 90  # 실행 앞 이 시간 안에 깨우기 예약이 있어야 한다(예약은 실행 5분 전)
+BACKUP_DIR = Path(os.getenv("BLOG_BACKUP_DIR") or PROJECT_DIR / "backups")  # backup.py 와 같은 규약
+BACKUP_MAX_AGE_HOURS = 26  # 03:30 일일 백업 + 여유 2시간 30분
+PMSET = "/usr/bin/pmset"
 LOCK_STALE_MINUTES = 120  # 정상 실행은 15분 안팎 — 2시간이 넘으면 정체
 LOG_STALE_HOURS = 36
 SUBPROCESS_TIMEOUT = 120  # 메모리 스래싱 중 docker/launchctl 응답이 30초를 넘긴 사례(2026-11-26)
@@ -206,6 +213,94 @@ def check_n8n_cron(executions: list, now: datetime) -> list:
     return []
 
 
+def check_power(batt_text: str) -> list:
+    """`pmset -g batt` 출력으로 충전기 연결·배터리 잔량을 판정한다."""
+    source = re.search(r"drawing from '([^']+)'", batt_text)
+    if not source:
+        return [Finding(WARN, "전원", "pmset 출력을 해석하지 못함")]
+    percent_match = re.search(r"(\d+)%", batt_text)
+    percent = int(percent_match.group(1)) if percent_match else None
+    shown = f"{percent}%" if percent is not None else "잔량 확인 불가"
+    if "Battery" in source.group(1):
+        return [Finding(ERROR, "전원", f"배터리로 구동 중({shown}) — 충전기 연결 확인")]
+    if percent is not None and percent < BATTERY_LOW_PERCENT:
+        return [Finding(WARN, "전원", f"충전기는 연결됐지만 배터리 잔량 낮음({percent}%)")]
+    return [Finding(OK, "전원", f"AC {percent}%" if percent is not None else "AC")]
+
+
+_WAKE_LINE = re.compile(r"(?:wake|wakepoweron|wake or poweron) at (\d\d/\d\d/\d{4} \d\d:\d\d:\d\d)")
+
+
+def _next_slot(now: datetime, hour: int) -> datetime:
+    """깨우기 여유(WAKE_LEAD_MINUTES) 뒤에 오는 가장 가까운 hour:00. 곧 올 시각은 건너뛴다."""
+    slot = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if slot <= now + timedelta(minutes=WAKE_LEAD_MINUTES):
+        slot += timedelta(days=1)
+    return slot
+
+
+def check_wake_schedule(sched_text: str, now: datetime) -> list:
+    """`pmset -g sched` 출력에서 다음 01:00·09:00 실행 앞 깨우기 예약을 요구한다."""
+    wakes = sorted(
+        datetime.strptime(m, "%m/%d/%Y %H:%M:%S") for m in _WAKE_LINE.findall(sched_text)
+    )
+    found, missing = [], []
+    for hour in sorted(WAKE_SLOT_HOURS):
+        slot = _next_slot(now, hour).replace(tzinfo=None)
+        lo = slot - timedelta(minutes=WAKE_LEAD_MINUTES)
+        hits = [w for w in wakes if lo <= w <= slot]
+        if hits:
+            found.append(hits[-1])
+        else:
+            detail = f"{slot:%m/%d} {hour:02d}:00 실행 앞 깨우기 예약 없음"
+            missing.append(Finding(ERROR, "깨우기", detail))
+    if missing:
+        return sorted(missing, key=lambda f: f.detail)
+    return [Finding(OK, "깨우기", "예약 " + "·".join(f"{w:%m/%d %H:%M}" for w in found))]
+
+
+_STAMP = r"(\d{8}_\d{6})"
+
+
+def _latest_stamp(paths: list, pattern: str) -> datetime | None:
+    stamps = []
+    for path in paths:
+        m = re.fullmatch(pattern, path.name)
+        if m:
+            stamps.append(datetime.strptime(m.group(1), "%Y%m%d_%H%M%S").replace(tzinfo=KST))
+    return max(stamps, default=None)
+
+
+def check_backup(backup_dir: Path, now: datetime) -> list:
+    """가장 최근 n8n·Sheets 백업이 BACKUP_MAX_AGE_HOURS 안인지 본다(파일 이름의 시각 기준).
+
+    Sheets 는 manifest.json 이 있는 완성본만 인정한다(backup.py 가 마지막에 쓴다).
+    """
+    n8n_dir, sheets_dir = backup_dir / "n8n", backup_dir / "sheets"
+    n8n_files = list(n8n_dir.iterdir()) if n8n_dir.is_dir() else []
+    sheets = [p for p in sheets_dir.iterdir() if (p / "manifest.json").is_file()] if (
+        sheets_dir.is_dir()
+    ) else []
+    latest = {
+        "n8n": _latest_stamp(n8n_files, rf"n8n_{_STAMP}\.tar\.gz"),
+        "Sheets": _latest_stamp(sheets, _STAMP),
+    }
+    errors, oks = [], []
+    for name, stamp in latest.items():
+        if stamp is None:
+            errors.append(Finding(ERROR, "백업", f"{name} 백업 없음"))
+            continue
+        age = now - stamp
+        hours = int(age.total_seconds() // 3600)
+        if age > timedelta(hours=BACKUP_MAX_AGE_HOURS):
+            errors.append(Finding(
+                ERROR, "백업", f"{name} 백업이 {hours}시간 전 (마지막 {stamp:%m/%d %H:%M})"
+            ))
+        else:
+            oks.append(f"{name} {hours}시간 전")
+    return errors or [Finding(OK, "백업", " · ".join(oks))]
+
+
 def render_message(findings: list, now: datetime) -> str | None:
     """이상(ERROR·WARN)이 있으면 본문, 없으면 None."""
     problems = [f for f in findings if f.level in (ERROR, WARN)]
@@ -286,6 +381,20 @@ def collect_n8n(now: datetime) -> list:
     return check_n8n_cron(executions, now)
 
 
+def collect_power() -> list:
+    try:
+        return check_power(_run([PMSET, "-g", "batt"]))
+    except (OSError, subprocess.SubprocessError) as e:
+        return [Finding(WARN, "전원", f"pmset 조회 실패: {type(e).__name__}")]
+
+
+def collect_wake(now: datetime) -> list:
+    try:
+        return check_wake_schedule(_run([PMSET, "-g", "sched"]), now)
+    except (OSError, subprocess.SubprocessError) as e:
+        return [Finding(WARN, "깨우기", f"pmset 조회 실패: {type(e).__name__}")]
+
+
 def run_checks(now: datetime) -> list:
     findings = []
     findings += collect_launchd()
@@ -293,6 +402,9 @@ def run_checks(now: datetime) -> list:
     findings += check_log_freshness(LOG_DIR, now)
     findings += check_lock(LOCK_DIR, now, _pid_alive)
     findings += collect_n8n(now)
+    findings += collect_power()
+    findings += collect_wake(now)
+    findings += check_backup(BACKUP_DIR, now)
     return fold_kakao_block(findings, kakao_blocked_today(KAKAO_BLOCK_FILE, now))
 
 
